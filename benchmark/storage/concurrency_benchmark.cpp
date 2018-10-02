@@ -41,13 +41,13 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
     }
 
     // start logging and GC threads
-    StartLogging(10);
-    StartGC(&txn_manager_, 10);
+    // StartLogging(10);
+    // StartGC(&txn_manager_, 10);
   }
 
   void TearDown(const benchmark::State &state) final {
-    EndGC();
-    EndLogging();
+    // EndGC();
+    // EndLogging();
 
     delete[] redo_buffer_;
     delete[] read_buffer_;
@@ -67,8 +67,8 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   const storage::ProjectedRowInitializer initializer_{layout_, StorageTestUtil::ProjectionListAllColumns(layout_)};
 
   // Workload
-  const uint32_t num_inserts_ = 10000000;
-  const uint32_t num_reads_ = 10000000;
+  const uint32_t num_inserts_ = 1000000;
+  const uint32_t num_reads_ = 1000000;
   const uint32_t num_threads_ = TestThreadPool::HardwareConcurrency();
   const uint64_t buffer_pool_reuse_limit_ = 10000000;
 
@@ -76,7 +76,7 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   std::default_random_engine generator_;
   storage::BlockStore block_store_{1000, 1000};
   // storage::RecordBufferSegmentPool buffer_pool_{1000, 100};
-  storage::RecordBufferSegmentPool buffer_pool_{num_inserts_, buffer_pool_reuse_limit_};
+  storage::RecordBufferSegmentPool buffer_pool_{buffer_pool_reuse_limit_, buffer_pool_reuse_limit_};
   storage::LogManager log_manager_{LOG_FILE_NAME, &buffer_pool_};
   std::thread log_thread_;
   bool logging_;
@@ -148,12 +148,13 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, SimpleInsert)(benchmark::State &state) 
   // NOLINTNEXTLINE
   for (auto _ : state) {
     storage::DataTable table(&block_store_, layout_, layout_version_t(0));
-    auto *txn = txn_manager_.BeginTransaction();
-    loose_txns_.push_back(txn);
     for (uint32_t i = 0; i < num_inserts_; ++i) {
+      auto *txn = txn_manager_.BeginTransaction();
+      // loose_txns_.push_back(txn);
       table.Insert(txn, *redo_);
+      txn_manager_.Commit(txn, [] {});
+      delete txn;
     }
-    txn_manager_.Commit(txn, [] {});
   }
 
   state.SetItemsProcessed(state.iterations() * num_inserts_);
@@ -167,9 +168,12 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
   for (auto _ : state) {
     storage::DataTable table(&block_store_, layout_, layout_version_t(0));
     auto workload = [&](uint32_t id) {
-      // We can use dummy timestamps here since we're not invoking concurrency control
-      transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
-      for (uint32_t i = 0; i < num_inserts_ / num_threads_; i++) table.Insert(&txn, *redo_);
+      for (uint32_t i = 0; i < num_inserts_ / num_threads_; i++) {
+        auto *txn = txn_manager_.BeginTransaction();
+        table.Insert(txn, *redo_);
+        txn_manager_.Commit(txn, [] {});
+        delete txn;
+      }
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
   }
@@ -191,7 +195,10 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, SequentialRead)(benchmark::State &state
   // NOLINTNEXTLINE
   for (auto _ : state) {
     for (uint32_t i = 0; i < num_reads_; ++i) {
-      read_table.Select(&txn, read_order[i], read_);
+      auto *txn = txn_manager_.BeginTransaction();
+      read_table.Select(txn, read_order[i], read_);
+      txn_manager_.Commit(txn, [] {});
+      delete txn;
     }
   }
 
@@ -214,7 +221,10 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, RandomRead)(benchmark::State &state) {
   // NOLINTNEXTLINE
   for (auto _ : state) {
     for (uint32_t i = 0; i < num_reads_; ++i) {
-      read_table.Select(&txn, read_order[i], read_);
+      auto *txn = txn_manager_.BeginTransaction();
+      read_table.Select(txn, read_order[i], read_);
+      txn_manager_.Commit(txn, [] {});
+      delete txn;
     }
   }
 
@@ -244,10 +254,12 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
   // NOLINTNEXTLINE
   for (auto _ : state) {
     auto workload = [&](uint32_t id) {
-      // We can use dummy timestamps here since we're not invoking concurrency control
-      transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
-      for (uint32_t i = 0; i < num_reads_ / num_threads_; i++)
-        read_table.Select(&txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], reads_[id]);
+      for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
+        auto *txn = txn_manager_.BeginTransaction();
+        read_table.Select(txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], reads_[id]);
+        txn_manager_.Commit(txn, [] {});
+        delete txn;
+      }
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
   }
