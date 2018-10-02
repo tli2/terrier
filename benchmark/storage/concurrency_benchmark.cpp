@@ -3,6 +3,9 @@
 
 #include "benchmark/benchmark.h"
 #include "common/typedefs.h"
+#include "loggers/main_logger.h"
+#include "loggers/storage_logger.h"
+#include "loggers/transaction_logger.h"
 #include "storage/data_table.h"
 #include "storage/garbage_collector.h"
 #include "storage/storage_util.h"
@@ -22,6 +25,11 @@ namespace terrier {
 class ConcurrencyBenchmark : public benchmark::Fixture {
  public:
   void SetUp(const benchmark::State &state) final {
+    init_main_logger();
+    // initialize namespace specific loggers
+    terrier::storage::init_storage_logger();
+    terrier::transaction::init_transaction_logger();
+
     // generate a random redo ProjectedRow to Insert
     redo_buffer_ = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
     redo_ = initializer_.InitializeRow(redo_buffer_);
@@ -41,13 +49,13 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
     }
 
     // start logging and GC threads
-    // StartLogging(10);
-    // StartGC(&txn_manager_, 10);
+    StartLogging(10);
+    StartGC(&txn_manager_, 10);
   }
 
   void TearDown(const benchmark::State &state) final {
-    // EndGC();
-    // EndLogging();
+    EndGC();
+    EndLogging();
 
     delete[] redo_buffer_;
     delete[] read_buffer_;
@@ -67,8 +75,8 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   const storage::ProjectedRowInitializer initializer_{layout_, StorageTestUtil::ProjectionListAllColumns(layout_)};
 
   // Workload
-  const uint32_t num_inserts_ = 1000000;
-  const uint32_t num_reads_ = 1000000;
+  const uint32_t num_inserts_ = 100;
+  const uint32_t num_reads_ = 100;
   const uint32_t num_threads_ = TestThreadPool::HardwareConcurrency();
   const uint64_t buffer_pool_reuse_limit_ = 10000000;
 
@@ -336,7 +344,6 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
   state.SetItemsProcessed(state.iterations() * num_reads_);
 }
 
-/*
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, SimpleInsert)->Unit(benchmark::kMillisecond);
 
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime();
@@ -346,7 +353,6 @@ BENCHMARK_REGISTER_F(ConcurrencyBenchmark, SequentialRead)->Unit(benchmark::kMil
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, RandomRead)->Unit(benchmark::kMillisecond);
 
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomRead)->Unit(benchmark::kMillisecond)->UseRealTime();
-*/
 
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, RandomUpdate)->Unit(benchmark::kMillisecond);
 

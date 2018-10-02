@@ -13,12 +13,16 @@ namespace terrier::storage {
 
 std::pair<uint32_t, uint32_t> GarbageCollector::PerformGarbageCollection() {
   uint32_t txns_deallocated = ProcessDeallocateQueue();
+  STORAGE_LOG_TRACE("GarbageCollector::PerformGarbageCollection(): txns_deallocated: {}", txns_deallocated);
   uint32_t txns_unlinked = ProcessUnlinkQueue();
+  STORAGE_LOG_TRACE("GarbageCollector::PerformGarbageCollection(): txns_unlinked: {}", txns_unlinked);
   if (txns_unlinked > 0) {
     // Only update this field if we actually unlinked anything, otherwise we're being too conservative about when it's
     // safe to deallocate the transactions in our queue.
     last_unlinked_ = txn_manager_->GetTimestamp();
   }
+  STORAGE_LOG_TRACE("GarbageCollector::PerformGarbageCollection(): last_unlinked_: {}",
+                    static_cast<uint64_t>(last_unlinked_));
   return std::make_pair(txns_deallocated, txns_unlinked);
 }
 
