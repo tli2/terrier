@@ -191,6 +191,47 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomRead)(benchmark::State &s
   state.SetItemsProcessed(state.iterations() * num_reads_);
 }
 
+// Read the num_reads_ of tuples in a random order from a DataTable concurrently
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
+  TestThreadPool thread_pool;
+  storage::DataTable read_table(&block_store_, layout_, layout_version_t(0));
+  // populate read_table_ by inserting tuples
+  // We can use dummy timestamps here since we're not invoking concurrency control
+  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
+  std::vector<storage::TupleSlot> read_order;
+  for (uint32_t i = 0; i < num_reads_; ++i) {
+    read_order.emplace_back(read_table.Insert(&txn, *redo_));
+  }
+  // Generate random read orders and read buffer for each thread
+  std::shuffle(read_order.begin(), read_order.end(), generator_);
+  std::uniform_int_distribution<uint32_t> rand_start(0, static_cast<uint32_t>(read_order.size() - 1));
+  std::vector<uint32_t> rand_read_offsets;
+  for (uint32_t i = 0; i < num_threads_; ++i) {
+    // Create random reads
+    rand_read_offsets.emplace_back(rand_start(generator_));
+  }
+
+  // Number of failed_updates
+  std::atomic<uint32_t> num_aborts;
+
+  // NOLINTNEXTLINE
+  for (auto _ : state) {
+    auto workload = [&](uint32_t id) {
+      // We can use dummy timestamps here since we're not invoking concurrency control
+      transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
+      for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
+        bool update_result =
+            read_table.Update(&txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], *redo_);
+        if (update_result == false) num_aborts++;
+      }
+    };
+    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+  }
+
+  state.SetItemsProcessed(state.iterations() * num_reads_ - num_aborts);
+}
+
 BENCHMARK_REGISTER_F(DataTableBenchmark, SimpleInsert)->Unit(benchmark::kMillisecond);
 
 BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime();
@@ -200,4 +241,6 @@ BENCHMARK_REGISTER_F(DataTableBenchmark, SequentialRead)->Unit(benchmark::kMilli
 BENCHMARK_REGISTER_F(DataTableBenchmark, RandomRead)->Unit(benchmark::kMillisecond);
 
 BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentRandomRead)->Unit(benchmark::kMillisecond)->UseRealTime();
+
+BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentRandomUpdate)->Unit(benchmark::kMillisecond)->UseRealTime();
 }  // namespace terrier
