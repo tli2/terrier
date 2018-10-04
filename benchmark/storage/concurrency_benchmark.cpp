@@ -25,7 +25,7 @@ namespace terrier {
 class ConcurrencyBenchmark : public benchmark::Fixture {
  public:
   void SetUp(const benchmark::State &state) final {
-    printf("setup once\n");
+    // LOG_INFO("Setup once.\n");
     // generate a random redo ProjectedRow to Insert
     redo_buffer_ = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
     redo_ = initializer_.InitializeRow(redo_buffer_);
@@ -44,19 +44,25 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
       reads_.emplace_back(read);
     }
 
-    log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
-    txn_manager_ = new transaction::TransactionManager(&buffer_pool_, true, log_manager_);
+    if (enable_gc_and_wal_ == true) {
+      log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
+    }
+    txn_manager_ = new transaction::TransactionManager(&buffer_pool_, enable_gc_and_wal_, log_manager_);
 
-    // start logging and GC threads
-    StartLogging(10);
-    StartGC(txn_manager_, 10);
+    if (enable_gc_and_wal_ == true) {
+      // start logging and GC threads
+      StartLogging(10);
+      StartGC(txn_manager_, 10);
+    }
   }
 
   void TearDown(const benchmark::State &state) final {
-    EndGC();
-    EndLogging();
+    if (enable_gc_and_wal_ == true) {
+      EndGC();
+      EndLogging();
 
-    delete log_manager_;
+      delete log_manager_;
+    }
     delete txn_manager_;
     delete[] redo_buffer_;
     delete[] read_buffer_;
@@ -92,7 +98,9 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   std::thread gc_thread_;
   storage::GarbageCollector *gc_;
   transaction::TransactionManager *txn_manager_;
-  storage::LogManager *log_manager_;
+  storage::LogManager *log_manager_ = LOGGING_DISABLED;
+
+  bool enable_gc_and_wal_ = false;
 
   // Insert buffer pointers
   byte *redo_buffer_;
@@ -163,8 +171,10 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, SimpleInsert)(benchmark::State &state) 
       auto *txn = txn_manager_->BeginTransaction();
       auto inserted = table_.Insert(txn, *redo_);
 
-      auto *record = txn->StageWrite(nullptr, inserted, initializer_);
-      TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
+      if (enable_gc_and_wal_ == true) {
+        auto *record = txn->StageWrite(nullptr, inserted, initializer_);
+        TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
+      }
       txn_manager_->Commit(txn, [] {});
     }
   }
@@ -181,8 +191,13 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
     auto workload = [&](uint32_t id) {
       for (uint32_t i = 0; i < num_inserts_ / num_threads_; i++) {
         auto *txn = txn_manager_->BeginTransaction();
-        table_.Insert(txn, *redo_);
+        auto inserted = table_.Insert(txn, *redo_);
         txn_manager_->Commit(txn, [] {});
+
+        if (enable_gc_and_wal_ == true) {
+          auto *record = txn->StageWrite(nullptr, inserted, initializer_);
+          TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
+        }
       }
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
@@ -287,6 +302,10 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, RandomUpdate)(benchmark::State &state) 
   for (auto _ : state) {
     for (uint32_t i = 0; i < num_reads_; ++i) {
       auto *txn = txn_manager_->BeginTransaction();
+      if (enable_gc_and_wal_ == true) {
+        auto *record = txn->StageWrite(nullptr, read_order[i], initializer_);
+        TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
+      }
       table_.Update(txn, read_order[i], *redo_);
       txn_manager_->Commit(txn, [] {});
     }
@@ -323,10 +342,14 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
     auto workload = [&](uint32_t id) {
       for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
         auto *txn = txn_manager_->BeginTransaction();
-        bool update_result = table_.Update(txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], *redo_);
+        auto update_slot = read_order[(rand_read_offsets[id] + i) % read_order.size()];
+        if (enable_gc_and_wal_ == true) {
+          auto *record = txn->StageWrite(nullptr, update_slot, initializer_);
+          TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
+        }
+        bool update_result = table_.Update(txn, update_slot, *redo_);
         if (update_result == false) {
-          printf("Aborting because update failure!!\n");
-          fflush(stdout);
+          LOG_INFO("Aborting because update failure!!\n");
           txn_manager_->Abort(txn);
           num_aborts += 1;
         } else {
