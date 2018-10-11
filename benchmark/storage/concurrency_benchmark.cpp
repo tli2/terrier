@@ -31,19 +31,6 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
     redo_ = initializer_.InitializeRow(redo_buffer_);
     StorageTestUtil::PopulateRandomRow(redo_, layout_, 0, &generator_);
 
-    // generate a ProjectedRow buffer to Read
-    read_buffer_ = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
-    read_ = initializer_.InitializeRow(read_buffer_);
-
-    // generate a vector of ProjectedRow buffers for concurrent reads
-    for (uint32_t i = 0; i < num_threads_; ++i) {
-      // Create read buffer
-      byte *read_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
-      storage::ProjectedRow *read = initializer_.InitializeRow(read_buffer);
-      read_buffers_.emplace_back(read_buffer);
-      reads_.emplace_back(read);
-    }
-
     if (enable_gc_and_wal_ == true) {
       log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
     }
@@ -57,6 +44,7 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   }
 
   void TearDown(const benchmark::State &state) final {
+    delete[] redo_buffer_;
     if (enable_gc_and_wal_ == true) {
       EndGC();
       EndLogging();
@@ -64,12 +52,6 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
       delete log_manager_;
     }
     delete txn_manager_;
-    delete[] redo_buffer_;
-    delete[] read_buffer_;
-    for (uint32_t i = 0; i < num_threads_; ++i) delete[] read_buffers_[i];
-    // google benchmark might run benchmark several iterations. We need to clear vectors.
-    read_buffers_.clear();
-    reads_.clear();
   }
 
   // Tuple layout
@@ -106,14 +88,6 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   byte *redo_buffer_;
   storage::ProjectedRow *redo_;
 
-  // Read buffer pointers;
-  byte *read_buffer_;
-  storage::ProjectedRow *read_;
-
-  // Read buffers pointers for concurrent reads
-  std::vector<byte *> read_buffers_;
-  std::vector<storage::ProjectedRow *> reads_;
-
   // The data table used in the experiments
   storage::DataTable table_{&block_store_, layout_, layout_version_t(0)};
 
@@ -126,7 +100,6 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   void EndLogging() {
     logging_ = false;
     log_thread_.join();
-    fflush(stdout);
     log_manager_->Shutdown();
   }
 
@@ -160,28 +133,6 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   }
 };
 
-// Insert the num_inserts_ of tuples into a DataTable in a single thread
-// NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ConcurrencyBenchmark, SimpleInsert)(benchmark::State &state) {
-  int cnt = 0;
-  // NOLINTNEXTLINE
-  for (auto _ : state) {
-    printf("**********ran No.%d************\n", cnt++);
-    for (uint32_t i = 0; i < num_inserts_; ++i) {
-      auto *txn = txn_manager_->BeginTransaction();
-      auto inserted = table_.Insert(txn, *redo_);
-
-      if (enable_gc_and_wal_ == true) {
-        auto *record = txn->StageWrite(nullptr, inserted, initializer_);
-        TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
-      }
-      txn_manager_->Commit(txn, [] {});
-    }
-  }
-
-  state.SetItemsProcessed(state.iterations() * num_inserts_);
-}
-
 // Insert the num_inserts_ of tuples into a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &state) {
@@ -190,66 +141,33 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
   for (auto _ : state) {
     auto workload = [&](uint32_t id) {
       for (uint32_t i = 0; i < num_inserts_ / num_threads_; i++) {
+        // auto start = std::chrono::high_resolution_clock::now();
+
+        // Insert buffer pointers
+        byte *redo_buffer;
+        storage::ProjectedRow *redo;
+
+        redo_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
+        redo = initializer_.InitializeRow(redo_buffer);
+        StorageTestUtil::PopulateRandomRow(redo, layout_, 0, &generator_);
+
         auto *txn = txn_manager_->BeginTransaction();
-        auto inserted = table_.Insert(txn, *redo_);
+        auto inserted = table_.Insert(txn, *redo);
         txn_manager_->Commit(txn, [] {});
 
         if (enable_gc_and_wal_ == true) {
           auto *record = txn->StageWrite(nullptr, inserted, initializer_);
-          TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
+          TERRIER_MEMCPY(record->Delta(), redo, redo->Size());
         }
+
+        delete[] redo_buffer;
+        // delete[] reinterpret_cast<byte *>(redo);
       }
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
   }
 
   state.SetItemsProcessed(state.iterations() * num_inserts_);
-}
-
-// Read the num_reads_ of tuples in a sequential order from a DataTable in a single thread
-// NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ConcurrencyBenchmark, SequentialRead)(benchmark::State &state) {
-  // Populate read_table by inserting tuples
-  // We can use dummy timestamps here since we're not invoking concurrency control
-  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
-  std::vector<storage::TupleSlot> read_order;
-  for (uint32_t i = 0; i < num_reads_; ++i) {
-    read_order.emplace_back(table_.Insert(&txn, *redo_));
-  }
-  // NOLINTNEXTLINE
-  for (auto _ : state) {
-    for (uint32_t i = 0; i < num_reads_; ++i) {
-      auto *txn = txn_manager_->BeginTransaction();
-      table_.Select(txn, read_order[i], read_);
-      txn_manager_->Commit(txn, [] {});
-    }
-  }
-
-  state.SetItemsProcessed(state.iterations() * num_reads_);
-}
-
-// Read the num_reads_ of tuples in a random order from a DataTable in a single thread
-// NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ConcurrencyBenchmark, RandomRead)(benchmark::State &state) {
-  // Populate read_table_ by inserting tuples
-  // We can use dummy timestamps here since we're not invoking concurrency control
-  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
-  std::vector<storage::TupleSlot> read_order;
-  for (uint32_t i = 0; i < num_reads_; ++i) {
-    read_order.emplace_back(table_.Insert(&txn, *redo_));
-  }
-  // Create random reads
-  std::shuffle(read_order.begin(), read_order.end(), generator_);
-  // NOLINTNEXTLINE
-  for (auto _ : state) {
-    for (uint32_t i = 0; i < num_reads_; ++i) {
-      auto *txn = txn_manager_->BeginTransaction();
-      table_.Select(txn, read_order[i], read_);
-      txn_manager_->Commit(txn, [] {});
-    }
-  }
-
-  state.SetItemsProcessed(state.iterations() * num_reads_);
 }
 
 // Read the num_reads_ of tuples in a random order from a DataTable concurrently
@@ -271,44 +189,28 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
     // Create random reads
     rand_read_offsets.emplace_back(rand_start(generator_));
   }
+
   // NOLINTNEXTLINE
   for (auto _ : state) {
     auto workload = [&](uint32_t id) {
       for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
+        // Read buffer pointers;
+        byte *read_buffer;
+        storage::ProjectedRow *read;
+
+        // generate a ProjectedRow buffer to Read
+        read_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
+        read = initializer_.InitializeRow(read_buffer);
+
         auto *txn = txn_manager_->BeginTransaction();
-        table_.Select(txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], reads_[id]);
+        table_.Select(txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], read);
         txn_manager_->Commit(txn, [] {});
+
+        delete[] read_buffer;
+        // delete[] reinterpret_cast<byte *>(read);
       }
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
-  }
-
-  state.SetItemsProcessed(state.iterations() * num_reads_);
-}
-
-// Read the num_reads_ of tuples in a random order from a DataTable in a single thread
-// NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ConcurrencyBenchmark, RandomUpdate)(benchmark::State &state) {
-  // Populate read_table_ by inserting tuples
-  // We can use dummy timestamps here since we're not invoking concurrency control
-  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
-  std::vector<storage::TupleSlot> read_order;
-  for (uint32_t i = 0; i < num_reads_; ++i) {
-    read_order.emplace_back(table_.Insert(&txn, *redo_));
-  }
-  // Create random reads
-  std::shuffle(read_order.begin(), read_order.end(), generator_);
-  // NOLINTNEXTLINE
-  for (auto _ : state) {
-    for (uint32_t i = 0; i < num_reads_; ++i) {
-      auto *txn = txn_manager_->BeginTransaction();
-      if (enable_gc_and_wal_ == true) {
-        auto *record = txn->StageWrite(nullptr, read_order[i], initializer_);
-        TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
-      }
-      table_.Update(txn, read_order[i], *redo_);
-      txn_manager_->Commit(txn, [] {});
-    }
   }
 
   state.SetItemsProcessed(state.iterations() * num_reads_);
@@ -341,13 +243,21 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
   for (auto _ : state) {
     auto workload = [&](uint32_t id) {
       for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
+        // Update buffer pointers
+        byte *redo_buffer;
+        storage::ProjectedRow *redo;
+
+        redo_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
+        redo = initializer_.InitializeRow(redo_buffer);
+        StorageTestUtil::PopulateRandomRow(redo, layout_, 0, &generator_);
+
         auto *txn = txn_manager_->BeginTransaction();
         auto update_slot = read_order[(rand_read_offsets[id] + i) % read_order.size()];
         if (enable_gc_and_wal_ == true) {
           auto *record = txn->StageWrite(nullptr, update_slot, initializer_);
           TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
         }
-        bool update_result = table_.Update(txn, update_slot, *redo_);
+        bool update_result = table_.Update(txn, update_slot, *redo);
         if (update_result == false) {
           LOG_INFO("Aborting because update failure!!\n");
           txn_manager_->Abort(txn);
@@ -355,6 +265,9 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
         } else {
           txn_manager_->Commit(txn, [] {});
         }
+
+        delete[] redo_buffer;
+        // delete[] reinterpret_cast<byte *>(redo);
       }
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
@@ -363,17 +276,9 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
   state.SetItemsProcessed(state.iterations() * num_reads_ - num_aborts);
 }
 
-// BENCHMARK_REGISTER_F(ConcurrencyBenchmark, SimpleInsert)->Unit(benchmark::kMillisecond);
-
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime();
 
-// BENCHMARK_REGISTER_F(ConcurrencyBenchmark, SequentialRead)->Unit(benchmark::kMillisecond);
-
-// BENCHMARK_REGISTER_F(ConcurrencyBenchmark, RandomRead)->Unit(benchmark::kMillisecond);
-
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomRead)->Unit(benchmark::kMillisecond)->UseRealTime();
-
-// BENCHMARK_REGISTER_F(ConcurrencyBenchmark, RandomUpdate)->Unit(benchmark::kMillisecond);
 
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)->Unit(benchmark::kMillisecond)->UseRealTime();
 }  // namespace terrier
