@@ -254,7 +254,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
   state.SetItemsProcessed(state.iterations() * num_reads_);
 }
 
-// Read the num_reads_ of tuples in a random order from a DataTable concurrently
+// Update the num_reads_ of tuples in a random order from a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
   TestThreadPool thread_pool;
@@ -336,6 +336,73 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
   state.SetItemsProcessed(state.iterations() * num_reads_ - num_aborts);
 }
 
+// Delete the num_reads_ of tuples in a random order from a DataTable concurrently
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::State &state) {
+  TestThreadPool thread_pool;
+
+  std::atomic<uint64_t> total_latency(0);
+  std::atomic<uint64_t> total_committed(0);
+
+  // The data table used in the experiments
+  storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
+
+  // populate read_table_ by inserting tuples
+  // We can use dummy timestamps here since we're not invoking concurrency control
+  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
+  std::vector<storage::TupleSlot> read_order;
+  for (uint32_t i = 0; i < num_reads_; ++i) {
+    read_order.emplace_back(table.Insert(&txn, *redo_));
+  }
+  // Generate random read orders and read buffer for each thread
+  std::shuffle(read_order.begin(), read_order.end(), generator_);
+  std::uniform_int_distribution<uint32_t> rand_start(0, static_cast<uint32_t>(read_order.size() - 1));
+  std::vector<uint32_t> rand_read_offsets;
+  for (uint32_t i = 0; i < num_threads_; ++i) {
+    // Create random reads
+    rand_read_offsets.emplace_back(rand_start(generator_));
+  }
+
+  // Number of aborted transactions
+  std::atomic<uint32_t> num_aborts(0);
+
+  // NOLINTNEXTLINE
+  for (auto _ : state) {
+    auto workload = [&](uint32_t id) {
+      std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
+      int thread_total_committed(0);
+      for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
+        auto start = std::chrono::high_resolution_clock::now();
+        auto *txn = txn_manager_->BeginTransaction();
+        auto delete_slot = read_order[(rand_read_offsets[id] + i) % read_order.size()];
+        bool delete_result = table.Delete(txn, delete_slot);
+        if (delete_result == false) {
+          txn_manager_->Abort(txn);
+          num_aborts += 1;
+        } else {
+          txn_manager_->Commit(txn, [start, &thread_total_latency, &thread_total_committed] {
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<uint64_t, std::nano> diff = end - start;
+            thread_total_latency += diff;
+            thread_total_committed++;
+          });
+        }
+
+        if (enable_gc_and_wal_ == false) {
+          delete txn;
+        }
+      }
+      total_latency += thread_total_latency.count();
+      total_committed += thread_total_committed;
+    };
+    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+  }
+
+  LOG_INFO("Number of aborted txns: {}", num_aborts.load());
+  LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
+  state.SetItemsProcessed(state.iterations() * num_reads_ - num_aborts);
+}
+
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime()->MinTime(10);
 
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomRead)
@@ -347,4 +414,6 @@ BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime()
     ->MinTime(10);
+
+BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomDelete)->Unit(benchmark::kMillisecond)->UseRealTime();
 }  // namespace terrier
