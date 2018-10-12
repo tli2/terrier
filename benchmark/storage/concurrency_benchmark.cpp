@@ -135,15 +135,19 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &state) {
   TestThreadPool thread_pool;
 
+  std::atomic<uint64_t> total_latency(0);
+  std::atomic<uint64_t> total_committed(0);
+
   // NOLINTNEXTLINE
   for (auto _ : state) {
     // The data table used in the experiments
     storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
 
     auto workload = [&](uint32_t id) {
-      for (uint32_t i = 0; i < num_inserts_ / num_threads_; i++) {
-        // auto start = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
+      int thread_total_committed(0);
 
+      for (uint32_t i = 0; i < num_inserts_ / num_threads_; i++) {
         // Insert buffer pointers
         byte *redo_buffer;
         storage::ProjectedRow *redo;
@@ -152,9 +156,15 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
         redo = initializer_.InitializeRow(redo_buffer);
         StorageTestUtil::PopulateRandomRow(redo, layout_, 0, &generator_);
 
+        auto start = std::chrono::high_resolution_clock::now();
         auto *txn = txn_manager_->BeginTransaction();
         auto inserted = table.Insert(txn, *redo);
-        txn_manager_->Commit(txn, [] {});
+        txn_manager_->Commit(txn, [start, &thread_total_latency, &thread_total_committed] {
+          auto end = std::chrono::high_resolution_clock::now();
+          std::chrono::duration<uint64_t, std::nano> diff = end - start;
+          thread_total_latency += diff;
+          thread_total_committed++;
+        });
 
         if (enable_gc_and_wal_ == true) {
           auto *record = txn->StageWrite(nullptr, inserted, initializer_);
@@ -167,10 +177,13 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
           delete txn;
         }
       }
+      total_latency += thread_total_latency.count();
+      total_committed += thread_total_committed;
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
   }
 
+  LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
   state.SetItemsProcessed(state.iterations() * num_inserts_);
 }
 
@@ -178,6 +191,9 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State &state) {
   TestThreadPool thread_pool;
+
+  std::atomic<uint64_t> total_latency(0);
+  std::atomic<uint64_t> total_committed(0);
 
   // The data table used in the experiments
   storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
@@ -201,6 +217,8 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
   // NOLINTNEXTLINE
   for (auto _ : state) {
     auto workload = [&](uint32_t id) {
+      std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
+      int thread_total_committed(0);
       for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
         // Read buffer pointers;
         byte *read_buffer;
@@ -210,9 +228,15 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
         read_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
         read = initializer_.InitializeRow(read_buffer);
 
+        auto start = std::chrono::high_resolution_clock::now();
         auto *txn = txn_manager_->BeginTransaction();
         table.Select(txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], read);
-        txn_manager_->Commit(txn, [] {});
+        txn_manager_->Commit(txn, [start, &thread_total_latency, &thread_total_committed] {
+          auto end = std::chrono::high_resolution_clock::now();
+          std::chrono::duration<uint64_t, std::nano> diff = end - start;
+          thread_total_latency += diff;
+          thread_total_committed++;
+        });
 
         delete[] read_buffer;
 
@@ -220,10 +244,13 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
           delete txn;
         }
       }
+      total_latency += thread_total_latency.count();
+      total_committed += thread_total_committed;
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
   }
 
+  LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
   state.SetItemsProcessed(state.iterations() * num_reads_);
 }
 
@@ -231,6 +258,9 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
   TestThreadPool thread_pool;
+
+  std::atomic<uint64_t> total_latency(0);
+  std::atomic<uint64_t> total_committed(0);
 
   // The data table used in the experiments
   storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
@@ -252,11 +282,13 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
   }
 
   // Number of aborted transactions
-  std::atomic<uint32_t> num_aborts;
+  std::atomic<uint32_t> num_aborts(0);
 
   // NOLINTNEXTLINE
   for (auto _ : state) {
     auto workload = [&](uint32_t id) {
+      std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
+      int thread_total_committed(0);
       for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
         // Update buffer pointers
         byte *redo_buffer;
@@ -266,6 +298,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
         redo = initializer_.InitializeRow(redo_buffer);
         StorageTestUtil::PopulateRandomRow(redo, layout_, 0, &generator_);
 
+        auto start = std::chrono::high_resolution_clock::now();
         auto *txn = txn_manager_->BeginTransaction();
         auto update_slot = read_order[(rand_read_offsets[id] + i) % read_order.size()];
         if (enable_gc_and_wal_ == true) {
@@ -278,7 +311,12 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
           txn_manager_->Abort(txn);
           num_aborts += 1;
         } else {
-          txn_manager_->Commit(txn, [] {});
+          txn_manager_->Commit(txn, [start, &thread_total_latency, &thread_total_committed] {
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<uint64_t, std::nano> diff = end - start;
+            thread_total_latency += diff;
+            thread_total_committed++;
+          });
         }
 
         delete[] redo_buffer;
@@ -287,11 +325,14 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
           delete txn;
         }
       }
+      total_latency += thread_total_latency.count();
+      total_committed += thread_total_committed;
     };
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
   }
 
-  printf("Number of aborted txns: %u\n", num_aborts.load());
+  LOG_INFO("Number of aborted txns: {}", num_aborts.load());
+  LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
   state.SetItemsProcessed(state.iterations() * num_reads_ - num_aborts);
 }
 
