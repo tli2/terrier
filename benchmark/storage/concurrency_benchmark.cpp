@@ -211,7 +211,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
         // LOG_INFO("flag {} size {} thread {}", task_submitting_, task_queues_[id].size(), id);
         // LOG_INFO("running!!");
         if (task_queues_[id].size() == 0) {
-          // std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+          std::this_thread::sleep_for(std::chrono::nanoseconds(1));
           continue;
         }
         // Insert buffer pointers
@@ -296,7 +296,13 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
     auto workload = [&](uint32_t id) {
       std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
       int thread_total_committed(0);
-      for (uint32_t i = 0; i < num_operations_ / num_threads_; i++) {
+      int i = 0;
+      while (task_submitting_ == true or task_queues_[id].size() > 0) {
+        if (task_queues_[id].size() == 0) {
+          std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+          continue;
+        }
+
         // Read buffer pointers;
         byte *read_buffer;
         storage::ProjectedRow *read;
@@ -305,7 +311,10 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
         read_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
         read = initializer_.InitializeRow(read_buffer);
 
-        auto start = std::chrono::high_resolution_clock::now();
+        task_queue_latches_[id].Lock();
+        time_point start = task_queues_[id].front();
+        task_queues_[id].pop();
+        task_queue_latches_[id].Unlock();
         auto *txn = txn_manager_->BeginTransaction();
         table.Select(txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], read);
 
@@ -328,7 +337,9 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
       total_latency += thread_total_latency.count();
       total_committed += thread_total_committed;
     };
+    StartTaskSubmitting(1000000000 / txn_rates_);
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    EndTaskSubmitting();
   }
 
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
@@ -370,7 +381,13 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
     auto workload = [&](uint32_t id) {
       std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
       int thread_total_committed(0);
-      for (uint32_t i = 0; i < num_operations_ / num_threads_; i++) {
+      int i = 0;
+      while (task_submitting_ == true or task_queues_[id].size() > 0) {
+        if (task_queues_[id].size() == 0) {
+          std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+          continue;
+        }
+
         // Update buffer pointers
         byte *redo_buffer;
         storage::ProjectedRow *redo;
@@ -379,7 +396,10 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
         redo = initializer_.InitializeRow(redo_buffer);
         StorageTestUtil::PopulateRandomRow(redo, layout_, 0, &generator_);
 
-        auto start = std::chrono::high_resolution_clock::now();
+        task_queue_latches_[id].Lock();
+        time_point start = task_queues_[id].front();
+        task_queues_[id].pop();
+        task_queue_latches_[id].Unlock();
         auto *txn = txn_manager_->BeginTransaction();
         auto update_slot = read_order[(rand_read_offsets[id] + i) % read_order.size()];
         if (enable_gc_and_wal_ == true) {
@@ -413,7 +433,9 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
       total_latency += thread_total_latency.count();
       total_committed += thread_total_committed;
     };
+    StartTaskSubmitting(1000000000 / txn_rates_);
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    EndTaskSubmitting();
   }
 
   LOG_INFO("Number of aborted txns: {}", num_aborts.load());
@@ -456,8 +478,17 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::Stat
     auto workload = [&](uint32_t id) {
       std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
       int thread_total_committed(0);
-      for (uint32_t i = 0; i < num_operations_ / num_threads_; i++) {
-        auto start = std::chrono::high_resolution_clock::now();
+      int i = 0;
+      while (task_submitting_ == true or task_queues_[id].size() > 0) {
+        if (task_queues_[id].size() == 0) {
+          std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+          continue;
+        }
+
+        task_queue_latches_[id].Lock();
+        time_point start = task_queues_[id].front();
+        task_queues_[id].pop();
+        task_queue_latches_[id].Unlock();
         auto *txn = txn_manager_->BeginTransaction();
         auto delete_slot = read_order[(rand_read_offsets[id] + i) % read_order.size()];
         bool delete_result = table.Delete(txn, delete_slot);
@@ -484,13 +515,15 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::Stat
       total_latency += thread_total_latency.count();
       total_committed += thread_total_committed;
     };
+    StartTaskSubmitting(1000000000 / txn_rates_);
     thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    EndTaskSubmitting();
   }
 
   LOG_INFO("Number of aborted txns: {}", num_aborts.load());
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
   state.SetItemsProcessed(state.iterations() * num_operations_ - num_aborts);
-}
+}  // namespace terrier
 
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime()->MinTime(10);
 
