@@ -177,7 +177,7 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
           }
         }
         // Reject txns if the queue is larger than 100
-        if (shortest_queue_size > 100) {
+        if (shortest_queue_size > 500) {
           // LOG_INFO("Rejecting 1!");
           continue;
         }
@@ -269,7 +269,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
   LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_committed.load());
   LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_committed.load());
-  state.SetItemsProcessed(state.iterations() * num_operations_);
+  state.SetItemsProcessed(total_committed.load());
 }
 
 // Read the num_reads_ of tuples in a random order from a DataTable concurrently
@@ -354,7 +354,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
   LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_committed.load());
   LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_committed.load());
-  state.SetItemsProcessed(state.iterations() * num_operations_);
+  state.SetItemsProcessed(total_committed.load());
 }
 
 // Update the num_reads_ of tuples in a random order from a DataTable concurrently
@@ -456,7 +456,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
            txn_manager_->GetTotalCommitLatchWait() / (total_committed.load() + num_aborts.load()));
   LOG_INFO("Average table latch wait: {}",
            txn_manager_->GetTotalTableLatchWait() / (total_committed.load() + num_aborts.load()));
-  state.SetItemsProcessed(state.iterations() * num_operations_ - num_aborts);
+  state.SetItemsProcessed(total_committed.load());
 }
 
 // Delete the num_reads_ of tuples in a random order from a DataTable concurrently
@@ -542,7 +542,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::Stat
            txn_manager_->GetTotalCommitLatchWait() / (total_committed.load() + num_aborts.load()));
   LOG_INFO("Average table latch wait: {}",
            txn_manager_->GetTotalTableLatchWait() / (total_committed.load() + num_aborts.load()));
-  state.SetItemsProcessed(state.iterations() * num_operations_ - num_aborts);
+  state.SetItemsProcessed(total_committed.load());
 }  // namespace terrier
 
 BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime()->MinTime(10);
