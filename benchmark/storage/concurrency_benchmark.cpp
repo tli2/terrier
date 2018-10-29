@@ -74,7 +74,9 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
   const uint32_t num_threads_ = 4;
   const uint64_t buffer_pool_reuse_limit_ = 10000000;
   // Number of transactions per second
-  const uint64_t txn_rates_ = 5000000;
+  const uint64_t txn_rates_ = 1000000;
+  // Throttling threshold for the work queue size
+  const uint64_t work_queue_threshold_ = 100;
 
   // Test infrastructure
   std::default_random_engine generator_;
