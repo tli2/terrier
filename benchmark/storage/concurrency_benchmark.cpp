@@ -176,6 +176,12 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
             shortest_queue_id = i;
           }
         }
+        // Reject txns if the queue is larger than 100
+        if (shortest_queue_size > 100) {
+          // LOG_INFO("Rejecting 1!");
+          continue;
+        }
+
         task_queue_latches_[shortest_queue_id].Lock();
         task_queues_[shortest_queue_id].emplace(current);
         // LOG_INFO("add one item in thread {}, current size {}!", shortest_queue_id,
