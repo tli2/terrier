@@ -6,7 +6,12 @@ TransactionContext *TransactionManager::BeginTransaction() {
   // This latch has to also protect addition of this transaction to the running transaction table. Otherwise,
   // the thread might get scheduled out while other transactions commit, and the GC will deallocate their version
   // chain which may be needed for this transaction, assuming that this transaction does not exist.
+  auto start = std::chrono::high_resolution_clock::now();
   common::SharedLatch::ScopedSharedLatch guard(&commit_latch_);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<uint64_t, std::nano> diff = end - start;
+  total_commit_latch_wait_ += diff.count();
+
   timestamp_t start_time = time_++;
 
   // TODO(Tianyu):
@@ -15,7 +20,11 @@ TransactionContext *TransactionManager::BeginTransaction() {
   // guarantee that the iterator or underlying pointer is stable across operations.
   // (That is, they may change as concurrent inserts and deletes happen)
   auto *result = new TransactionContext(start_time, start_time + INT64_MIN, buffer_pool_, log_manager_);
+  start = std::chrono::high_resolution_clock::now();
   table_latch_.Lock();
+  end = std::chrono::high_resolution_clock::now();
+  diff = end - start;
+  total_table_latch_wait_ += diff.count();
   auto ret UNUSED_ATTRIBUTE = curr_running_txns_.emplace(result->StartTime(), result);
   TERRIER_ASSERT(ret.second, "commit start time should be globally unique");
   table_latch_.Unlock();
@@ -51,7 +60,12 @@ timestamp_t TransactionManager::ReadOnlyCommitCriticalSection(TransactionContext
 
 timestamp_t TransactionManager::UpdatingCommitCriticalSection(TransactionContext *const txn, const callback_fn callback,
                                                               void *const callback_arg) {
+  auto start = std::chrono::high_resolution_clock::now();
   common::SharedLatch::ScopedExclusiveLatch guard(&commit_latch_);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<uint64_t, std::nano> diff = end - start;
+  total_commit_latch_wait_ += diff.count();
+
   const timestamp_t commit_time = time_++;
   // TODO(Tianyu):
   // WARNING: This operation has to happen in the critical section to make sure that commits appear in serial order
@@ -82,8 +96,12 @@ timestamp_t TransactionManager::Commit(TransactionContext *const txn, transactio
   timestamp_t result = txn->undo_buffer_.Empty() ? ReadOnlyCommitCriticalSection(txn, callback, callback_arg)
                                                  : UpdatingCommitCriticalSection(txn, callback, callback_arg);
   {
+    auto start = std::chrono::high_resolution_clock::now();
     // In a critical section, remove this transaction from the table of running transactions
     common::SpinLatch::ScopedSpinLatch guard(&table_latch_);
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<uint64_t, std::nano> diff = end - start;
+    total_table_latch_wait_ += diff.count();
     const timestamp_t start_time = txn->StartTime();
     size_t result UNUSED_ATTRIBUTE = curr_running_txns_.erase(start_time);
     TERRIER_ASSERT(result == 1, "Committed transaction did not exist in global transactions table");
@@ -102,8 +120,13 @@ void TransactionManager::Abort(TransactionContext *const txn) {
   // Discard the redo buffer that is not yet logged out
   txn->redo_buffer_.Finalize(false);
   {
+    auto start = std::chrono::high_resolution_clock::now();
     // In a critical section, remove this transaction from the table of running transactions
     common::SpinLatch::ScopedSpinLatch guard(&table_latch_);
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<uint64_t, std::nano> diff = end - start;
+    total_table_latch_wait_ += diff.count();
+
     const timestamp_t start_time = txn->StartTime();
     size_t ret UNUSED_ATTRIBUTE = curr_running_txns_.erase(start_time);
     TERRIER_ASSERT(ret == 1, "Aborted transaction did not exist in global transactions table");
@@ -112,14 +135,24 @@ void TransactionManager::Abort(TransactionContext *const txn) {
 }
 
 timestamp_t TransactionManager::OldestTransactionStartTime() const {
+  auto start = std::chrono::high_resolution_clock::now();
   common::SpinLatch::ScopedSpinLatch guard(&table_latch_);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<uint64_t, std::nano> diff = end - start;
+  total_table_latch_wait_ += diff.count();
+
   auto oldest_txn = curr_running_txns_.begin();
   timestamp_t result = (oldest_txn != curr_running_txns_.end()) ? oldest_txn->second->StartTime() : time_.load();
   return result;
 }
 
 TransactionQueue TransactionManager::CompletedTransactionsForGC() {
+  auto start = std::chrono::high_resolution_clock::now();
   common::SpinLatch::ScopedSpinLatch guard(&table_latch_);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<uint64_t, std::nano> diff = end - start;
+  total_table_latch_wait_ += diff.count();
+
   TransactionQueue hand_to_gc(std::move(completed_txns_));
   TERRIER_ASSERT(completed_txns_.empty(), "TransactionManager's queue should now be empty.");
   return hand_to_gc;

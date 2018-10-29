@@ -75,6 +75,16 @@ class TransactionManager {
    */
   TransactionQueue CompletedTransactionsForGC();
 
+  /**
+   * @return total wait time on the commit latch in nanos
+   */
+  uint64_t GetTotalCommitLatchWait() { return total_commit_latch_wait_.load(); }
+
+  /**
+   * @return total wait time on the tablelatch in nanos
+   */
+  uint64_t GetTotalTableLatchWait() { return total_table_latch_wait_.load(); }
+
  private:
   storage::RecordBufferSegmentPool *buffer_pool_;
   // TODO(Tianyu): Timestamp generation needs to be more efficient (batches)
@@ -91,6 +101,11 @@ class TransactionManager {
   bool gc_enabled_ = false;
   TransactionQueue completed_txns_;
   storage::LogManager *const log_manager_;
+
+  // total wait time on the commit latch
+  mutable std::atomic<uint64_t> total_commit_latch_wait_{0};
+  // total wait time on the table latch
+  mutable std::atomic<uint64_t> total_table_latch_wait_{0};
 
   timestamp_t ReadOnlyCommitCriticalSection(TransactionContext *txn, transaction::callback_fn callback,
                                             void *callback_arg);

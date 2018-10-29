@@ -25,7 +25,7 @@ namespace terrier {
 class ConcurrencyBenchmark : public benchmark::Fixture {
  public:
   void SetUp(const benchmark::State &state) final {
-    // LOG_INFO("Setup once.\n");
+    LOG_INFO("Setup once.\n");
     // generate a random redo ProjectedRow to Insert
     redo_buffer_ = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
     redo_ = initializer_.InitializeRow(redo_buffer_);
@@ -199,7 +199,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
 
   // NOLINTNEXTLINE
   for (auto _ : state) {
-    // LOG_INFO("start the loop");
+    LOG_INFO("start the loop");
     // The data table used in the experiments
     storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
 
@@ -261,6 +261,8 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
   }
 
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
+  LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_committed.load());
+  LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_committed.load());
   state.SetItemsProcessed(state.iterations() * num_operations_);
 }
 
@@ -293,6 +295,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
 
   // NOLINTNEXTLINE
   for (auto _ : state) {
+    LOG_INFO("start the loop");
     auto workload = [&](uint32_t id) {
       std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
       int thread_total_committed(0);
@@ -343,6 +346,8 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
   }
 
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
+  LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_committed.load());
+  LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_committed.load());
   state.SetItemsProcessed(state.iterations() * num_operations_);
 }
 
@@ -378,6 +383,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
 
   // NOLINTNEXTLINE
   for (auto _ : state) {
+    LOG_INFO("start the loop");
     auto workload = [&](uint32_t id) {
       std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
       int thread_total_committed(0);
@@ -440,6 +446,10 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
 
   LOG_INFO("Number of aborted txns: {}", num_aborts.load());
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
+  LOG_INFO("Average commit latch wait: {}",
+           txn_manager_->GetTotalCommitLatchWait() / (total_committed.load() + num_aborts.load()));
+  LOG_INFO("Average table latch wait: {}",
+           txn_manager_->GetTotalTableLatchWait() / (total_committed.load() + num_aborts.load()));
   state.SetItemsProcessed(state.iterations() * num_operations_ - num_aborts);
 }
 
@@ -522,6 +532,10 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::Stat
 
   LOG_INFO("Number of aborted txns: {}", num_aborts.load());
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
+  LOG_INFO("Average commit latch wait: {}",
+           txn_manager_->GetTotalCommitLatchWait() / (total_committed.load() + num_aborts.load()));
+  LOG_INFO("Average table latch wait: {}",
+           txn_manager_->GetTotalTableLatchWait() / (total_committed.load() + num_aborts.load()));
   state.SetItemsProcessed(state.iterations() * num_operations_ - num_aborts);
 }  // namespace terrier
 
@@ -537,5 +551,5 @@ BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)
     ->UseRealTime()
     ->MinTime(10);
 
-BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomDelete)->Unit(benchmark::kMillisecond)->UseRealTime();
+// BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomDelete)->Unit(benchmark::kMillisecond)->UseRealTime();
 }  // namespace terrier
