@@ -179,7 +179,7 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
           }
         }
         // Reject txns if the queue is larger than 100
-        if (shortest_queue_size > 500) {
+        if (shortest_queue_size > work_queue_threshold_) {
           // LOG_INFO("Rejecting 1!");
           continue;
         }
