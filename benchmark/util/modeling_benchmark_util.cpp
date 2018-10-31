@@ -1,12 +1,11 @@
-#include "util/transaction_benchmark_util.h"
+#include "util/modeling_benchmark_util.h"
 #include <algorithm>
 #include <utility>
 #include <vector>
 #include "common/allocator.h"
-#include "transaction/transaction_util.h"
 
 namespace terrier {
-RandomWorkloadTransaction::RandomWorkloadTransaction(LargeTransactionBenchmarkObject *test_object)
+RandomWorkloadTransaction::RandomWorkloadTransaction(ModelingBenchmarkObject *test_object)
     : test_object_(test_object),
       txn_(test_object->txn_manager_.BeginTransaction()),
       aborted_(false),
@@ -74,13 +73,12 @@ void RandomWorkloadTransaction::Finish() {
     commit_time_ = test_object_->txn_manager_.Commit(txn_, TestCallbacks::EmptyCallback, nullptr);
 }
 
-LargeTransactionBenchmarkObject::LargeTransactionBenchmarkObject(const std::vector<uint8_t> &attr_sizes,
-                                                                 uint32_t initial_table_size, uint32_t txn_length,
-                                                                 std::vector<double> operation_ratio,
-                                                                 storage::BlockStore *block_store,
-                                                                 storage::RecordBufferSegmentPool *buffer_pool,
-                                                                 std::default_random_engine *generator, bool gc_on,
-                                                                 storage::LogManager *log_manager)
+ModelingBenchmarkObject::ModelingBenchmarkObject(const std::vector<uint8_t> &attr_sizes, uint32_t initial_table_size,
+                                                 uint32_t txn_length, std::vector<double> operation_ratio,
+                                                 storage::BlockStore *block_store,
+                                                 storage::RecordBufferSegmentPool *buffer_pool,
+                                                 std::default_random_engine *generator, bool gc_on,
+                                                 storage::LogManager *log_manager)
     : txn_length_(txn_length),
       operation_ratio_(std::move(operation_ratio)),
       generator_(generator),
@@ -94,12 +92,12 @@ LargeTransactionBenchmarkObject::LargeTransactionBenchmarkObject(const std::vect
   PopulateInitialTable(initial_table_size, generator_);
 }
 
-LargeTransactionBenchmarkObject::~LargeTransactionBenchmarkObject() {
+ModelingBenchmarkObject::~ModelingBenchmarkObject() {
   if (!gc_on_) delete initial_txn_;
 }
 
 // Caller is responsible for freeing the returned results if bookkeeping is on.
-uint64_t LargeTransactionBenchmarkObject::SimulateOltp(uint32_t num_transactions, uint32_t num_concurrent_txns) {
+uint64_t ModelingBenchmarkObject::SimulateOltp(uint32_t num_transactions, uint32_t num_concurrent_txns) {
   TestThreadPool thread_pool;
   std::vector<RandomWorkloadTransaction *> txns;
   std::function<void(uint32_t)> workload;
@@ -135,7 +133,7 @@ uint64_t LargeTransactionBenchmarkObject::SimulateOltp(uint32_t num_transactions
   return abort_count_;
 }
 
-void LargeTransactionBenchmarkObject::SimulateOneTransaction(terrier::RandomWorkloadTransaction *txn, uint32_t txn_id) {
+void ModelingBenchmarkObject::SimulateOneTransaction(terrier::RandomWorkloadTransaction *txn, uint32_t txn_id) {
   std::default_random_engine thread_generator(txn_id);
 
   auto insert = [&] { txn->RandomInsert(&thread_generator); };
@@ -147,7 +145,7 @@ void LargeTransactionBenchmarkObject::SimulateOneTransaction(terrier::RandomWork
 }
 
 template <class Random>
-void LargeTransactionBenchmarkObject::PopulateInitialTable(uint32_t num_tuples, Random *generator) {
+void ModelingBenchmarkObject::PopulateInitialTable(uint32_t num_tuples, Random *generator) {
   initial_txn_ = txn_manager_.BeginTransaction();
   byte *redo_buffer = nullptr;
 
