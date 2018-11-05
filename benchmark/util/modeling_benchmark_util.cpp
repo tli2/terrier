@@ -5,7 +5,7 @@
 #include "common/allocator.h"
 
 namespace terrier {
-RandomWorkloadTransaction::RandomWorkloadTransaction(ModelingBenchmarkObject *test_object)
+RandomTransaction::RandomTransaction(ModelingBenchmarkObject *test_object)
     : test_object_(test_object),
       txn_(test_object->txn_manager_.BeginTransaction()),
       aborted_(false),
@@ -13,14 +13,14 @@ RandomWorkloadTransaction::RandomWorkloadTransaction(ModelingBenchmarkObject *te
       commit_time_(UINT64_MAX),
       buffer_(common::AllocationUtil::AllocateAligned(test_object->row_initializer_.ProjectedRowSize())) {}
 
-RandomWorkloadTransaction::~RandomWorkloadTransaction() {
+RandomTransaction::~RandomTransaction() {
   if (!test_object_->gc_on_) delete txn_;
   delete[] buffer_;
   for (auto &entry : updates_) delete[] reinterpret_cast<byte *>(entry.second);
 }
 
 template <class Random>
-void RandomWorkloadTransaction::RandomUpdate(Random *generator) {
+void RandomTransaction::RandomUpdate(Random *generator) {
   if (aborted_) return;
   storage::TupleSlot updated =
       RandomTestUtil::UniformRandomElement(test_object_->last_checked_version_, generator)->first;
@@ -40,7 +40,7 @@ void RandomWorkloadTransaction::RandomUpdate(Random *generator) {
 }
 
 template <class Random>
-void RandomWorkloadTransaction::RandomInsert(Random *generator) {
+void RandomTransaction::RandomInsert(Random *generator) {
   if (aborted_) return;
   std::vector<col_id_t> insert_col_ids = StorageTestUtil::ProjectionListAllColumns(test_object_->layout_);
   storage::ProjectedRowInitializer initializer(test_object_->layout_, insert_col_ids);
@@ -57,7 +57,7 @@ void RandomWorkloadTransaction::RandomInsert(Random *generator) {
 }
 
 template <class Random>
-void RandomWorkloadTransaction::RandomSelect(Random *generator) {
+void RandomTransaction::RandomSelect(Random *generator) {
   if (aborted_) return;
   storage::TupleSlot selected =
       RandomTestUtil::UniformRandomElement(test_object_->last_checked_version_, generator)->first;
@@ -66,7 +66,7 @@ void RandomWorkloadTransaction::RandomSelect(Random *generator) {
   test_object_->table_.Select(txn_, selected, select);
 }
 
-void RandomWorkloadTransaction::Finish() {
+void RandomTransaction::Finish() {
   if (aborted_)
     test_object_->txn_manager_.Abort(txn_);
   else
@@ -99,14 +99,14 @@ ModelingBenchmarkObject::~ModelingBenchmarkObject() {
 // Caller is responsible for freeing the returned results if bookkeeping is on.
 uint64_t ModelingBenchmarkObject::SimulateOltp(uint32_t num_transactions, uint32_t num_concurrent_txns) {
   TestThreadPool thread_pool;
-  std::vector<RandomWorkloadTransaction *> txns;
+  std::vector<RandomTransaction *> txns;
   std::function<void(uint32_t)> workload;
   std::atomic<uint32_t> txns_run = 0;
   if (gc_on_) {
     // Then there is no need to keep track of RandomWorkloadTransaction objects
     workload = [&](uint32_t) {
       for (uint32_t txn_id = txns_run++; txn_id < num_transactions; txn_id = txns_run++) {
-        RandomWorkloadTransaction txn(this);
+        RandomTransaction txn(this);
         SimulateOneTransaction(&txn, txn_id);
       }
     };
@@ -116,7 +116,7 @@ uint64_t ModelingBenchmarkObject::SimulateOltp(uint32_t num_transactions, uint32
     // test objects
     workload = [&](uint32_t) {
       for (uint32_t txn_id = txns_run++; txn_id < num_transactions; txn_id = txns_run++) {
-        txns[txn_id] = new RandomWorkloadTransaction(this);
+        txns[txn_id] = new RandomTransaction(this);
         SimulateOneTransaction(txns[txn_id], txn_id);
       }
     };
@@ -125,7 +125,7 @@ uint64_t ModelingBenchmarkObject::SimulateOltp(uint32_t num_transactions, uint32
   thread_pool.RunThreadsUntilFinish(num_concurrent_txns, workload);
 
   // We only need to deallocate, and return, if gc is on, this loop is a no-op
-  for (RandomWorkloadTransaction *txn : txns) {
+  for (RandomTransaction *txn : txns) {
     if (txn->aborted_) abort_count_++;
     delete txn;
   }
@@ -133,7 +133,7 @@ uint64_t ModelingBenchmarkObject::SimulateOltp(uint32_t num_transactions, uint32
   return abort_count_;
 }
 
-void ModelingBenchmarkObject::SimulateOneTransaction(terrier::RandomWorkloadTransaction *txn, uint32_t txn_id) {
+void ModelingBenchmarkObject::SimulateOneTransaction(terrier::RandomTransaction *txn, uint32_t txn_id) {
   std::default_random_engine thread_generator(txn_id);
 
   auto insert = [&] { txn->RandomInsert(&thread_generator); };

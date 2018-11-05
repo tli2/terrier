@@ -17,24 +17,24 @@ struct TestCallbacks {
 };
 
 class ModelingBenchmarkObject;
-class RandomWorkloadTransaction;
+class RandomTransaction;
 using TupleEntry = std::pair<storage::TupleSlot, storage::ProjectedRow *>;
 
 /**
  * A RandomWorkloadTransaction class provides a simple interface to simulate a transaction running in the system.
  */
-class RandomWorkloadTransaction {
+class RandomTransaction {
  public:
   /**
    * Initializes a new RandomWorkloadTransaction to work on the given test object
    * @param test_object the test object that runs this transaction
    */
-  explicit RandomWorkloadTransaction(ModelingBenchmarkObject *test_object);
+  explicit RandomTransaction(ModelingBenchmarkObject *test_object);
 
   /**
    * Destructs a random workload transaction
    */
-  ~RandomWorkloadTransaction();
+  ~RandomTransaction();
 
   /**
    * Randomly updates a tuple, using the given generator as source of randomness.
@@ -140,12 +140,12 @@ class ModelingBenchmarkObject {
   const storage::BlockLayout &Layout() const { return layout_; }
 
  private:
-  void SimulateOneTransaction(RandomWorkloadTransaction *txn, uint32_t txn_id);
+  void SimulateOneTransaction(RandomTransaction *txn, uint32_t txn_id);
 
   template <class Random>
   void PopulateInitialTable(uint32_t num_tuples, Random *generator);
 
-  friend class RandomWorkloadTransaction;
+  friend class RandomTransaction;
   uint32_t txn_length_;
   std::vector<double> operation_ratio_;
   std::default_random_engine *generator_;

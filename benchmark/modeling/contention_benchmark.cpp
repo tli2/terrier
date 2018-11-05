@@ -22,7 +22,7 @@ namespace terrier {
 // We are interested in the system's raw performance, so the tuple's contents are intentionally left garbage and we
 // don't verify correctness. That's the job of the Google Tests.
 
-class ConcurrencyBenchmark : public benchmark::Fixture {
+class ContentionBenchmark : public benchmark::Fixture {
  public:
   void SetUp(const benchmark::State &state) final {
     LOG_INFO("Setup once.\n");
@@ -199,7 +199,7 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
 
 // Insert the num_inserts_ of tuples into a DataTable concurrently
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &state) {
+BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentInsert)(benchmark::State &state) {
   TestThreadPool thread_pool;
 
   std::atomic<uint64_t> total_latency(0);
@@ -276,7 +276,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
 
 // Read the num_reads_ of tuples in a random order from a DataTable concurrently
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State &state) {
+BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentRandomRead)(benchmark::State &state) {
   TestThreadPool thread_pool;
 
   std::atomic<uint64_t> total_latency(0);
@@ -361,7 +361,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
 
 // Update the num_reads_ of tuples in a random order from a DataTable concurrently
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
+BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
   TestThreadPool thread_pool;
 
   std::atomic<uint64_t> total_latency(0);
@@ -463,7 +463,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
 
 // Delete the num_reads_ of tuples in a random order from a DataTable concurrently
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::State &state) {
+BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentRandomDelete)(benchmark::State &state) {
   TestThreadPool thread_pool;
 
   std::atomic<uint64_t> total_latency(0);
@@ -547,14 +547,14 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::Stat
   state.SetItemsProcessed(total_committed.load());
 }  // namespace terrier
 
-BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime()->MinTime(10);
+BENCHMARK_REGISTER_F(ContentionBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime()->MinTime(10);
 
-BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomRead)
+BENCHMARK_REGISTER_F(ContentionBenchmark, ConcurrentRandomRead)
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime()
     ->MinTime(10);
 
-BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)
+BENCHMARK_REGISTER_F(ContentionBenchmark, ConcurrentRandomUpdate)
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime()
     ->MinTime(10);
