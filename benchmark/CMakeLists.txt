@@ -12,4 +12,5 @@ if (TERRIER_BUILD_BENCHMARKS)
 
     add_subdirectory(storage)
     add_subdirectory(transaction)
+    add_subdirectory(modeling)
 endif()

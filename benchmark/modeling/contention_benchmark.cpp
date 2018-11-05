@@ -11,6 +11,7 @@
 #include "storage/storage_util.h"
 #include "transaction/transaction_context.h"
 #include "transaction/transaction_manager.h"
+#include "util/modeling_benchmark_util.h"
 #include "util/storage_test_util.h"
 #include "util/test_thread_pool.h"
 
@@ -18,7 +19,7 @@
 
 namespace terrier {
 
-// This benchmark simulates the concurrent query execution in a YCSB-like benchmark.
+// This benchmark simulates the concurrent query execution with different mixtures of operations in transactions.
 // We are interested in the system's raw performance, so the tuple's contents are intentionally left garbage and we
 // don't verify correctness. That's the job of the Google Tests.
 
@@ -549,15 +550,4 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentRandomDelete)(benchmark::State
 
 BENCHMARK_REGISTER_F(ContentionBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime()->MinTime(10);
 
-BENCHMARK_REGISTER_F(ContentionBenchmark, ConcurrentRandomRead)
-    ->Unit(benchmark::kMillisecond)
-    ->UseRealTime()
-    ->MinTime(10);
-
-BENCHMARK_REGISTER_F(ContentionBenchmark, ConcurrentRandomUpdate)
-    ->Unit(benchmark::kMillisecond)
-    ->UseRealTime()
-    ->MinTime(10);
-
-// BENCHMARK_REGISTER_F(ConcurrencyBenchmark, ConcurrentRandomDelete)->Unit(benchmark::kMillisecond)->UseRealTime();
 }  // namespace terrier
