@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <memory>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "util/test_thread_pool.h"
 
 #define LOG_FILE_NAME "concurrency_benchmark.log"
+#define CSV_FILE_NAME "concurrency_benchmark.csv"
 
 namespace terrier {
 
@@ -39,6 +41,8 @@ class ContentionBenchmark : public benchmark::Fixture {
       StartLogging(10);
       StartGC(txn_manager_, 10);
     }
+
+    csv_file_ = fopen(CSV_FILE_NAME, "a");
   }
 
   void TearDown(const benchmark::State &state) final {
@@ -50,7 +54,12 @@ class ContentionBenchmark : public benchmark::Fixture {
     }
     delete txn_manager_;
     task_queues_.clear();
+
+    fclose(csv_file_);
   }
+
+  // The csv file for the experiment results
+  FILE *csv_file_;
 
   // Workload
   const uint32_t num_operations_ = 1000000;
@@ -187,7 +196,7 @@ static void CustomArguments(benchmark::internal::Benchmark *b) {
   for (int i = 1; i <= 16; i *= 2)
     for (int j = 1; j <= 9; j += 2)
       for (int k = 0; k <= 100; k += 10)
-        for (int l = 0; l <= 100; l += 10)
+        for (int l = 0; l <= 100 - k; l += 10)
           for (int m = 8; m <= 16; m += 8) b->Args({i, j, k, l, m});
 }
 
@@ -200,6 +209,7 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
   uint64_t total_committed(0);
   uint64_t total_aborted(0);
   uint64_t total_blocks_latch_wait(0);
+  uint64_t total_elapsed_ms(0);
 
   const uint32_t num_threads = state.range(0);
   const uint32_t txn_length = state.range(1);
@@ -207,7 +217,7 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
   const uint32_t update_percenrage = state.range(3);
   const uint32_t num_attrs = state.range(4);
 
-  const uint32_t select_percenrage = 100 - insert_percenrage - update_percenrage;
+  UNUSED_ATTRIBUTE const uint32_t select_percenrage = 100 - insert_percenrage - update_percenrage;
   const std::vector<double> insert_update_select_ratio = {insert_percenrage / 100.0, update_percenrage / 100.0,
                                                           select_percenrage / 100.0};
   // const std::vector<double> insert_update_select_ratio = {0, 1, 0};
@@ -239,15 +249,29 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
     total_blocks_latch_wait += tested.GetTotalBlocksLatchWait();
 
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+    total_elapsed_ms += elapsed_ms;
+
+    LOG_INFO("Committed: {} Time: {}", tested.GetCommitCount() / 1000, elapsed_ms);
   }
+
   state.SetItemsProcessed(total_committed);
 
   auto total_txn_num = total_committed + total_aborted;
   LOG_INFO("Committed: {} Aborted: {}", total_committed, total_aborted);
+  LOG_INFO("Average throughput: {} k/s", total_committed / total_elapsed_ms);
   LOG_INFO("Average latency: {}", total_latency / total_txn_num);
   LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_txn_num);
   LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_txn_num);
   LOG_INFO("Average blocks latch wait: {}", total_blocks_latch_wait / total_txn_num);
+
+  // log the params
+  fprintf(csv_file_, "%d,%d,%d,%d,%d", num_threads, txn_length, insert_percenrage, update_percenrage, num_attrs);
+  // log the results
+  fprintf(csv_file_, ",%ld,%ld,%ld,%ld,%ld,%ld,%ld\n", total_committed, total_aborted,
+          total_committed / total_elapsed_ms, total_latency / total_txn_num,
+          txn_manager_->GetTotalCommitLatchWait() / total_txn_num,
+          txn_manager_->GetTotalTableLatchWait() / total_txn_num, total_blocks_latch_wait / total_txn_num);
+  fflush(csv_file_);
 }
 
 BENCHMARK_REGISTER_F(ContentionBenchmark, RunBenchmark)
