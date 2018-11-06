@@ -217,6 +217,11 @@ class DataTable {
    */
   DataTableCounter *GetDataTableCounter() { return &data_table_counter_; }
 
+  /**
+   * @return total wait time on the blocks latch in nanoseconds
+   */
+  uint64_t GetTotalBlocksLatchWait() { return blocks_latch_.GetTotalWait(); }
+
  private:
   // The GarbageCollector needs to modify VersionPtrs when pruning version chains
   friend class GarbageCollector;

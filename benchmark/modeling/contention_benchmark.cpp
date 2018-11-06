@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "benchmark/benchmark.h"
+#include "common/scoped_timer.h"
 #include "common/typedefs.h"
 #include "loggers/main_logger.h"
 #include "loggers/storage_logger.h"
@@ -27,10 +28,6 @@ class ContentionBenchmark : public benchmark::Fixture {
  public:
   void SetUp(const benchmark::State &state) final {
     LOG_INFO("Setup once.\n");
-    // generate a random redo ProjectedRow to Insert
-    redo_buffer_ = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
-    redo_ = initializer_.InitializeRow(redo_buffer_);
-    StorageTestUtil::PopulateRandomRow(redo_, layout_, 0, &generator_);
 
     if (enable_gc_and_wal_ == true) {
       log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
@@ -42,15 +39,9 @@ class ContentionBenchmark : public benchmark::Fixture {
       StartLogging(10);
       StartGC(txn_manager_, 10);
     }
-
-    // Initialize the data structure for task queues
-    for (uint32_t i = 0; i < num_threads_; ++i) {
-      task_queues_.emplace_back(std::queue<time_point>());
-    }
   }
 
   void TearDown(const benchmark::State &state) final {
-    delete[] redo_buffer_;
     if (enable_gc_and_wal_ == true) {
       EndGC();
       EndLogging();
@@ -61,18 +52,8 @@ class ContentionBenchmark : public benchmark::Fixture {
     task_queues_.clear();
   }
 
-  // Tuple layout
-  const uint8_t column_size_ = 8;
-  const storage::BlockLayout layout_{{column_size_, column_size_, column_size_, column_size_, column_size_,
-                                      column_size_, column_size_, column_size_, column_size_, column_size_}};
-
-  // Tuple properties
-  const storage::ProjectedRowInitializer initializer_{layout_, StorageTestUtil::ProjectionListAllColumns(layout_)};
-
   // Workload
   const uint32_t num_operations_ = 1000000;
-  // const uint32_t num_threads_ = TestThreadPool::HardwareConcurrency();
-  const uint32_t num_threads_ = 4;
   const uint64_t buffer_pool_reuse_limit_ = 10000000;
   // Number of transactions per second
   const uint64_t txn_rates_ = 1000000;
@@ -99,8 +80,11 @@ class ContentionBenchmark : public benchmark::Fixture {
   storage::ProjectedRow *redo_;
 
   typedef std::chrono::high_resolution_clock::time_point time_point;
+
   // Latches to protect the worker queues
-  std::vector<common::SpinLatch> task_queue_latches_{num_threads_};
+  // We have to define the size of this vector ahead of time becuase of c++ constraints, so we just define a very large
+  // size.
+  std::vector<common::SpinLatch> task_queue_latches_{100};
   // One task queue per worker thead
   std::vector<std::queue<time_point>> task_queues_;
 
@@ -164,6 +148,7 @@ class ContentionBenchmark : public benchmark::Fixture {
     uint64_t submitted_count = 0;
     uint64_t shortest_queue_size;
     uint32_t shortest_queue_id;
+    auto num_threads = task_queues_.size();
 
     while (submitted_count < num_operations_) {
       current = std::chrono::high_resolution_clock::now();
@@ -172,7 +157,7 @@ class ContentionBenchmark : public benchmark::Fixture {
         submitted_count++;
         shortest_queue_size = task_queues_[0].size();
         shortest_queue_id = 0;
-        for (uint32_t i = 1; i < num_threads_; ++i) {
+        for (uint32_t i = 1; i < num_threads; ++i) {
           auto queue_size = task_queues_[i].size();
           if (queue_size < shortest_queue_size) {
             shortest_queue_size = queue_size;
@@ -198,356 +183,77 @@ class ContentionBenchmark : public benchmark::Fixture {
   }
 };
 
+static void CustomArguments(benchmark::internal::Benchmark *b) {
+  for (int i = 1; i <= 16; i *= 2)
+    for (int j = 1; j <= 9; j += 2)
+      for (int k = 0; k <= 100; k += 10)
+        for (int l = 0; l <= 100; l += 10)
+          for (int m = 8; m <= 16; m += 8) b->Args({i, j, k, l, m});
+}
+
 // Insert the num_inserts_ of tuples into a DataTable concurrently
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentInsert)(benchmark::State &state) {
+BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
   TestThreadPool thread_pool;
 
-  std::atomic<uint64_t> total_latency(0);
-  std::atomic<uint64_t> total_committed(0);
+  uint64_t total_latency(0);
+  uint64_t total_committed(0);
+  uint64_t total_aborted(0);
+  uint64_t total_blocks_latch_wait(0);
+
+  const uint32_t num_threads = state.range(0);
+  const uint32_t txn_length = state.range(1);
+  const uint32_t insert_percenrage = state.range(2);
+  const uint32_t update_percenrage = state.range(3);
+  const uint32_t num_attrs = state.range(4);
+
+  const uint32_t select_percenrage = 100 - insert_percenrage - update_percenrage;
+  const std::vector<double> insert_update_select_ratio = {insert_percenrage / 100.0, update_percenrage / 100.0,
+                                                          select_percenrage / 100.0};
+  // const std::vector<double> insert_update_select_ratio = {0, 1, 0};
+  const std::vector<uint8_t> attr_sizes(num_attrs, 8);
+  // Initialize the data structure for task queues
+  for (uint32_t i = 0; i < num_threads; ++i) {
+    task_queues_.emplace_back(std::queue<time_point>());
+  }
+  const uint32_t initial_table_size = 1000000;
 
   // NOLINTNEXTLINE
   for (auto _ : state) {
-    LOG_INFO("start the loop");
-    // The data table used in the experiments
-    storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
-
-    auto workload = [&](uint32_t id) {
-      std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
-      int thread_total_committed(0);
-
-      while (task_submitting_ == true or task_queues_[id].size() > 0) {
-        // LOG_INFO("flag {} size {} thread {}", task_submitting_, task_queues_[id].size(), id);
-        // LOG_INFO("running!!");
-        if (task_queues_[id].size() == 0) {
-          std::this_thread::sleep_for(std::chrono::nanoseconds(1));
-          continue;
-        }
-        // Insert buffer pointers
-        byte *redo_buffer;
-        storage::ProjectedRow *redo;
-
-        redo_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
-        redo = initializer_.InitializeRow(redo_buffer);
-        StorageTestUtil::PopulateRandomRow(redo, layout_, 0, &generator_);
-
-        // LOG_INFO("before locking thread {}!!", id);
-        task_queue_latches_[id].Lock();
-        time_point start = task_queues_[id].front();
-        // LOG_INFO("pop one item in thread {}, current size {}!", id, task_queues_[id].size());
-        task_queues_[id].pop();
-        // LOG_INFO("pop one item in thread {}, remaining size {}!", id, task_queues_[id].size());
-        task_queue_latches_[id].Unlock();
-        auto *txn = txn_manager_->BeginTransaction();
-        auto inserted = table.Insert(txn, *redo);
-        auto callback = [start, &thread_total_latency, &thread_total_committed] {
-          auto end = std::chrono::high_resolution_clock::now();
-          std::chrono::duration<uint64_t, std::nano> diff = end - start;
-          thread_total_latency += diff;
-          thread_total_committed++;
-        };
-        // a captureless thunk
-        auto thunk = [](void *arg) { (*static_cast<decltype(callback) *>(arg))(); };
-        txn_manager_->Commit(txn, thunk, &callback);
-
-        if (enable_gc_and_wal_ == true) {
-          auto *record = txn->StageWrite(nullptr, inserted, initializer_);
-          TERRIER_MEMCPY(record->Delta(), redo, redo->Size());
-        }
-
-        delete[] redo_buffer;
-
-        if (enable_gc_and_wal_ == false) {
-          delete txn;
-        }
-      }
-      total_latency += thread_total_latency.count();
-      total_committed += thread_total_committed;
-    };
+    LOG_INFO("Run once.");
+    ModelingBenchmarkObject tested(attr_sizes, initial_table_size, txn_length, insert_update_select_ratio,
+                                   &block_store_, &buffer_pool_, &generator_, task_submitting_, task_queues_,
+                                   task_queue_latches_, enable_gc_and_wal_, txn_manager_, log_manager_);
+    total_blocks_latch_wait -= tested.GetTotalBlocksLatchWait();
     StartTaskSubmitting(1000000000 / txn_rates_);
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    uint64_t elapsed_ms;
+    {
+      common::ScopedTimer timer(&elapsed_ms);
+      tested.SimulateOltp();
+    }
     EndTaskSubmitting();
-  }
 
-  LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
-  LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_committed.load());
-  LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_committed.load());
-  state.SetItemsProcessed(total_committed.load());
+    total_committed += tested.GetCommitCount();
+    total_aborted += tested.GetAbortCount();
+    total_latency += tested.GetLatencyCount();
+    total_blocks_latch_wait += tested.GetTotalBlocksLatchWait();
+
+    state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+  }
+  state.SetItemsProcessed(total_committed);
+
+  auto total_txn_num = total_committed + total_aborted;
+  LOG_INFO("Committed: {} Aborted: {}", total_committed, total_aborted);
+  LOG_INFO("Average latency: {}", total_latency / total_txn_num);
+  LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_txn_num);
+  LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_txn_num);
+  LOG_INFO("Average blocks latch wait: {}", total_blocks_latch_wait / total_txn_num);
 }
 
-// Read the num_reads_ of tuples in a random order from a DataTable concurrently
-// NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentRandomRead)(benchmark::State &state) {
-  TestThreadPool thread_pool;
-
-  std::atomic<uint64_t> total_latency(0);
-  std::atomic<uint64_t> total_committed(0);
-
-  // The data table used in the experiments
-  storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
-
-  // populate read_table_ by inserting tuples
-  // We can use dummy timestamps here since we're not invoking concurrency control
-  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
-  std::vector<storage::TupleSlot> read_order;
-  for (uint32_t i = 0; i < num_operations_; ++i) {
-    read_order.emplace_back(table.Insert(&txn, *redo_));
-  }
-  // Generate random read orders and read buffer for each thread
-  std::shuffle(read_order.begin(), read_order.end(), generator_);
-  std::uniform_int_distribution<uint32_t> rand_start(0, static_cast<uint32_t>(read_order.size() - 1));
-  std::vector<uint32_t> rand_read_offsets;
-  for (uint32_t i = 0; i < num_threads_; ++i) {
-    // Create random reads
-    rand_read_offsets.emplace_back(rand_start(generator_));
-  }
-
-  // NOLINTNEXTLINE
-  for (auto _ : state) {
-    LOG_INFO("start the loop");
-    auto workload = [&](uint32_t id) {
-      std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
-      int thread_total_committed(0);
-      int i = 0;
-      while (task_submitting_ == true or task_queues_[id].size() > 0) {
-        if (task_queues_[id].size() == 0) {
-          std::this_thread::sleep_for(std::chrono::nanoseconds(1));
-          continue;
-        }
-
-        // Read buffer pointers;
-        byte *read_buffer;
-        storage::ProjectedRow *read;
-
-        // generate a ProjectedRow buffer to Read
-        read_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
-        read = initializer_.InitializeRow(read_buffer);
-
-        task_queue_latches_[id].Lock();
-        time_point start = task_queues_[id].front();
-        task_queues_[id].pop();
-        task_queue_latches_[id].Unlock();
-        auto *txn = txn_manager_->BeginTransaction();
-        table.Select(txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], read);
-
-        auto callback = [start, &thread_total_latency, &thread_total_committed] {
-          auto end = std::chrono::high_resolution_clock::now();
-          std::chrono::duration<uint64_t, std::nano> diff = end - start;
-          thread_total_latency += diff;
-          thread_total_committed++;
-        };
-        // a captureless thunk
-        auto thunk = [](void *arg) { (*static_cast<decltype(callback) *>(arg))(); };
-        txn_manager_->Commit(txn, thunk, &callback);
-
-        delete[] read_buffer;
-
-        if (enable_gc_and_wal_ == false) {
-          delete txn;
-        }
-      }
-      total_latency += thread_total_latency.count();
-      total_committed += thread_total_committed;
-    };
-    StartTaskSubmitting(1000000000 / txn_rates_);
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
-    EndTaskSubmitting();
-  }
-
-  LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
-  LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_committed.load());
-  LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_committed.load());
-  state.SetItemsProcessed(total_committed.load());
-}
-
-// Update the num_reads_ of tuples in a random order from a DataTable concurrently
-// NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
-  TestThreadPool thread_pool;
-
-  std::atomic<uint64_t> total_latency(0);
-  std::atomic<uint64_t> total_committed(0);
-
-  // The data table used in the experiments
-  storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
-
-  // populate read_table_ by inserting tuples
-  // We can use dummy timestamps here since we're not invoking concurrency control
-  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
-  std::vector<storage::TupleSlot> read_order;
-  for (uint32_t i = 0; i < num_operations_; ++i) {
-    read_order.emplace_back(table.Insert(&txn, *redo_));
-  }
-  // Generate random read orders and read buffer for each thread
-  std::shuffle(read_order.begin(), read_order.end(), generator_);
-  std::uniform_int_distribution<uint32_t> rand_start(0, static_cast<uint32_t>(read_order.size() - 1));
-  std::vector<uint32_t> rand_read_offsets;
-  for (uint32_t i = 0; i < num_threads_; ++i) {
-    // Create random reads
-    rand_read_offsets.emplace_back(rand_start(generator_));
-  }
-
-  // Number of aborted transactions
-  std::atomic<uint32_t> num_aborts(0);
-
-  // NOLINTNEXTLINE
-  for (auto _ : state) {
-    LOG_INFO("start the loop");
-    auto workload = [&](uint32_t id) {
-      std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
-      int thread_total_committed(0);
-      int i = 0;
-      while (task_submitting_ == true or task_queues_[id].size() > 0) {
-        if (task_queues_[id].size() == 0) {
-          std::this_thread::sleep_for(std::chrono::nanoseconds(1));
-          continue;
-        }
-
-        // Update buffer pointers
-        byte *redo_buffer;
-        storage::ProjectedRow *redo;
-
-        redo_buffer = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
-        redo = initializer_.InitializeRow(redo_buffer);
-        StorageTestUtil::PopulateRandomRow(redo, layout_, 0, &generator_);
-
-        task_queue_latches_[id].Lock();
-        time_point start = task_queues_[id].front();
-        task_queues_[id].pop();
-        task_queue_latches_[id].Unlock();
-        auto *txn = txn_manager_->BeginTransaction();
-        auto update_slot = read_order[(rand_read_offsets[id] + i) % read_order.size()];
-        if (enable_gc_and_wal_ == true) {
-          auto *record = txn->StageWrite(nullptr, update_slot, initializer_);
-          TERRIER_MEMCPY(record->Delta(), redo_, redo_->Size());
-        }
-        bool update_result = table.Update(txn, update_slot, *redo);
-        if (update_result == false) {
-          // LOG_INFO("Aborting because update failure!!\n");
-          txn_manager_->Abort(txn);
-          num_aborts += 1;
-        } else {
-          auto callback = [start, &thread_total_latency, &thread_total_committed] {
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<uint64_t, std::nano> diff = end - start;
-            thread_total_latency += diff;
-            thread_total_committed++;
-          };
-
-          // a captureless thunk
-          auto thunk = [](void *arg) { (*static_cast<decltype(callback) *>(arg))(); };
-          txn_manager_->Commit(txn, thunk, &callback);
-        }
-
-        delete[] redo_buffer;
-
-        if (enable_gc_and_wal_ == false) {
-          delete txn;
-        }
-      }
-      total_latency += thread_total_latency.count();
-      total_committed += thread_total_committed;
-    };
-    StartTaskSubmitting(1000000000 / txn_rates_);
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
-    EndTaskSubmitting();
-  }
-
-  LOG_INFO("Number of aborted txns: {}", num_aborts.load());
-  LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
-  LOG_INFO("Average commit latch wait: {}",
-           txn_manager_->GetTotalCommitLatchWait() / (total_committed.load() + num_aborts.load()));
-  LOG_INFO("Average table latch wait: {}",
-           txn_manager_->GetTotalTableLatchWait() / (total_committed.load() + num_aborts.load()));
-  state.SetItemsProcessed(total_committed.load());
-}
-
-// Delete the num_reads_ of tuples in a random order from a DataTable concurrently
-// NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(ContentionBenchmark, ConcurrentRandomDelete)(benchmark::State &state) {
-  TestThreadPool thread_pool;
-
-  std::atomic<uint64_t> total_latency(0);
-  std::atomic<uint64_t> total_committed(0);
-
-  // The data table used in the experiments
-  storage::DataTable table{&block_store_, layout_, layout_version_t(0)};
-
-  // populate read_table_ by inserting tuples
-  // We can use dummy timestamps here since we're not invoking concurrency control
-  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
-  std::vector<storage::TupleSlot> read_order;
-  for (uint32_t i = 0; i < num_operations_; ++i) {
-    read_order.emplace_back(table.Insert(&txn, *redo_));
-  }
-  // Generate random read orders and read buffer for each thread
-  std::shuffle(read_order.begin(), read_order.end(), generator_);
-  std::uniform_int_distribution<uint32_t> rand_start(0, static_cast<uint32_t>(read_order.size() - 1));
-  std::vector<uint32_t> rand_read_offsets;
-  for (uint32_t i = 0; i < num_threads_; ++i) {
-    // Create random reads
-    rand_read_offsets.emplace_back(rand_start(generator_));
-  }
-
-  // Number of aborted transactions
-  std::atomic<uint32_t> num_aborts(0);
-
-  // NOLINTNEXTLINE
-  for (auto _ : state) {
-    auto workload = [&](uint32_t id) {
-      std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
-      int thread_total_committed(0);
-      int i = 0;
-      while (task_submitting_ == true or task_queues_[id].size() > 0) {
-        if (task_queues_[id].size() == 0) {
-          std::this_thread::sleep_for(std::chrono::nanoseconds(1));
-          continue;
-        }
-
-        task_queue_latches_[id].Lock();
-        time_point start = task_queues_[id].front();
-        task_queues_[id].pop();
-        task_queue_latches_[id].Unlock();
-        auto *txn = txn_manager_->BeginTransaction();
-        auto delete_slot = read_order[(rand_read_offsets[id] + i) % read_order.size()];
-        bool delete_result = table.Delete(txn, delete_slot);
-        if (delete_result == false) {
-          txn_manager_->Abort(txn);
-          num_aborts += 1;
-        } else {
-          auto callback = [start, &thread_total_latency, &thread_total_committed] {
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<uint64_t, std::nano> diff = end - start;
-            thread_total_latency += diff;
-            thread_total_committed++;
-          };
-
-          // a captureless thunk
-          auto thunk = [](void *arg) { (*static_cast<decltype(callback) *>(arg))(); };
-          txn_manager_->Commit(txn, thunk, &callback);
-        }
-
-        if (enable_gc_and_wal_ == false) {
-          delete txn;
-        }
-      }
-      total_latency += thread_total_latency.count();
-      total_committed += thread_total_committed;
-    };
-    StartTaskSubmitting(1000000000 / txn_rates_);
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
-    EndTaskSubmitting();
-  }
-
-  LOG_INFO("Number of aborted txns: {}", num_aborts.load());
-  LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
-  LOG_INFO("Average commit latch wait: {}",
-           txn_manager_->GetTotalCommitLatchWait() / (total_committed.load() + num_aborts.load()));
-  LOG_INFO("Average table latch wait: {}",
-           txn_manager_->GetTotalTableLatchWait() / (total_committed.load() + num_aborts.load()));
-  state.SetItemsProcessed(total_committed.load());
-}  // namespace terrier
-
-BENCHMARK_REGISTER_F(ContentionBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime()->MinTime(10);
+BENCHMARK_REGISTER_F(ContentionBenchmark, RunBenchmark)
+    ->Unit(benchmark::kMillisecond)
+    ->UseRealTime()
+    ->MinTime(5)
+    ->Apply(CustomArguments);
 
 }  // namespace terrier

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <tbb/reader_writer_lock.h>
+#include <atomic>
+#include <chrono>
 #include "common/macros.h"
 
 namespace terrier::common {
@@ -18,12 +20,24 @@ class SharedLatch {
   /**
    * Acquire exclusive lock on mutex.
    */
-  void LockExclusive() { latch_.lock(); }
+  void LockExclusive() {
+    auto start = std::chrono::high_resolution_clock::now();
+    latch_.lock();
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<uint64_t, std::nano> diff = end - start;
+    total_latch_wait_ += diff.count();
+  }
 
   /**
    * Acquire shared lock on mutex.
    */
-  void LockShared() { latch_.lock_read(); }
+  void LockShared() {
+    auto start = std::chrono::high_resolution_clock::now();
+    latch_.lock_read();
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<uint64_t, std::nano> diff = end - start;
+    total_latch_wait_ += diff.count();
+  }
 
   /**
    * Try to acquire exclusive lock on mutex.
@@ -41,6 +55,11 @@ class SharedLatch {
    * Release lock.
    */
   void Unlock() { latch_.unlock(); }
+
+  /**
+   * Get the total latch wait time in nanoseconds
+   */
+  uint64_t GetTotalWait() { return total_latch_wait_.load(); }
 
   /**
    * Scoped read latch that guarantees releasing the latch when destructed.
@@ -83,6 +102,8 @@ class SharedLatch {
 
  private:
   tbb::reader_writer_lock latch_;
+  // total wait time on the commit latch (nanoseconds)
+  std::atomic<uint64_t> total_latch_wait_{0};
 };
 
 }  // namespace terrier::common

@@ -7,7 +7,7 @@
 namespace terrier {
 RandomTransaction::RandomTransaction(ModelingBenchmarkObject *test_object)
     : test_object_(test_object),
-      txn_(test_object->txn_manager_.BeginTransaction()),
+      txn_(test_object->txn_manager_->BeginTransaction()),
       aborted_(false),
       start_time_(txn_->StartTime()),
       commit_time_(UINT64_MAX),
@@ -66,28 +66,33 @@ void RandomTransaction::RandomSelect(Random *generator) {
   test_object_->table_.Select(txn_, selected, select);
 }
 
-void RandomTransaction::Finish() {
+void RandomTransaction::Finish(transaction::callback_fn callback, void *callback_arg) {
   if (aborted_)
-    test_object_->txn_manager_.Abort(txn_);
+    test_object_->txn_manager_->Abort(txn_);
   else
-    commit_time_ = test_object_->txn_manager_.Commit(txn_, TestCallbacks::EmptyCallback, nullptr);
+    commit_time_ = test_object_->txn_manager_->Commit(txn_, callback, callback_arg);
 }
 
-ModelingBenchmarkObject::ModelingBenchmarkObject(const std::vector<uint8_t> &attr_sizes, uint32_t initial_table_size,
-                                                 uint32_t txn_length, std::vector<double> operation_ratio,
-                                                 storage::BlockStore *block_store,
-                                                 storage::RecordBufferSegmentPool *buffer_pool,
-                                                 std::default_random_engine *generator, bool gc_on,
-                                                 storage::LogManager *log_manager)
+ModelingBenchmarkObject::ModelingBenchmarkObject(
+    const std::vector<uint8_t> &attr_sizes, uint32_t initial_table_size, uint32_t txn_length,
+    std::vector<double> operation_ratio, storage::BlockStore *block_store,
+    storage::RecordBufferSegmentPool *buffer_pool, std::default_random_engine *generator, bool &task_submitting,
+    std::vector<std::queue<time_point>> &task_queues, std::vector<common::SpinLatch> &task_queue_latches, bool gc_on,
+    transaction::TransactionManager *txn_manager, storage::LogManager *log_manager)
     : txn_length_(txn_length),
       operation_ratio_(std::move(operation_ratio)),
       generator_(generator),
       layout_({attr_sizes}),
       table_(block_store, layout_, layout_version_t(0)),
-      txn_manager_(buffer_pool, gc_on, log_manager),
+      txn_manager_(txn_manager),
       gc_on_(gc_on),
       wal_on_(log_manager != LOGGING_DISABLED),
-      abort_count_(0) {
+      task_submitting_(task_submitting),
+      task_queues_(task_queues),
+      task_queue_latches_(task_queue_latches),
+      abort_count_(0),
+      commit_count_(0),
+      latency_count_(0) {
   // Bootstrap the table to have the specified number of tuples
   PopulateInitialTable(initial_table_size, generator_);
 }
@@ -97,43 +102,67 @@ ModelingBenchmarkObject::~ModelingBenchmarkObject() {
 }
 
 // Caller is responsible for freeing the returned results if bookkeeping is on.
-uint64_t ModelingBenchmarkObject::SimulateOltp(uint32_t num_transactions, uint32_t num_concurrent_txns) {
+void ModelingBenchmarkObject::SimulateOltp() {
   TestThreadPool thread_pool;
-  std::vector<RandomTransaction *> txns;
-  std::function<void(uint32_t)> workload;
-  std::atomic<uint32_t> txns_run = 0;
-  if (gc_on_) {
-    // Then there is no need to keep track of RandomWorkloadTransaction objects
-    workload = [&](uint32_t) {
-      for (uint32_t txn_id = txns_run++; txn_id < num_transactions; txn_id = txns_run++) {
-        RandomTransaction txn(this);
-        SimulateOneTransaction(&txn, txn_id);
-      }
-    };
-  } else {
-    txns.resize(num_transactions);
-    // Either for correctness checking, or to cleanup memory afterwards, we need to retain these
-    // test objects
-    workload = [&](uint32_t) {
-      for (uint32_t txn_id = txns_run++; txn_id < num_transactions; txn_id = txns_run++) {
-        txns[txn_id] = new RandomTransaction(this);
-        SimulateOneTransaction(txns[txn_id], txn_id);
-      }
-    };
-  }
 
-  thread_pool.RunThreadsUntilFinish(num_concurrent_txns, workload);
+  std::atomic<uint64_t> total_latency(0);
+  std::atomic<uint64_t> total_committed(0);
+  // Number of aborted transactions
+  std::atomic<uint32_t> num_aborts(0);
 
-  // We only need to deallocate, and return, if gc is on, this loop is a no-op
-  for (RandomTransaction *txn : txns) {
-    if (txn->aborted_) abort_count_++;
-    delete txn;
-  }
-  // This result is meaningless if bookkeeping is not turned on.
-  return abort_count_;
+  auto workload = [&](uint32_t id) {
+    std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
+
+    int thread_total_committed(0);
+    while (task_submitting_ == true or task_queues_[id].size() > 0) {
+      // LOG_INFO("flag {} size {} thread {}", task_submitting_, task_queues_[id].size(), id);
+      // LOG_INFO("running!!");
+      if (task_queues_[id].size() == 0) {
+        std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+        continue;
+      }
+
+      uint32_t txn_cnt = 0;
+
+      // LOG_INFO("before locking thread {}!!", id);
+      task_queue_latches_[id].Lock();
+      time_point start = task_queues_[id].front();
+      // LOG_INFO("pop one item in thread {}, current size {}!", id, task_queues_[id].size());
+      task_queues_[id].pop();
+      // LOG_INFO("pop one item in thread {}, remaining size {}!", id, task_queues_[id].size());
+      task_queue_latches_[id].Unlock();
+
+      auto callback = [start, &thread_total_latency, &thread_total_committed] {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<uint64_t, std::nano> diff = end - start;
+        thread_total_latency += diff;
+        thread_total_committed++;
+      };
+      // a captureless thunk
+      auto thunk = [](void *arg) { (*static_cast<decltype(callback) *>(arg))(); };
+
+      auto txn = new RandomTransaction(this);
+
+      SimulateOneTransaction(txn, txn_cnt++, thunk, &callback);
+
+      if (txn->aborted_) num_aborts++;
+
+      if (gc_on_ == false) {
+        delete txn;
+      }
+    }
+    total_latency += thread_total_latency.count();
+    total_committed += thread_total_committed;
+  };
+  thread_pool.RunThreadsUntilFinish(task_queues_.size(), workload);
+
+  abort_count_ = num_aborts.load();
+  commit_count_ = total_committed.load();
+  latency_count_ = total_latency.load();
 }
 
-void ModelingBenchmarkObject::SimulateOneTransaction(terrier::RandomTransaction *txn, uint32_t txn_id) {
+void ModelingBenchmarkObject::SimulateOneTransaction(terrier::RandomTransaction *txn, uint32_t txn_id,
+                                                     transaction::callback_fn callback, void *callback_arg) {
   std::default_random_engine thread_generator(txn_id);
 
   auto insert = [&] { txn->RandomInsert(&thread_generator); };
@@ -141,12 +170,12 @@ void ModelingBenchmarkObject::SimulateOneTransaction(terrier::RandomTransaction 
   auto select = [&] { txn->RandomSelect(&thread_generator); };
   RandomTestUtil::InvokeWorkloadWithDistribution({insert, update, select}, operation_ratio_, &thread_generator,
                                                  txn_length_);
-  txn->Finish();
+  txn->Finish(callback, callback_arg);
 }
 
 template <class Random>
 void ModelingBenchmarkObject::PopulateInitialTable(uint32_t num_tuples, Random *generator) {
-  initial_txn_ = txn_manager_.BeginTransaction();
+  initial_txn_ = txn_manager_->BeginTransaction();
   byte *redo_buffer = nullptr;
 
   redo_buffer = common::AllocationUtil::AllocateAligned(row_initializer_.ProjectedRowSize());
@@ -163,7 +192,7 @@ void ModelingBenchmarkObject::PopulateInitialTable(uint32_t num_tuples, Random *
     }
     last_checked_version_.emplace_back(inserted, nullptr);
   }
-  txn_manager_.Commit(initial_txn_, TestCallbacks::EmptyCallback, nullptr);
+  txn_manager_->Commit(initial_txn_, TestCallbacks::EmptyCallback, nullptr);
   // cleanup if not keeping track of all the inserts.
   delete[] redo_buffer;
 }

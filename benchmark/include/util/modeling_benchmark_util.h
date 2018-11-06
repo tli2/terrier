@@ -66,7 +66,7 @@ class RandomTransaction {
   /**
    * Finish the simulation of this transaction. The underlying transaction will either commit or abort.
    */
-  void Finish();
+  void Finish(transaction::callback_fn callback, void *callback_arg);
 
   timestamp_t BeginTimestamp() const { return start_time_; }
 
@@ -96,6 +96,8 @@ class RandomTransaction {
  */
 class ModelingBenchmarkObject {
  public:
+  typedef std::chrono::high_resolution_clock::time_point time_point;
+
   /**
    * Initializes a test object with the given configuration
    * @param max_columns the max number of columns in the generated test table
@@ -112,7 +114,10 @@ class ModelingBenchmarkObject {
   ModelingBenchmarkObject(const std::vector<uint8_t> &attr_sizes, uint32_t initial_table_size, uint32_t txn_length,
                           std::vector<double> operation_ratio, storage::BlockStore *block_store,
                           storage::RecordBufferSegmentPool *buffer_pool, std::default_random_engine *generator,
-                          bool gc_on, storage::LogManager *log_manager = LOGGING_DISABLED);
+                          bool &task_submitting, std::vector<std::queue<time_point>> &task_queues,
+                          std::vector<common::SpinLatch> &task_queue_latches, bool gc_on,
+                          transaction::TransactionManager *txn_manager,
+                          storage::LogManager *log_manager = LOGGING_DISABLED);
 
   /**
    * Destructs a LargeTransactionBenchmarkObject
@@ -122,25 +127,42 @@ class ModelingBenchmarkObject {
   /**
    * @return the transaction manager used by this test
    */
-  transaction::TransactionManager *GetTxnManager() { return &txn_manager_; }
+  transaction::TransactionManager *GetTxnManager() { return txn_manager_; }
 
   /**
-   * Simulate an oltp workload, running the specified number of total transactions while allowing the specified number
-   * of transactions to run concurrently. Transactions are generated using the configuration provided on construction.
-   *
-   * @param num_transactions total number of transactions to run
-   * @param num_concurrent_txns number of transactions allowed to run concurrently
-   * @return abort count
+   * Simulate an oltp workload.
+   * Transactions are generated using the configuration provided on construction.
    */
-  uint64_t SimulateOltp(uint32_t num_transactions, uint32_t num_concurrent_txns);
+  void SimulateOltp();
 
   /**
    * @return layout of the randomly generated table
    */
   const storage::BlockLayout &Layout() const { return layout_; }
 
+  /**
+   * @return the number of commited transactions
+   */
+  uint64_t GetCommitCount() const { return commit_count_; }
+
+  /**
+   * @return the number of aborted transactions
+   */
+  uint64_t GetAbortCount() const { return abort_count_; }
+
+  /**
+   * @return the number of total latency of transactions
+   */
+  uint64_t GetLatencyCount() const { return latency_count_; }
+
+  /**
+   * @return total wait time on the table's blocks latch in nanoseconds
+   */
+  uint64_t GetTotalBlocksLatchWait() { return table_.GetTotalBlocksLatchWait(); }
+
  private:
-  void SimulateOneTransaction(RandomTransaction *txn, uint32_t txn_id);
+  void SimulateOneTransaction(RandomTransaction *txn, uint32_t txn_id, transaction::callback_fn callback,
+                              void *callback_arg);
 
   template <class Random>
   void PopulateInitialTable(uint32_t num_tuples, Random *generator);
@@ -151,10 +173,17 @@ class ModelingBenchmarkObject {
   std::default_random_engine *generator_;
   storage::BlockLayout layout_;
   storage::DataTable table_;
-  transaction::TransactionManager txn_manager_;
+  transaction::TransactionManager *txn_manager_;
   transaction::TransactionContext *initial_txn_;
   bool gc_on_, wal_on_;
+
+  bool &task_submitting_;
+  std::vector<std::queue<time_point>> &task_queues_;
+  std::vector<common::SpinLatch> &task_queue_latches_;
+
   uint64_t abort_count_;
+  uint64_t commit_count_;
+  uint64_t latency_count_;
 
   // tuple content is meaningless if bookkeeping is off.
   std::vector<TupleEntry> last_checked_version_;
