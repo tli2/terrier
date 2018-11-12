@@ -4,7 +4,6 @@
 
 #include "benchmark/benchmark.h"
 #include "common/scoped_timer.h"
-#include "common/typedefs.h"
 #include "loggers/main_logger.h"
 #include "loggers/storage_logger.h"
 #include "loggers/transaction_logger.h"

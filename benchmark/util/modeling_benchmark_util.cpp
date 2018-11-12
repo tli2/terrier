@@ -24,7 +24,8 @@ void RandomTransaction::RandomUpdate(Random *generator) {
   if (aborted_) return;
   storage::TupleSlot updated =
       RandomTestUtil::UniformRandomElement(test_object_->last_checked_version_, generator)->first;
-  std::vector<col_id_t> update_col_ids = StorageTestUtil::ProjectionListRandomColumns(test_object_->layout_, generator);
+  std::vector<storage::col_id_t> update_col_ids =
+      StorageTestUtil::ProjectionListRandomColumns(test_object_->layout_, generator);
   storage::ProjectedRowInitializer initializer(test_object_->layout_, update_col_ids);
   auto *update_buffer = buffer_;
   storage::ProjectedRow *update = initializer.InitializeRow(update_buffer);
@@ -42,7 +43,7 @@ void RandomTransaction::RandomUpdate(Random *generator) {
 template <class Random>
 void RandomTransaction::RandomInsert(Random *generator) {
   if (aborted_) return;
-  std::vector<col_id_t> insert_col_ids = StorageTestUtil::ProjectionListAllColumns(test_object_->layout_);
+  std::vector<storage::col_id_t> insert_col_ids = StorageTestUtil::ProjectionListAllColumns(test_object_->layout_);
   storage::ProjectedRowInitializer initializer(test_object_->layout_, insert_col_ids);
   auto *insert_buffer = buffer_;
   storage::ProjectedRow *insert = initializer.InitializeRow(insert_buffer);
@@ -83,7 +84,7 @@ ModelingBenchmarkObject::ModelingBenchmarkObject(
       operation_ratio_(std::move(operation_ratio)),
       generator_(generator),
       layout_({attr_sizes}),
-      table_(block_store, layout_, layout_version_t(0)),
+      table_(block_store, layout_, storage::layout_version_t(0)),
       txn_manager_(txn_manager),
       gc_on_(gc_on),
       wal_on_(log_manager != LOGGING_DISABLED),

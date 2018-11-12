@@ -83,7 +83,7 @@ class TransactionManager {
   /**
    * @return total wait time on the tablelatch in nanos
    */
-  uint64_t GetTotalTableLatchWait() { return table_latch_.GetTotalWait(); }
+  uint64_t GetTotalTableLatchWait() { return running_txns_table_latch_.GetTotalWait(); }
 
  private:
   storage::RecordBufferSegmentPool *buffer_pool_;
