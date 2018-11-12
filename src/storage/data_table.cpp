@@ -97,7 +97,12 @@ TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const Pr
     RawBlock *block = insertion_head_.load();
 
     auto start = std::chrono::high_resolution_clock::now();
-    if (block != nullptr && accessor_.Allocate(block, &result)) break;
+    if (block != nullptr && accessor_.Allocate(block, &result)) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<uint64_t, std::nano> diff = end - start;
+      total_bitmap_wait_ += diff.count();
+      break;
+    }
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<uint64_t, std::nano> diff = end - start;
     total_bitmap_wait_ += diff.count();
