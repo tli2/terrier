@@ -160,6 +160,11 @@ class ModelingBenchmarkObject {
    */
   uint64_t GetTotalBlocksLatchWait() { return table_.GetTotalBlocksLatchWait(); }
 
+  /**
+   * @return total wait time on the table's concurrent bitmap in nanoseconds
+   */
+  uint64_t GetTotalBitmapWait() { return table_.GetTotalBitmapWait(); }
+
  private:
   void SimulateOneTransaction(RandomTransaction *txn, uint32_t txn_id, transaction::callback_fn callback,
                               void *callback_arg);

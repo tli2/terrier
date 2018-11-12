@@ -1,4 +1,5 @@
 #include "storage/data_table.h"
+#include <chrono>
 #include <unordered_map>
 #include "common/allocator.h"
 #include "storage/storage_util.h"
@@ -94,7 +95,13 @@ TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const Pr
   TupleSlot result;
   while (true) {
     RawBlock *block = insertion_head_.load();
+
+    auto start = std::chrono::high_resolution_clock::now();
     if (block != nullptr && accessor_.Allocate(block, &result)) break;
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<uint64_t, std::nano> diff = end - start;
+    total_bitmap_wait_ += diff.count();
+
     NewBlock(block);
   }
   // At this point, sequential scan down the block can still see this, except it thinks it is logically deleted if we 0

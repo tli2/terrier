@@ -209,6 +209,7 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
   uint64_t total_committed(0);
   uint64_t total_aborted(0);
   uint64_t total_blocks_latch_wait(0);
+  uint64_t total_bitmap_wait(0);
   uint64_t total_elapsed_ms(0);
 
   const uint32_t num_threads = state.range(0);
@@ -235,6 +236,7 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
                                    &block_store_, &buffer_pool_, &generator_, task_submitting_, task_queues_,
                                    task_queue_latches_, enable_gc_and_wal_, txn_manager_, log_manager_);
     total_blocks_latch_wait -= tested.GetTotalBlocksLatchWait();
+    total_bitmap_wait -= tested.GetTotalBitmapWait();
     StartTaskSubmitting(1000000000 / txn_rates_);
     uint64_t elapsed_ms;
     {
@@ -247,6 +249,7 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
     total_aborted += tested.GetAbortCount();
     total_latency += tested.GetLatencyCount();
     total_blocks_latch_wait += tested.GetTotalBlocksLatchWait();
+    total_bitmap_wait += tested.GetTotalBitmapWait();
 
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
     total_elapsed_ms += elapsed_ms;
@@ -263,14 +266,16 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
   LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_txn_num);
   LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_txn_num);
   LOG_INFO("Average blocks latch wait: {}", total_blocks_latch_wait / total_txn_num);
+  LOG_INFO("Average concurrent bitmap wait: {}", total_bitmap_wait / total_txn_num);
 
   // log the params
   fprintf(csv_file_, "%d,%d,%d,%d,%d", num_threads, txn_length, insert_percenrage, update_percenrage, num_attrs);
   // log the results
-  fprintf(csv_file_, ",%ld,%ld,%ld,%ld,%ld,%ld,%ld\n", total_committed, total_aborted,
+  fprintf(csv_file_, ",%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld\n", total_committed, total_aborted,
           total_committed / total_elapsed_ms, total_latency / total_txn_num,
           txn_manager_->GetTotalCommitLatchWait() / total_txn_num,
-          txn_manager_->GetTotalTableLatchWait() / total_txn_num, total_blocks_latch_wait / total_txn_num);
+          txn_manager_->GetTotalTableLatchWait() / total_txn_num, total_blocks_latch_wait / total_txn_num,
+          total_bitmap_wait / total_txn_num);
   fflush(csv_file_);
 }
 

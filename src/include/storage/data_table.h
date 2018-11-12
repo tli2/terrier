@@ -222,6 +222,11 @@ class DataTable {
    */
   uint64_t GetTotalBlocksLatchWait() { return blocks_latch_.GetTotalWait(); }
 
+  /**
+   * @return total wait time on the concurrent bitmap in nanoseconds
+   */
+  uint64_t GetTotalBitmapWait() { return total_bitmap_wait_.load(); }
+
  private:
   // The GarbageCollector needs to modify VersionPtrs when pruning version chains
   friend class GarbageCollector;
@@ -231,6 +236,9 @@ class DataTable {
   BlockStore *const block_store_;
   const layout_version_t layout_version_;
   const TupleAccessStrategy accessor_;
+
+  // total wait time on the concurrent bitmap whiling inserting into the table (nanoseconds)
+  std::atomic<uint64_t> total_bitmap_wait_{0};
 
   // TODO(Tianyu): For now, on insertion, we simply sequentially go through a block and allocate a
   // new one when the current one is full. Needless to say, we will need to revisit this when extending GC to handle
