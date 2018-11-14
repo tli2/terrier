@@ -201,10 +201,11 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomRead)(benchmark::State &s
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
   TestThreadPool thread_pool;
-  storage::DataTable read_table(&block_store_, layout_, layout_version_t(0));
+  storage::DataTable read_table(&block_store_, layout_, storage::layout_version_t(0));
   // populate read_table_ by inserting tuples
   // We can use dummy timestamps here since we're not invoking concurrency control
-  transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
+  transaction::TransactionContext txn(transaction::timestamp_t(0), transaction::timestamp_t(0), &buffer_pool_,
+                                      LOGGING_DISABLED);
   std::vector<storage::TupleSlot> read_order;
   for (uint32_t i = 0; i < num_reads_; ++i) {
     read_order.emplace_back(read_table.Insert(&txn, *redo_));
@@ -225,7 +226,8 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomUpdate)(benchmark::State 
   for (auto _ : state) {
     auto workload = [&](uint32_t id) {
       // We can use dummy timestamps here since we're not invoking concurrency control
-      transaction::TransactionContext txn(timestamp_t(0), timestamp_t(0), &buffer_pool_, LOGGING_DISABLED);
+      transaction::TransactionContext txn(transaction::timestamp_t(0), transaction::timestamp_t(0), &buffer_pool_,
+                                          LOGGING_DISABLED);
       for (uint32_t i = 0; i < num_reads_ / num_threads_; i++) {
         bool update_result =
             read_table.Update(&txn, read_order[(rand_read_offsets[id] + i) % read_order.size()], *redo_);
