@@ -17,7 +17,7 @@
 #include "util/test_thread_pool.h"
 
 #define LOG_FILE_NAME "concurrency_benchmark.log"
-#define CSV_FILE_NAME "concurrency_benchmark.csv"
+#define CSV_FILE_NAME "concurrency_benchmark_committed.csv"
 
 namespace terrier {
 
@@ -207,9 +207,16 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
   uint64_t total_latency(0);
   uint64_t total_committed(0);
   uint64_t total_aborted(0);
-  uint64_t total_blocks_latch_wait(0);
-  uint64_t total_bitmap_wait(0);
   uint64_t total_elapsed_ms(0);
+
+  uint64_t total_commit_latch_wait(0);
+  uint64_t total_commit_latch_count(0);
+  uint64_t total_table_latch_wait(0);
+  uint64_t total_table_latch_count(0);
+  uint64_t total_bitmap_latch_wait(0);
+  uint64_t total_bitmap_latch_count(0);
+  uint64_t total_block_latch_wait(0);
+  uint64_t total_block_latch_count(0);
 
   const uint32_t num_threads = state.range(0);
   const uint32_t txn_length = state.range(1);
@@ -234,8 +241,16 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
     ModelingBenchmarkObject tested(attr_sizes, initial_table_size, txn_length, insert_update_select_ratio,
                                    &block_store_, &buffer_pool_, &generator_, task_submitting_, task_queues_,
                                    task_queue_latches_, enable_gc_and_wal_, txn_manager_, log_manager_);
-    total_blocks_latch_wait -= tested.GetTotalBlocksLatchWait();
-    total_bitmap_wait -= tested.GetTotalBitmapWait();
+
+    total_commit_latch_wait -= tested.GetCommitLatchWait();
+    total_commit_latch_count -= tested.GetCommitLatchCount();
+    total_table_latch_wait -= tested.GetTableLatchWait();
+    total_table_latch_count -= tested.GetTableLatchCount();
+    total_bitmap_latch_wait -= tested.GetBitmapLatchWait();
+    total_bitmap_latch_count -= tested.GetBitmapLatchCount();
+    total_block_latch_wait -= tested.GetBlockLatchWait();
+    total_block_latch_count -= tested.GetBlockLatchCount();
+
     StartTaskSubmitting(1000000000 / txn_rates_);
     uint64_t elapsed_ms;
     {
@@ -247,34 +262,50 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
     total_committed += tested.GetCommitCount();
     total_aborted += tested.GetAbortCount();
     total_latency += tested.GetLatencyCount();
-    total_blocks_latch_wait += tested.GetTotalBlocksLatchWait();
-    total_bitmap_wait += tested.GetTotalBitmapWait();
+
+    total_commit_latch_wait += tested.GetCommitLatchWait();
+    total_commit_latch_count += tested.GetCommitLatchCount();
+    total_table_latch_wait += tested.GetTableLatchWait();
+    total_table_latch_count += tested.GetTableLatchCount();
+    total_bitmap_latch_wait += tested.GetBitmapLatchWait();
+    total_bitmap_latch_count += tested.GetBitmapLatchCount();
+    total_block_latch_wait += tested.GetBlockLatchWait();
+    total_block_latch_count += tested.GetBlockLatchCount();
 
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
     total_elapsed_ms += elapsed_ms;
 
-    LOG_INFO("Committed: {} Time: {}", tested.GetCommitCount() / 1000, elapsed_ms);
+    LOG_INFO("Committed(k): {} Time: {}", tested.GetCommitCount() / 1000, elapsed_ms);
   }
+
+  total_commit_latch_count += total_commit_latch_count == 0;
+  total_table_latch_count += total_table_latch_count == 0;
+  total_bitmap_latch_count += total_bitmap_latch_count == 0;
+  total_block_latch_count += total_block_latch_count == 0;
 
   state.SetItemsProcessed(total_committed);
 
-  auto total_txn_num = total_committed + total_aborted;
-  LOG_INFO("Committed: {} Aborted: {}", total_committed, total_aborted);
+  LOG_INFO("Committed(k): {} Aborted: {}", total_committed / 1000, total_aborted);
   LOG_INFO("Average throughput: {} k/s", total_committed / total_elapsed_ms);
-  LOG_INFO("Average latency: {}", total_latency / total_txn_num);
-  LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_txn_num);
-  LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_txn_num);
-  LOG_INFO("Average blocks latch wait: {}", total_blocks_latch_wait / total_txn_num);
-  LOG_INFO("Average concurrent bitmap wait: {}", total_bitmap_wait / total_txn_num);
+  LOG_INFO("Average latency: {}", total_latency / total_committed);
+  LOG_INFO("Average commit latch wait per txn: {}", total_commit_latch_wait / total_committed);
+  LOG_INFO("Average table latch wait per txn: {}", total_table_latch_wait / total_committed);
+  LOG_INFO("Average blocks latch wait per txn: {}", total_block_latch_wait / total_committed);
+  LOG_INFO("Average concurrent bitmap wait per txn: {}", total_bitmap_latch_wait / total_committed);
+  LOG_INFO("Average commit latch wait: {}", total_commit_latch_wait / total_commit_latch_count);
+  LOG_INFO("Average table latch wait: {}", total_table_latch_wait / total_table_latch_count);
+  LOG_INFO("Average block latch wait: {}", total_block_latch_wait / total_block_latch_count);
+  LOG_INFO("Average concurrent bitmap wait: {}", total_bitmap_latch_wait / total_bitmap_latch_count);
 
   // log the params
   fprintf(csv_file_, "%d,%d,%d,%d,%d", num_threads, txn_length, insert_percenrage, update_percenrage, num_attrs);
   // log the results
-  fprintf(csv_file_, ",%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld\n", total_committed, total_aborted,
-          total_committed / total_elapsed_ms, total_latency / total_txn_num,
-          txn_manager_->GetTotalCommitLatchWait() / total_txn_num,
-          txn_manager_->GetTotalTableLatchWait() / total_txn_num, total_blocks_latch_wait / total_txn_num,
-          total_bitmap_wait / total_txn_num);
+  fprintf(csv_file_, ",%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld\n", total_committed, total_aborted,
+          total_committed / total_elapsed_ms, total_latency / total_committed,
+          total_commit_latch_wait / total_committed, total_table_latch_wait / total_committed,
+          total_block_latch_wait / total_committed, total_bitmap_latch_wait / total_committed,
+          total_commit_latch_wait / total_commit_latch_count, total_table_latch_wait / total_table_latch_count,
+          total_block_latch_wait / total_block_latch_count, total_bitmap_latch_wait / total_bitmap_latch_count);
   fflush(csv_file_);
 }
 

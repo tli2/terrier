@@ -34,7 +34,7 @@ class TransactionManager {
    * Begins a transaction.
    * @return transaction context for the newly begun transaction
    */
-  TransactionContext *BeginTransaction();
+  TransactionContext *BeginTransaction(bool enable_contention_metrics = false);
 
   /**
    * Commits a transaction, making all of its changes visible to others.
@@ -74,16 +74,6 @@ class TransactionManager {
    * @return copy of the completed txns for the GC to process
    */
   TransactionQueue CompletedTransactionsForGC();
-
-  /**
-   * @return total wait time on the commit latch in nanos
-   */
-  uint64_t GetTotalCommitLatchWait() { return commit_latch_.GetTotalWait(); }
-
-  /**
-   * @return total wait time on the tablelatch in nanos
-   */
-  uint64_t GetTotalTableLatchWait() { return running_txns_table_latch_.GetTotalWait(); }
 
  private:
   storage::RecordBufferSegmentPool *buffer_pool_;

@@ -96,18 +96,36 @@ TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const Pr
   while (true) {
     RawBlock *block = insertion_head_.load();
 
-    auto start = std::chrono::high_resolution_clock::now();
+    transaction::TransactionContext::time_point start;
+    if (txn->EnableContentionMetrics()) {
+      start = std::chrono::high_resolution_clock::now();
+    }
     if (block != nullptr && accessor_.Allocate(block, &result)) {
-      auto end = std::chrono::high_resolution_clock::now();
-      std::chrono::duration<uint64_t, std::nano> diff = end - start;
-      total_bitmap_wait_ += diff.count();
+      if (txn->EnableContentionMetrics()) {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<uint64_t, std::nano> diff = end - start;
+        txn->AddToBitmapLatch(diff.count());
+      }
       break;
     }
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<uint64_t, std::nano> diff = end - start;
-    total_bitmap_wait_ += diff.count();
+    if (txn->EnableContentionMetrics()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<uint64_t, std::nano> diff = end - start;
+      txn->AddToBitmapLatch(diff.count());
+    }
 
-    NewBlock(block);
+    {
+      if (txn->EnableContentionMetrics()) {
+        start = std::chrono::high_resolution_clock::now();
+      }
+      common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
+      if (txn->EnableContentionMetrics()) {
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<uint64_t, std::nano> diff = end - start;
+        txn->AddToBlockLatch(diff.count());
+      }
+      NewBlock(block);
+    }
   }
   // At this point, sequential scan down the block can still see this, except it thinks it is logically deleted if we 0
   // the primary key column
@@ -265,7 +283,6 @@ bool DataTable::CompareAndSwapVersionPtr(const TupleSlot slot, const TupleAccess
 }
 
 void DataTable::NewBlock(RawBlock *expected_val) {
-  common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
   // Want to stop early if another thread is already getting a new block
   if (expected_val != insertion_head_) return;
   RawBlock *new_block = block_store_->Get();

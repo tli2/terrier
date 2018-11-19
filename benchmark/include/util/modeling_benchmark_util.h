@@ -77,6 +77,8 @@ class RandomTransaction {
 
   std::unordered_map<storage::TupleSlot, storage::ProjectedRow *> *Updates() { return &updates_; }
 
+  const transaction::TransactionContext *GetTransactionContext() const { return txn_; }
+
  private:
   friend class ModelingBenchmarkObject;
   ModelingBenchmarkObject *test_object_;
@@ -155,15 +157,45 @@ class ModelingBenchmarkObject {
    */
   uint64_t GetLatencyCount() const { return latency_count_; }
 
-  /**
-   * @return total wait time on the table's blocks latch in nanoseconds
+  /*
+   * @return The total wait time on the commit latch (nanoseconds)
    */
-  uint64_t GetTotalBlocksLatchWait() { return table_.GetTotalBlocksLatchWait(); }
+  uint64_t GetCommitLatchWait() const { return commit_latch_wait_; }
 
-  /**
-   * @return total wait time on the table's concurrent bitmap in nanoseconds
+  /*
+   * @return The total number of acquisition on the commit latch
    */
-  uint64_t GetTotalBitmapWait() { return table_.GetTotalBitmapWait(); }
+  uint64_t GetCommitLatchCount() const { return commit_latch_count_; }
+
+  /*
+   * @return The total wait time on the table latch (nanoseconds)
+   */
+  uint64_t GetTableLatchWait() const { return table_latch_wait_; }
+
+  /*
+   * @return The total number of acquisition on the table latch
+   */
+  uint64_t GetTableLatchCount() const { return table_latch_count_; }
+
+  /*
+   * @return The total wait time on the block latch (nanoseconds)
+   */
+  uint64_t GetBlockLatchWait() const { return block_latch_wait_; }
+
+  /*
+   * @return The total number of acquisition on the block latch
+   */
+  uint64_t GetBlockLatchCount() const { return block_latch_count_; }
+
+  /*
+   * @return The total wait time on the bitmap latch (nanoseconds)
+   */
+  uint64_t GetBitmapLatchWait() const { return bitmap_latch_wait_; }
+
+  /*
+   * @return The total number of acquisition on the bitmap latch
+   */
+  uint64_t GetBitmapLatchCount() const { return bitmap_latch_count_; }
 
  private:
   void SimulateOneTransaction(RandomTransaction *txn, uint32_t txn_id, transaction::callback_fn callback,
@@ -189,6 +221,26 @@ class ModelingBenchmarkObject {
   uint64_t abort_count_;
   uint64_t commit_count_;
   uint64_t latency_count_;
+
+  // total wait time on the commit latch (nanoseconds)
+  uint64_t commit_latch_wait_{0};
+  // total number of acquisition on the commit latch (nanoseconds)
+  uint64_t commit_latch_count_{0};
+
+  // total wait time on the table latch (nanoseconds)
+  uint64_t table_latch_wait_{0};
+  // total number of acquisition on the table latch (nanoseconds)
+  uint64_t table_latch_count_{0};
+
+  // total wait time on the concurrent bitmap (nanoseconds)
+  uint64_t bitmap_latch_wait_{0};
+  // total number of acquisition on the concurrent bitmap (nanoseconds)
+  uint64_t bitmap_latch_count_{0};
+
+  // total wait time on the block latch (nanoseconds)
+  uint64_t block_latch_wait_{0};
+  // total number of acquisition on the block latch (nanoseconds)
+  uint64_t block_latch_count_{0};
 
   // tuple content is meaningless if bookkeeping is off.
   std::vector<TupleEntry> last_checked_version_;

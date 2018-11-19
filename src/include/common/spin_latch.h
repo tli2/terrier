@@ -20,13 +20,7 @@ class SpinLatch {
    * If another thread has already locked the spin latch, a call to lock will
    * block execution until the lock is acquired.
    */
-  void Lock() {
-    auto start = std::chrono::high_resolution_clock::now();
-    latch_.lock();
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<uint64_t, std::nano> diff = end - start;
-    total_latch_wait_ += diff.count();
-  }
+  void Lock() { latch_.lock(); }
 
   /**
    * @brief Tries to lock the spin latch.
@@ -39,11 +33,6 @@ class SpinLatch {
    * @brief Unlocks the spin latch.
    */
   void Unlock() { latch_.unlock(); }
-
-  /**
-   * Get the total latch wait time in nanoseconds
-   */
-  uint64_t GetTotalWait() { return total_latch_wait_.load(); }
 
   /**
    * Scoped spin latch that guaranteees releasing the lock when destructed.
@@ -68,8 +57,6 @@ class SpinLatch {
 
  private:
   tbb::spin_mutex latch_;
-  // total wait time on the commit latch (nanoseconds)
-  std::atomic<uint64_t> total_latch_wait_{0};
 };
 
 }  // namespace terrier::common

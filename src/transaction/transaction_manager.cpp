@@ -2,11 +2,20 @@
 #include <utility>
 
 namespace terrier::transaction {
-TransactionContext *TransactionManager::BeginTransaction() {
+TransactionContext *TransactionManager::BeginTransaction(bool enable_contention_metrics) {
+  transaction::TransactionContext::time_point start;
+  if (enable_contention_metrics) {
+    start = std::chrono::high_resolution_clock::now();
+  }
   // This latch has to also protect addition of this transaction to the running transaction table. Otherwise,
   // the thread might get scheduled out while other transactions commit, and the GC will deallocate their version
   // chain which may be needed for this transaction, assuming that this transaction does not exist.
   common::SharedLatch::ScopedSharedLatch guard(&commit_latch_);
+  std::chrono::duration<uint64_t, std::nano> diff;
+  if (enable_contention_metrics) {
+    auto end = std::chrono::high_resolution_clock::now();
+    diff = end - start;
+  }
 
   timestamp_t start_time = time_++;
 
@@ -15,8 +24,21 @@ TransactionContext *TransactionManager::BeginTransaction() {
   // Doing this with std::map or other data structure is risky though, as they may not
   // guarantee that the iterator or underlying pointer is stable across operations.
   // (That is, they may change as concurrent inserts and deletes happen)
-  auto *result = new TransactionContext(start_time, start_time + INT64_MIN, buffer_pool_, log_manager_);
+  auto *result =
+      new TransactionContext(start_time, start_time + INT64_MIN, buffer_pool_, log_manager_, enable_contention_metrics);
+  if (enable_contention_metrics) {
+    result->AddToCommitLatch(diff.count());
+    start = std::chrono::high_resolution_clock::now();
+  }
+
   running_txns_table_latch_.Lock();
+
+  if (enable_contention_metrics) {
+    auto end = std::chrono::high_resolution_clock::now();
+    diff = end - start;
+    result->AddToTableLatch(diff.count());
+  }
+
   auto ret UNUSED_ATTRIBUTE = curr_running_txns_.emplace(result->StartTime(), result);
   TERRIER_ASSERT(ret.second, "commit start time should be globally unique");
   running_txns_table_latch_.Unlock();
@@ -52,7 +74,16 @@ timestamp_t TransactionManager::ReadOnlyCommitCriticalSection(TransactionContext
 
 timestamp_t TransactionManager::UpdatingCommitCriticalSection(TransactionContext *const txn, const callback_fn callback,
                                                               void *const callback_arg) {
+  transaction::TransactionContext::time_point start;
+  if (txn->EnableContentionMetrics()) {
+    start = std::chrono::high_resolution_clock::now();
+  }
   common::SharedLatch::ScopedExclusiveLatch guard(&commit_latch_);
+  if (txn->EnableContentionMetrics()) {
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<uint64_t, std::nano> diff = end - start;
+    txn->AddToCommitLatch(diff.count());
+  }
 
   const timestamp_t commit_time = time_++;
   // TODO(Tianyu):
@@ -84,8 +115,18 @@ timestamp_t TransactionManager::Commit(TransactionContext *const txn, transactio
   timestamp_t result = txn->undo_buffer_.Empty() ? ReadOnlyCommitCriticalSection(txn, callback, callback_arg)
                                                  : UpdatingCommitCriticalSection(txn, callback, callback_arg);
   {
+    transaction::TransactionContext::time_point start;
+    if (txn->EnableContentionMetrics()) {
+      start = std::chrono::high_resolution_clock::now();
+    }
     // In a critical section, remove this transaction from the table of running transactions
     common::SpinLatch::ScopedSpinLatch guard(&running_txns_table_latch_);
+    if (txn->EnableContentionMetrics()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<uint64_t, std::nano> diff = end - start;
+      txn->AddToTableLatch(diff.count());
+    }
+
     const timestamp_t start_time = txn->StartTime();
     size_t result UNUSED_ATTRIBUTE = curr_running_txns_.erase(start_time);
     TERRIER_ASSERT(result == 1, "Committed transaction did not exist in global transactions table");
@@ -104,8 +145,17 @@ void TransactionManager::Abort(TransactionContext *const txn) {
   // Discard the redo buffer that is not yet logged out
   txn->redo_buffer_.Finalize(false);
   {
+    transaction::TransactionContext::time_point start;
+    if (txn->EnableContentionMetrics()) {
+      start = std::chrono::high_resolution_clock::now();
+    }
     // In a critical section, remove this transaction from the table of running transactions
     common::SpinLatch::ScopedSpinLatch guard(&running_txns_table_latch_);
+    if (txn->EnableContentionMetrics()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<uint64_t, std::nano> diff = end - start;
+      txn->AddToTableLatch(diff.count());
+    }
     const timestamp_t start_time = txn->StartTime();
     size_t ret UNUSED_ATTRIBUTE = curr_running_txns_.erase(start_time);
     TERRIER_ASSERT(ret == 1, "Aborted transaction did not exist in global transactions table");

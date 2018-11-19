@@ -268,8 +268,6 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
   }
 
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
-  LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_committed.load());
-  LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_committed.load());
   state.SetItemsProcessed(total_committed.load());
 }
 
@@ -354,8 +352,6 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
   }
 
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
-  LOG_INFO("Average commit latch wait: {}", txn_manager_->GetTotalCommitLatchWait() / total_committed.load());
-  LOG_INFO("Average table latch wait: {}", txn_manager_->GetTotalTableLatchWait() / total_committed.load());
   state.SetItemsProcessed(total_committed.load());
 }
 
@@ -455,10 +451,6 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
 
   LOG_INFO("Number of aborted txns: {}", num_aborts.load());
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
-  LOG_INFO("Average commit latch wait: {}",
-           txn_manager_->GetTotalCommitLatchWait() / (total_committed.load() + num_aborts.load()));
-  LOG_INFO("Average table latch wait: {}",
-           txn_manager_->GetTotalTableLatchWait() / (total_committed.load() + num_aborts.load()));
   state.SetItemsProcessed(total_committed.load());
 }
 
@@ -542,10 +534,6 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::Stat
 
   LOG_INFO("Number of aborted txns: {}", num_aborts.load());
   LOG_INFO("Average latency: {}", total_latency.load() / total_committed.load());
-  LOG_INFO("Average commit latch wait: {}",
-           txn_manager_->GetTotalCommitLatchWait() / (total_committed.load() + num_aborts.load()));
-  LOG_INFO("Average table latch wait: {}",
-           txn_manager_->GetTotalTableLatchWait() / (total_committed.load() + num_aborts.load()));
   state.SetItemsProcessed(total_committed.load());
 }  // namespace terrier
 

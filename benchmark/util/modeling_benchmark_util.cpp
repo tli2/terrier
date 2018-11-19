@@ -7,7 +7,7 @@
 namespace terrier {
 RandomTransaction::RandomTransaction(ModelingBenchmarkObject *test_object)
     : test_object_(test_object),
-      txn_(test_object->txn_manager_->BeginTransaction()),
+      txn_(test_object->txn_manager_->BeginTransaction(true)),
       aborted_(false),
       start_time_(txn_->StartTime()),
       commit_time_(UINT64_MAX),
@@ -111,8 +111,29 @@ void ModelingBenchmarkObject::SimulateOltp() {
   // Number of aborted transactions
   std::atomic<uint32_t> num_aborts(0);
 
+  std::atomic<uint32_t> total_commit_latch_wait(0);
+  std::atomic<uint32_t> total_commit_latch_count(0);
+
+  std::atomic<uint32_t> total_table_latch_wait(0);
+  std::atomic<uint32_t> total_table_latch_count(0);
+
+  std::atomic<uint32_t> total_bitmap_latch_wait(0);
+  std::atomic<uint32_t> total_bitmap_latch_count(0);
+
+  std::atomic<uint32_t> total_block_latch_wait(0);
+  std::atomic<uint32_t> total_block_latch_count(0);
+
   auto workload = [&](uint32_t id) {
     std::chrono::duration<uint64_t, std::nano> thread_total_latency(0);
+
+    uint64_t thread_total_commit_latch_wait(0);
+    uint64_t thread_total_commit_latch_count(0);
+    uint64_t thread_total_table_latch_wait(0);
+    uint64_t thread_total_table_latch_count(0);
+    uint64_t thread_total_bitmap_latch_wait(0);
+    uint64_t thread_total_bitmap_latch_count(0);
+    uint64_t thread_total_block_latch_wait(0);
+    uint64_t thread_total_block_latch_count(0);
 
     int thread_total_committed(0);
     while (task_submitting_ == true or task_queues_[id].size() > 0) {
@@ -133,33 +154,63 @@ void ModelingBenchmarkObject::SimulateOltp() {
       // LOG_INFO("pop one item in thread {}, remaining size {}!", id, task_queues_[id].size());
       task_queue_latches_[id].Unlock();
 
-      auto callback = [start, &thread_total_latency, &thread_total_committed] {
+      auto txn = new RandomTransaction(this);
+      auto txn_context = txn->GetTransactionContext();
+
+      auto callback = [start, &thread_total_latency, &thread_total_committed, &thread_total_commit_latch_wait,
+                       &thread_total_commit_latch_count, &thread_total_table_latch_wait,
+                       &thread_total_table_latch_count, &thread_total_bitmap_latch_wait,
+                       &thread_total_bitmap_latch_count, &thread_total_block_latch_wait,
+                       &thread_total_block_latch_count, txn_context] {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<uint64_t, std::nano> diff = end - start;
         thread_total_latency += diff;
         thread_total_committed++;
+
+        thread_total_commit_latch_wait += txn_context->GetCommitLatchWait();
+        thread_total_commit_latch_count += txn_context->GetCommitLatchCount();
+        thread_total_table_latch_wait += txn_context->GetTableLatchWait();
+        thread_total_table_latch_count += txn_context->GetTableLatchCount();
+        thread_total_bitmap_latch_wait += txn_context->GetBitmapLatchWait();
+        thread_total_bitmap_latch_count += txn_context->GetBitmapLatchCount();
+        thread_total_block_latch_wait += txn_context->GetBlockLatchWait();
+        thread_total_block_latch_count += txn_context->GetBlockLatchCount();
       };
       // a captureless thunk
       auto thunk = [](void *arg) { (*static_cast<decltype(callback) *>(arg))(); };
-
-      auto txn = new RandomTransaction(this);
 
       SimulateOneTransaction(txn, txn_cnt++, thunk, &callback);
 
       if (txn->aborted_) num_aborts++;
 
-      if (gc_on_ == false) {
-        delete txn;
-      }
+      delete txn;
     }
     total_latency += thread_total_latency.count();
     total_committed += thread_total_committed;
+
+    total_commit_latch_wait += thread_total_commit_latch_wait;
+    total_commit_latch_count += thread_total_commit_latch_count;
+    total_table_latch_wait += thread_total_table_latch_wait;
+    total_table_latch_count += thread_total_table_latch_count;
+    total_bitmap_latch_wait += thread_total_bitmap_latch_wait;
+    total_bitmap_latch_count += thread_total_bitmap_latch_count;
+    total_block_latch_wait += thread_total_block_latch_wait;
+    total_block_latch_count += thread_total_block_latch_count;
   };
   thread_pool.RunThreadsUntilFinish(task_queues_.size(), workload);
 
   abort_count_ = num_aborts.load();
   commit_count_ = total_committed.load();
   latency_count_ = total_latency.load();
+
+  commit_latch_wait_ = total_commit_latch_wait;
+  commit_latch_count_ = total_commit_latch_count;
+  table_latch_wait_ = total_table_latch_wait;
+  table_latch_count_ = total_table_latch_count;
+  bitmap_latch_wait_ = total_bitmap_latch_wait;
+  bitmap_latch_count_ = total_bitmap_latch_count;
+  block_latch_wait_ = total_block_latch_wait;
+  block_latch_count_ = total_block_latch_count;
 }
 
 void ModelingBenchmarkObject::SimulateOneTransaction(terrier::RandomTransaction *txn, uint32_t txn_id,

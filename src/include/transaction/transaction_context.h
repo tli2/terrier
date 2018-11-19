@@ -30,8 +30,13 @@ class TransactionContext {
    * @param log_manager pointer to log manager in the system, or nullptr, if logging is disabled
    */
   TransactionContext(const timestamp_t start, const timestamp_t txn_id,
-                     storage::RecordBufferSegmentPool *const buffer_pool, storage::LogManager *const log_manager)
-      : start_time_(start), txn_id_(txn_id), undo_buffer_(buffer_pool), redo_buffer_(log_manager, buffer_pool) {}
+                     storage::RecordBufferSegmentPool *const buffer_pool, storage::LogManager *const log_manager,
+                     bool enable_contention_metrics = false)
+      : start_time_(start),
+        txn_id_(txn_id),
+        undo_buffer_(buffer_pool),
+        redo_buffer_(log_manager, buffer_pool),
+        enable_contention_metrics_(enable_contention_metrics) {}
 
   /**
    * @return start time of this transaction
@@ -111,6 +116,85 @@ class TransactionContext {
     storage::DeleteRecord::Initialize(redo_buffer_.NewEntry(size), start_time_, table, slot);
   }
 
+  typedef std::chrono::high_resolution_clock::time_point time_point;
+
+  /**
+   * @return whether the contention metrics is enabled to collect for this transaction
+   */
+  bool EnableContentionMetrics() const { return enable_contention_metrics_; }
+
+  /**
+   * Add the wait time duration for one acquisition to the commit latch metrics
+   */
+  void AddToCommitLatch(uint64_t duration) {
+    commit_latch_wait_ += duration;
+    commit_latch_count_++;
+  }
+
+  /*
+   * @return The total wait time on the commit latch (nanoseconds)
+   */
+  uint64_t GetCommitLatchWait() const { return commit_latch_wait_; }
+
+  /*
+   * @return The total number of acquisition on the commit latch
+   */
+  uint64_t GetCommitLatchCount() const { return commit_latch_count_; }
+
+  /**
+   * Add the wait time duration for one acquisition to the table latch metrics
+   */
+  void AddToTableLatch(uint64_t duration) {
+    table_latch_wait_ += duration;
+    table_latch_count_++;
+  }
+
+  /*
+   * @return The total wait time on the table latch (nanoseconds)
+   */
+  uint64_t GetTableLatchWait() const { return table_latch_wait_; }
+
+  /*
+   * @return The total number of acquisition on the table latch
+   */
+  uint64_t GetTableLatchCount() const { return table_latch_count_; }
+
+  /**
+   * Add the wait time duration for one acquisition to the block latch metrics
+   */
+  void AddToBlockLatch(uint64_t duration) {
+    block_latch_wait_ += duration;
+    block_latch_count_++;
+  }
+
+  /*
+   * @return The total wait time on the block latch (nanoseconds)
+   */
+  uint64_t GetBlockLatchWait() const { return block_latch_wait_; }
+
+  /*
+   * @return The total number of acquisition on the block latch
+   */
+  uint64_t GetBlockLatchCount() const { return block_latch_count_; }
+
+  /**
+   * Add the wait time duration for one acquisition to the bitmap latch metrics
+   */
+  void AddToBitmapLatch(uint64_t duration) {
+    bitmap_latch_wait_ += duration;
+    bitmap_latch_count_++;
+  }
+
+  /*
+   * @return The total wait time on the bitmap latch (nanoseconds)
+   */
+  uint64_t GetBitmapLatchWait() const { return bitmap_latch_wait_; }
+
+  /*
+   * @return The total number of acquisition on the bitmap latch
+   */
+  uint64_t GetBitmapLatchCount() const { return bitmap_latch_count_; }
+
  private:
   friend class storage::GarbageCollector;
   friend class TransactionManager;
@@ -118,5 +202,28 @@ class TransactionContext {
   std::atomic<timestamp_t> txn_id_;
   storage::UndoBuffer undo_buffer_;
   storage::RedoBuffer redo_buffer_;
+
+  // Whether to enable the tracking of contention related metrics
+  bool enable_contention_metrics_;
+
+  // total wait time on the commit latch for this transaction (nanoseconds)
+  uint64_t commit_latch_wait_{0};
+  // total number of acquisition on the commit latch for this transaction (nanoseconds)
+  uint64_t commit_latch_count_{0};
+
+  // total wait time on the table latch for this transaction (nanoseconds)
+  uint64_t table_latch_wait_{0};
+  // total number of acquisition on the table latch for this transaction (nanoseconds)
+  uint64_t table_latch_count_{0};
+
+  // total wait time on the concurrent bitmap for this transaction (nanoseconds)
+  uint64_t bitmap_latch_wait_{0};
+  // total number of acquisition on the concurrent bitmap for this transaction (nanoseconds)
+  uint64_t bitmap_latch_count_{0};
+
+  // total wait time on the block latch for this transaction (nanoseconds)
+  uint64_t block_latch_wait_{0};
+  // total number of acquisition on the block latch for this transaction (nanoseconds)
+  uint64_t block_latch_count_{0};
 };
 }  // namespace terrier::transaction
