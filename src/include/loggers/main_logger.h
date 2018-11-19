@@ -6,7 +6,7 @@
 #include "spdlog/spdlog.h"
 
 // flush the debug logs, every <n> seconds
-#define DEBUG_LOG_FLUSH_INTERVAL 3
+#define DEBUG_LOG_FLUSH_INTERVAL 1
 
 extern std::shared_ptr<spdlog::sinks::stdout_sink_mt> default_sink;
 extern std::shared_ptr<spdlog::logger> main_logger;
