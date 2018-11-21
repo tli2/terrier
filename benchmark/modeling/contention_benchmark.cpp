@@ -10,6 +10,7 @@
 #include "storage/data_table.h"
 #include "storage/garbage_collector.h"
 #include "storage/storage_util.h"
+#include "storage/write_ahead_log/log_io.h"
 #include "transaction/transaction_context.h"
 #include "transaction/transaction_manager.h"
 #include "util/modeling_benchmark_util.h"
@@ -31,6 +32,10 @@ class ContentionBenchmark : public benchmark::Fixture {
     LOG_INFO("Setup once.\n");
 
     if (enable_gc_and_wal_ == true) {
+      // trunc the log file to avoid huge size when benchmarking
+      auto log_file_id = storage::PosixIoWrappers::Open(LOG_FILE_NAME, O_TRUNC);
+      storage::PosixIoWrappers::Close(log_file_id);
+
       log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
     }
     txn_manager_ = new transaction::TransactionManager(&buffer_pool_, enable_gc_and_wal_, log_manager_);
