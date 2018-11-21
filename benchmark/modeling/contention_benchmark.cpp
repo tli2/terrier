@@ -35,20 +35,11 @@ class ContentionBenchmark : public benchmark::Fixture {
     }
     txn_manager_ = new transaction::TransactionManager(&buffer_pool_, enable_gc_and_wal_, log_manager_);
 
-    if (enable_gc_and_wal_ == true) {
-      // start logging and GC threads
-      StartLogging(10);
-      StartGC(txn_manager_, 10);
-    }
-
     csv_file_ = fopen(CSV_FILE_NAME, "a");
   }
 
   void TearDown(const benchmark::State &state) final {
     if (enable_gc_and_wal_ == true) {
-      EndGC();
-      EndLogging();
-
       delete log_manager_;
     }
     delete txn_manager_;
@@ -81,7 +72,7 @@ class ContentionBenchmark : public benchmark::Fixture {
   transaction::TransactionManager *txn_manager_;
   storage::LogManager *log_manager_ = LOGGING_DISABLED;
 
-  bool enable_gc_and_wal_ = false;
+  bool enable_gc_and_wal_ = true;
 
   // Insert buffer pointers
   byte *redo_buffer_;
@@ -108,7 +99,6 @@ class ContentionBenchmark : public benchmark::Fixture {
 
   void EndTaskSubmitting() { task_submitting_thread_.join(); }
 
- private:
   void StartLogging(uint32_t log_period_milli) {
     logging_ = true;
     log_thread_ = std::thread([log_period_milli, this] { LogThreadLoop(log_period_milli); });
@@ -135,10 +125,11 @@ class ContentionBenchmark : public benchmark::Fixture {
     delete gc_;
   }
 
+ private:
   void LogThreadLoop(uint32_t log_period_milli) {
     while (logging_) {
       std::this_thread::sleep_for(std::chrono::milliseconds(log_period_milli));
-      log_manager_->Process();
+      if (logging_) log_manager_->Process();
     }
   }
 
@@ -202,21 +193,13 @@ static void CustomArguments(benchmark::internal::Benchmark *b) {
 // Insert the num_inserts_ of tuples into a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
-  TestThreadPool thread_pool;
+  ContentionBenchmarkMetrics metrics;
 
-  uint64_t total_latency(0);
-  uint64_t total_committed(0);
-  uint64_t total_aborted(0);
-  uint64_t total_elapsed_ms(0);
-
-  uint64_t total_commit_latch_wait(0);
-  uint64_t total_commit_latch_count(0);
-  uint64_t total_table_latch_wait(0);
-  uint64_t total_table_latch_count(0);
-  uint64_t total_bitmap_latch_wait(0);
-  uint64_t total_bitmap_latch_count(0);
-  uint64_t total_block_latch_wait(0);
-  uint64_t total_block_latch_count(0);
+  if (enable_gc_and_wal_ == true) {
+    // start logging and GC threads
+    StartLogging(10);
+    StartGC(txn_manager_, 10);
+  }
 
   const uint32_t num_threads = state.range(0);
   const uint32_t txn_length = state.range(1);
@@ -242,41 +225,37 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
                                    &block_store_, &buffer_pool_, &generator_, task_submitting_, task_queues_,
                                    task_queue_latches_, enable_gc_and_wal_, txn_manager_, log_manager_);
 
-    total_commit_latch_wait -= tested.GetCommitLatchWait();
-    total_commit_latch_count -= tested.GetCommitLatchCount();
-    total_table_latch_wait -= tested.GetTableLatchWait();
-    total_table_latch_count -= tested.GetTableLatchCount();
-    total_bitmap_latch_wait -= tested.GetBitmapLatchWait();
-    total_bitmap_latch_count -= tested.GetBitmapLatchCount();
-    total_block_latch_wait -= tested.GetBlockLatchWait();
-    total_block_latch_count -= tested.GetBlockLatchCount();
-
     StartTaskSubmitting(1000000000 / txn_rates_);
     uint64_t elapsed_ms;
     {
       common::ScopedTimer timer(&elapsed_ms);
-      tested.SimulateOltp();
+      printf("before: %p\n", &metrics);
+      tested.SimulateOltp(&metrics);
+      printf("after: %p\n", &metrics);
     }
     EndTaskSubmitting();
 
-    total_committed += tested.GetCommitCount();
-    total_aborted += tested.GetAbortCount();
-    total_latency += tested.GetLatencyCount();
-
-    total_commit_latch_wait += tested.GetCommitLatchWait();
-    total_commit_latch_count += tested.GetCommitLatchCount();
-    total_table_latch_wait += tested.GetTableLatchWait();
-    total_table_latch_count += tested.GetTableLatchCount();
-    total_bitmap_latch_wait += tested.GetBitmapLatchWait();
-    total_bitmap_latch_count += tested.GetBitmapLatchCount();
-    total_block_latch_wait += tested.GetBlockLatchWait();
-    total_block_latch_count += tested.GetBlockLatchCount();
-
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
-    total_elapsed_ms += elapsed_ms;
+    metrics.total_elapsed_ms_ += elapsed_ms;
 
-    LOG_INFO("Committed(k): {} Time: {}", tested.GetCommitCount() / 1000, elapsed_ms);
+    LOG_INFO("Committed(k): {} Time: {}", metrics.total_committed_ / 1000, metrics.total_elapsed_ms_);
   }
+
+  uint64_t total_latency = metrics.total_latency_.load();
+  uint64_t total_committed = metrics.total_committed_.load();
+  uint64_t total_aborted = metrics.total_aborted_.load();
+  uint64_t total_elapsed_ms = metrics.total_elapsed_ms_.load();
+
+  uint64_t total_commit_latch_wait = metrics.total_commit_latch_wait_.load();
+  uint64_t total_commit_latch_count = metrics.total_commit_latch_count_.load();
+  uint64_t total_table_latch_wait = metrics.total_table_latch_wait_.load();
+  uint64_t total_table_latch_count = metrics.total_table_latch_count_.load();
+  uint64_t total_bitmap_latch_wait = metrics.total_bitmap_latch_wait_.load();
+  uint64_t total_bitmap_latch_count = metrics.total_bitmap_latch_count_.load();
+  uint64_t total_block_latch_wait = metrics.total_block_latch_wait_.load();
+  uint64_t total_block_latch_count = metrics.total_block_latch_count_.load();
+
+  total_committed += total_committed == 0;
 
   total_commit_latch_count += total_commit_latch_count == 0;
   total_table_latch_count += total_table_latch_count == 0;
@@ -307,6 +286,11 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
           total_commit_latch_wait / total_commit_latch_count, total_table_latch_wait / total_table_latch_count,
           total_block_latch_wait / total_block_latch_count, total_bitmap_latch_wait / total_bitmap_latch_count);
   fflush(csv_file_);
+
+  if (enable_gc_and_wal_ == true) {
+    EndGC();
+    EndLogging();
+  }
 }
 
 BENCHMARK_REGISTER_F(ContentionBenchmark, RunBenchmark)

@@ -12,6 +12,7 @@
 #include "transaction/transaction_manager.h"
 #include "util/storage_test_util.h"
 #include "util/test_thread_pool.h"
+#include "util/transaction_test_util.h"
 
 #define LOG_FILE_NAME "concurrency_benchmark.log"
 
@@ -285,7 +286,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
   // populate read_table_ by inserting tuples
   // We can use dummy timestamps here since we're not invoking concurrency control
   transaction::TransactionContext txn(transaction::timestamp_t(0), transaction::timestamp_t(0), &buffer_pool_,
-                                      LOGGING_DISABLED);
+                                      LOGGING_DISABLED, nullptr);
   std::vector<storage::TupleSlot> read_order;
   for (uint32_t i = 0; i < num_operations_; ++i) {
     read_order.emplace_back(table.Insert(&txn, *redo_));
@@ -369,7 +370,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
   // populate read_table_ by inserting tuples
   // We can use dummy timestamps here since we're not invoking concurrency control
   transaction::TransactionContext txn(transaction::timestamp_t(0), transaction::timestamp_t(0), &buffer_pool_,
-                                      LOGGING_DISABLED);
+                                      LOGGING_DISABLED, nullptr);
   std::vector<storage::TupleSlot> read_order;
   for (uint32_t i = 0; i < num_operations_; ++i) {
     read_order.emplace_back(table.Insert(&txn, *redo_));
@@ -468,7 +469,7 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::Stat
   // populate read_table_ by inserting tuples
   // We can use dummy timestamps here since we're not invoking concurrency control
   transaction::TransactionContext txn(transaction::timestamp_t(0), transaction::timestamp_t(0), &buffer_pool_,
-                                      LOGGING_DISABLED);
+                                      LOGGING_DISABLED, nullptr);
   std::vector<storage::TupleSlot> read_order;
   for (uint32_t i = 0; i < num_operations_; ++i) {
     read_order.emplace_back(table.Insert(&txn, *redo_));

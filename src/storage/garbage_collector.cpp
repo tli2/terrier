@@ -51,6 +51,12 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
 
   // Get the completed transactions from the TransactionManager
   transaction::TransactionQueue completed_txns = txn_manager_->CompletedTransactionsForGC();
+  for (auto completed_txn : completed_txns) {
+    if (transaction::TransactionUtil::Committed(completed_txn->TxnId().load()) &&
+        completed_txn->EnableContentionMetrics()) {
+      completed_txn->MetricsCallback()(completed_txn);
+    }
+  }
   if (!completed_txns.empty()) {
     // Append to our local unlink queue
     txns_to_unlink_.splice_after(txns_to_unlink_.cbefore_begin(), std::move(completed_txns));

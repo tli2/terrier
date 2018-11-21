@@ -20,6 +20,26 @@ class ModelingBenchmarkObject;
 class RandomTransaction;
 using TupleEntry = std::pair<storage::TupleSlot, storage::ProjectedRow *>;
 
+/*
+ * A wrapper class to store the metrics related to the contention benchmark
+ */
+class ContentionBenchmarkMetrics {
+ public:
+  std::atomic<uint64_t> total_latency_{0};
+  std::atomic<uint64_t> total_committed_{0};
+  std::atomic<uint64_t> total_aborted_{0};
+  std::atomic<uint64_t> total_elapsed_ms_{0};
+
+  std::atomic<uint64_t> total_commit_latch_wait_{0};
+  std::atomic<uint64_t> total_commit_latch_count_{0};
+  std::atomic<uint64_t> total_table_latch_wait_{0};
+  std::atomic<uint64_t> total_table_latch_count_{0};
+  std::atomic<uint64_t> total_bitmap_latch_wait_{0};
+  std::atomic<uint64_t> total_bitmap_latch_count_{0};
+  std::atomic<uint64_t> total_block_latch_wait_{0};
+  std::atomic<uint64_t> total_block_latch_count_{0};
+};
+
 /**
  * A RandomWorkloadTransaction class provides a simple interface to simulate a transaction running in the system.
  */
@@ -29,7 +49,7 @@ class RandomTransaction {
    * Initializes a new RandomWorkloadTransaction to work on the given test object
    * @param test_object the test object that runs this transaction
    */
-  explicit RandomTransaction(ModelingBenchmarkObject *test_object);
+  explicit RandomTransaction(ModelingBenchmarkObject *test_object, transaction::metrics_callback_fn metrics_callback);
 
   /**
    * Destructs a random workload transaction
@@ -118,8 +138,7 @@ class ModelingBenchmarkObject {
                           storage::RecordBufferSegmentPool *buffer_pool, std::default_random_engine *generator,
                           bool &task_submitting, std::vector<std::queue<time_point>> &task_queues,
                           std::vector<common::SpinLatch> &task_queue_latches, bool gc_on,
-                          transaction::TransactionManager *txn_manager,
-                          storage::LogManager *log_manager = LOGGING_DISABLED);
+                          transaction::TransactionManager *txn_manager, storage::LogManager *log_manager);
 
   /**
    * Destructs a LargeTransactionBenchmarkObject
@@ -135,67 +154,12 @@ class ModelingBenchmarkObject {
    * Simulate an oltp workload.
    * Transactions are generated using the configuration provided on construction.
    */
-  void SimulateOltp();
+  void SimulateOltp(ContentionBenchmarkMetrics *metrics);
 
   /**
    * @return layout of the randomly generated table
    */
   const storage::BlockLayout &Layout() const { return layout_; }
-
-  /**
-   * @return the number of commited transactions
-   */
-  uint64_t GetCommitCount() const { return commit_count_; }
-
-  /**
-   * @return the number of aborted transactions
-   */
-  uint64_t GetAbortCount() const { return abort_count_; }
-
-  /**
-   * @return the number of total latency of transactions
-   */
-  uint64_t GetLatencyCount() const { return latency_count_; }
-
-  /*
-   * @return The total wait time on the commit latch (nanoseconds)
-   */
-  uint64_t GetCommitLatchWait() const { return commit_latch_wait_; }
-
-  /*
-   * @return The total number of acquisition on the commit latch
-   */
-  uint64_t GetCommitLatchCount() const { return commit_latch_count_; }
-
-  /*
-   * @return The total wait time on the table latch (nanoseconds)
-   */
-  uint64_t GetTableLatchWait() const { return table_latch_wait_; }
-
-  /*
-   * @return The total number of acquisition on the table latch
-   */
-  uint64_t GetTableLatchCount() const { return table_latch_count_; }
-
-  /*
-   * @return The total wait time on the block latch (nanoseconds)
-   */
-  uint64_t GetBlockLatchWait() const { return block_latch_wait_; }
-
-  /*
-   * @return The total number of acquisition on the block latch
-   */
-  uint64_t GetBlockLatchCount() const { return block_latch_count_; }
-
-  /*
-   * @return The total wait time on the bitmap latch (nanoseconds)
-   */
-  uint64_t GetBitmapLatchWait() const { return bitmap_latch_wait_; }
-
-  /*
-   * @return The total number of acquisition on the bitmap latch
-   */
-  uint64_t GetBitmapLatchCount() const { return bitmap_latch_count_; }
 
  private:
   void SimulateOneTransaction(RandomTransaction *txn, uint32_t txn_id, transaction::callback_fn callback,
@@ -217,30 +181,6 @@ class ModelingBenchmarkObject {
   bool &task_submitting_;
   std::vector<std::queue<time_point>> &task_queues_;
   std::vector<common::SpinLatch> &task_queue_latches_;
-
-  uint64_t abort_count_;
-  uint64_t commit_count_;
-  uint64_t latency_count_;
-
-  // total wait time on the commit latch (nanoseconds)
-  uint64_t commit_latch_wait_{0};
-  // total number of acquisition on the commit latch (nanoseconds)
-  uint64_t commit_latch_count_{0};
-
-  // total wait time on the table latch (nanoseconds)
-  uint64_t table_latch_wait_{0};
-  // total number of acquisition on the table latch (nanoseconds)
-  uint64_t table_latch_count_{0};
-
-  // total wait time on the concurrent bitmap (nanoseconds)
-  uint64_t bitmap_latch_wait_{0};
-  // total number of acquisition on the concurrent bitmap (nanoseconds)
-  uint64_t bitmap_latch_count_{0};
-
-  // total wait time on the block latch (nanoseconds)
-  uint64_t block_latch_wait_{0};
-  // total number of acquisition on the block latch (nanoseconds)
-  uint64_t block_latch_count_{0};
 
   // tuple content is meaningless if bookkeeping is off.
   std::vector<TupleEntry> last_checked_version_;

@@ -2,7 +2,8 @@
 #include <utility>
 
 namespace terrier::transaction {
-TransactionContext *TransactionManager::BeginTransaction(bool enable_contention_metrics) {
+TransactionContext *TransactionManager::BeginTransaction(transaction::metrics_callback_fn metrics_callback) {
+  bool enable_contention_metrics = metrics_callback != nullptr;
   transaction::TransactionContext::time_point start;
   if (enable_contention_metrics) {
     start = std::chrono::high_resolution_clock::now();
@@ -25,7 +26,7 @@ TransactionContext *TransactionManager::BeginTransaction(bool enable_contention_
   // guarantee that the iterator or underlying pointer is stable across operations.
   // (That is, they may change as concurrent inserts and deletes happen)
   auto *result =
-      new TransactionContext(start_time, start_time + INT64_MIN, buffer_pool_, log_manager_, enable_contention_metrics);
+      new TransactionContext(start_time, start_time + INT64_MIN, buffer_pool_, log_manager_, metrics_callback);
   if (enable_contention_metrics) {
     result->AddToCommitLatch(diff.count());
     start = std::chrono::high_resolution_clock::now();

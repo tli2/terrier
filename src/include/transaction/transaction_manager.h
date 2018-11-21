@@ -34,7 +34,7 @@ class TransactionManager {
    * Begins a transaction.
    * @return transaction context for the newly begun transaction
    */
-  TransactionContext *BeginTransaction(bool enable_contention_metrics = false);
+  TransactionContext *BeginTransaction(transaction::metrics_callback_fn metrics_callback = nullptr);
 
   /**
    * Commits a transaction, making all of its changes visible to others.

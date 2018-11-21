@@ -31,12 +31,12 @@ class TransactionContext {
    */
   TransactionContext(const timestamp_t start, const timestamp_t txn_id,
                      storage::RecordBufferSegmentPool *const buffer_pool, storage::LogManager *const log_manager,
-                     bool enable_contention_metrics = false)
+                     transaction::metrics_callback_fn metrics_callback)
       : start_time_(start),
         txn_id_(txn_id),
         undo_buffer_(buffer_pool),
         redo_buffer_(log_manager, buffer_pool),
-        enable_contention_metrics_(enable_contention_metrics) {}
+        metrics_callback_(metrics_callback) {}
 
   /**
    * @return start time of this transaction
@@ -121,7 +121,7 @@ class TransactionContext {
   /**
    * @return whether the contention metrics is enabled to collect for this transaction
    */
-  bool EnableContentionMetrics() const { return enable_contention_metrics_; }
+  bool EnableContentionMetrics() const { return metrics_callback_ != nullptr; }
 
   /**
    * Add the wait time duration for one acquisition to the commit latch metrics
@@ -195,6 +195,11 @@ class TransactionContext {
    */
   uint64_t GetBitmapLatchCount() const { return bitmap_latch_count_; }
 
+  /**
+   * @return function pointer of the metrics collection callback
+   */
+  transaction::metrics_callback_fn MetricsCallback() const { return metrics_callback_; }
+
  private:
   friend class storage::GarbageCollector;
   friend class TransactionManager;
@@ -202,9 +207,6 @@ class TransactionContext {
   std::atomic<timestamp_t> txn_id_;
   storage::UndoBuffer undo_buffer_;
   storage::RedoBuffer redo_buffer_;
-
-  // Whether to enable the tracking of contention related metrics
-  bool enable_contention_metrics_;
 
   // total wait time on the commit latch for this transaction (nanoseconds)
   uint64_t commit_latch_wait_{0};
@@ -225,5 +227,8 @@ class TransactionContext {
   uint64_t block_latch_wait_{0};
   // total number of acquisition on the block latch for this transaction (nanoseconds)
   uint64_t block_latch_count_{0};
+
+  // The callback function to collect metrics before being garbage collected
+  transaction::metrics_callback_fn metrics_callback_;
 };
 }  // namespace terrier::transaction

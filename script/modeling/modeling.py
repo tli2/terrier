@@ -29,10 +29,10 @@ def WriteResult(path, label, data):
 def Main(method, mode, input_path, output_path):
     dataset = pd.read_csv(input_path)  
     print(dataset.shape)
-    print(dataset.iloc[:, -4:].describe(include='all'))
+    print(dataset.iloc[:, -8:-4].describe(include='all'))
     
     x = dataset.iloc[:, :5].values  
-    y = dataset.iloc[:, -4:].values
+    y = dataset.iloc[:, -8:-4].values
     
     if mode == 'sum':
        y = np.sum(y, axis=1) 
