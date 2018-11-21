@@ -11,10 +11,6 @@
 #include "util/test_harness.h"
 
 namespace terrier {
-struct TestCallbacks {
-  TestCallbacks() = delete;
-  static void EmptyCallback(void * /*unused*/) {}
-};
 
 class ModelingBenchmarkObject;
 class RandomTransaction;
@@ -38,6 +34,34 @@ class ContentionBenchmarkMetrics {
   std::atomic<uint64_t> total_bitmap_latch_count_{0};
   std::atomic<uint64_t> total_block_latch_wait_{0};
   std::atomic<uint64_t> total_block_latch_count_{0};
+};
+
+/*
+ * A wrapper class to store the arguments used for the callback when txn commits
+ */
+class CommitCallbackArgs {
+ public:
+  CommitCallbackArgs(ContentionBenchmarkMetrics *metrics, transaction::TransactionContext::time_point start)
+      : metrics_(metrics), start_(start) {}
+
+  ContentionBenchmarkMetrics *metrics_;
+  transaction::TransactionContext::time_point start_;
+};
+
+struct TestCallbacks {
+  TestCallbacks() = delete;
+  static void EmptyCallback(void * /*unused*/) {}
+
+  static void CommitMetricsCallback(void *args) {
+    auto callback_args = reinterpret_cast<CommitCallbackArgs *>(args);
+    auto start = callback_args->start_;
+    auto metrics = callback_args->metrics_;
+    delete callback_args;
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<uint64_t, std::nano> diff = end - start;
+    metrics->total_latency_ += diff.count();
+    metrics->total_committed_++;
+  };
 };
 
 /**
@@ -118,8 +142,6 @@ class RandomTransaction {
  */
 class ModelingBenchmarkObject {
  public:
-  typedef std::chrono::high_resolution_clock::time_point time_point;
-
   /**
    * Initializes a test object with the given configuration
    * @param max_columns the max number of columns in the generated test table
@@ -136,7 +158,8 @@ class ModelingBenchmarkObject {
   ModelingBenchmarkObject(const std::vector<uint8_t> &attr_sizes, uint32_t initial_table_size, uint32_t txn_length,
                           std::vector<double> operation_ratio, storage::BlockStore *block_store,
                           storage::RecordBufferSegmentPool *buffer_pool, std::default_random_engine *generator,
-                          bool &task_submitting, std::vector<std::queue<time_point>> &task_queues,
+                          bool &task_submitting,
+                          std::vector<std::queue<transaction::TransactionContext::time_point>> &task_queues,
                           std::vector<common::SpinLatch> &task_queue_latches, bool gc_on,
                           transaction::TransactionManager *txn_manager, storage::LogManager *log_manager);
 
@@ -179,7 +202,7 @@ class ModelingBenchmarkObject {
   bool gc_on_, wal_on_;
 
   bool &task_submitting_;
-  std::vector<std::queue<time_point>> &task_queues_;
+  std::vector<std::queue<transaction::TransactionContext::time_point>> &task_queues_;
   std::vector<common::SpinLatch> &task_queue_latches_;
 
   // tuple content is meaningless if bookkeeping is off.

@@ -79,8 +79,9 @@ ModelingBenchmarkObject::ModelingBenchmarkObject(
     const std::vector<uint8_t> &attr_sizes, uint32_t initial_table_size, uint32_t txn_length,
     std::vector<double> operation_ratio, storage::BlockStore *block_store,
     storage::RecordBufferSegmentPool *buffer_pool, std::default_random_engine *generator, bool &task_submitting,
-    std::vector<std::queue<time_point>> &task_queues, std::vector<common::SpinLatch> &task_queue_latches, bool gc_on,
-    transaction::TransactionManager *txn_manager, storage::LogManager *log_manager)
+    std::vector<std::queue<transaction::TransactionContext::time_point>> &task_queues,
+    std::vector<common::SpinLatch> &task_queue_latches, bool gc_on, transaction::TransactionManager *txn_manager,
+    storage::LogManager *log_manager)
     : txn_length_(txn_length),
       operation_ratio_(std::move(operation_ratio)),
       generator_(generator),
@@ -117,7 +118,7 @@ void ModelingBenchmarkObject::SimulateOltp(ContentionBenchmarkMetrics *metrics) 
 
       // LOG_INFO("before locking thread {}!!", id);
       task_queue_latches_[id].Lock();
-      time_point start = task_queues_[id].front();
+      transaction::TransactionContext::time_point start = task_queues_[id].front();
       // LOG_INFO("pop one item in thread {}, current size {}!", id, task_queues_[id].size());
       task_queues_[id].pop();
       // LOG_INFO("pop one item in thread {}, remaining size {}!", id, task_queues_[id].size());
@@ -139,24 +140,8 @@ void ModelingBenchmarkObject::SimulateOltp(ContentionBenchmarkMetrics *metrics) 
 
       auto txn = new RandomTransaction(this, metrics_callback);
 
-      auto callback = [metrics, start] {
-        // printf("00 %p\n", metrics);
-        // fflush(stdout);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<uint64_t, std::nano> diff = end - start;
-        // printf("11 %p\n", metrics);
-        // fflush(stdout);
-        // metrics->total_latency_ += diff.count();
-        // printf("22 %p\n", metrics);
-        // fflush(stdout);
-        // metrics->total_committed_++;
-        // printf("33 %p\n", metrics);
-        // fflush(stdout);
-      };
-      // a captureless thunk
-      auto thunk = [](void *arg) { (*static_cast<decltype(callback) *>(arg))(); };
-
-      SimulateOneTransaction(txn, txn_cnt++, thunk, &callback);
+      auto callback_args = new CommitCallbackArgs(metrics, start);
+      SimulateOneTransaction(txn, txn_cnt++, TestCallbacks::CommitMetricsCallback, callback_args);
 
       if (txn->aborted_) metrics->total_aborted_++;
 

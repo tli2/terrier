@@ -218,20 +218,21 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
   }
   const uint32_t initial_table_size = 1000000;
 
+  std::vector<ModelingBenchmarkObject *> benchmark_objects;
+
   // NOLINTNEXTLINE
   for (auto _ : state) {
     LOG_INFO("Run once.");
-    ModelingBenchmarkObject tested(attr_sizes, initial_table_size, txn_length, insert_update_select_ratio,
-                                   &block_store_, &buffer_pool_, &generator_, task_submitting_, task_queues_,
-                                   task_queue_latches_, enable_gc_and_wal_, txn_manager_, log_manager_);
+    auto tested = new ModelingBenchmarkObject(attr_sizes, initial_table_size, txn_length, insert_update_select_ratio,
+                                              &block_store_, &buffer_pool_, &generator_, task_submitting_, task_queues_,
+                                              task_queue_latches_, enable_gc_and_wal_, txn_manager_, log_manager_);
+    benchmark_objects.push_back(tested);
 
     StartTaskSubmitting(1000000000 / txn_rates_);
     uint64_t elapsed_ms;
     {
       common::ScopedTimer timer(&elapsed_ms);
-      printf("before: %p\n", &metrics);
-      tested.SimulateOltp(&metrics);
-      printf("after: %p\n", &metrics);
+      tested->SimulateOltp(&metrics);
     }
     EndTaskSubmitting();
 
@@ -290,6 +291,10 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
   if (enable_gc_and_wal_ == true) {
     EndGC();
     EndLogging();
+  }
+
+  for (auto tested : benchmark_objects) {
+    delete tested;
   }
 }
 
