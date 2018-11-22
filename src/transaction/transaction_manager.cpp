@@ -133,9 +133,15 @@ timestamp_t TransactionManager::Commit(TransactionContext *const txn, transactio
     TERRIER_ASSERT(result == 1, "Committed transaction did not exist in global transactions table");
     // It is not necessary to have to GC process read-only transactions, but it's probably faster to call free off
     // the critical path there anyway
-    if (gc_enabled_) completed_txns_.push_front(txn);
+    if (gc_enabled_) {
+      completed_txns_.push_front(txn);
+    } else {
+      if (txn->EnableContentionMetrics()) {
+        txn->MetricsCallback()(txn);
+      }
+    }
+    if (log_manager_ == LOGGING_DISABLED) callback(callback_arg);
   }
-  if (log_manager_ == LOGGING_DISABLED) callback(callback_arg);
   return result;
 }
 
