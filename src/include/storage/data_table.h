@@ -116,19 +116,16 @@ class DataTable {
   DataTable(BlockStore *store, const BlockLayout &layout, layout_version_t layout_version);
 
   /**
-   * Destructs a DataTable, frees all its blocks.
+   * Destructs a DataTable, frees all its blocks and any potential varlen entries.
    */
-  ~DataTable() {
-    common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
-    for (RawBlock *block : blocks_) block_store_->Release(block);
-  }
+  ~DataTable();
 
   // TODO(Matt): I think the concept of a DataTable oid is going away once SqlTable is merged, so this placeholder will
   // go away
   /**
    * @return table oid of this data table
    */
-  table_oid_t TableOid() const { return table_oid_t{0}; }
+  catalog::table_oid_t TableOid() const { return catalog::table_oid_t{0}; }
 
   /**
    * Materializes a single tuple from the given slot, as visible to the transaction given, according to the format
@@ -270,5 +267,7 @@ class DataTable {
 
   // Allocates a new block to be used as insertion head.
   void NewBlock(RawBlock *expected_val);
+
+  void DeallocateVarlensOnShutdown(RawBlock *block);
 };
 }  // namespace terrier::storage

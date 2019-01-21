@@ -1,5 +1,5 @@
 #pragma once
-#include <map>
+#include <unordered_set>
 #include <utility>
 #include "common/shared_latch.h"
 #include "common/spin_latch.h"
@@ -85,8 +85,8 @@ class TransactionManager {
   common::SharedLatch commit_latch_;
 
   // TODO(Matt): consider a different data structure if this becomes a measured bottleneck
-  std::map<timestamp_t, TransactionContext *> curr_running_txns_;
-  mutable common::SpinLatch running_txns_table_latch_;
+  std::unordered_set<timestamp_t> curr_running_txns_;
+  mutable common::SpinLatch curr_running_txns_latch_;
 
   bool gc_enabled_ = false;
   TransactionQueue completed_txns_;
@@ -101,6 +101,14 @@ class TransactionManager {
   void LogCommit(TransactionContext *txn, timestamp_t commit_time, transaction::callback_fn callback,
                  void *callback_arg);
 
-  void Rollback(timestamp_t txn_id, const storage::UndoRecord &record) const;
+  void Rollback(TransactionContext *txn, const storage::UndoRecord &record) const;
+
+  void DeallocateColumnUpdateIfVarlen(TransactionContext *txn, storage::UndoRecord *undo,
+                                      uint16_t projection_list_index,
+                                      const storage::TupleAccessStrategy &accessor) const;
+
+  void DeallocateInsertedTupleIfVarlen(TransactionContext *txn, storage::UndoRecord *undo,
+                                       const storage::TupleAccessStrategy &accessor) const;
+  void GCLastUpdateOnAbort(TransactionContext *txn);
 };
 }  // namespace terrier::transaction

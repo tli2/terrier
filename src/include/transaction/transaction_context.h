@@ -12,7 +12,8 @@
 
 namespace terrier::storage {
 class GarbageCollector;
-}
+class LogManager;
+}  // namespace terrier::storage
 
 namespace terrier::transaction {
 /**
@@ -38,6 +39,9 @@ class TransactionContext {
         redo_buffer_(log_manager, buffer_pool),
         metrics_callback_(metrics_callback) {}
 
+  ~TransactionContext() {
+    for (const byte *ptr : loose_ptrs_) delete[] ptr;
+  }
   /**
    * @return start time of this transaction
    */
@@ -203,6 +207,7 @@ class TransactionContext {
  private:
   friend class storage::GarbageCollector;
   friend class TransactionManager;
+  friend class storage::LogManager;
   const timestamp_t start_time_;
   std::atomic<timestamp_t> txn_id_;
   storage::UndoBuffer undo_buffer_;
@@ -230,5 +235,12 @@ class TransactionContext {
 
   // The callback function to collect metrics before being garbage collected
   transaction::metrics_callback_fn metrics_callback_;
+
+  // TODO(Tianyu): Maybe not so much of a good idea to do this. Make explicit queue in GC?
+  //
+  std::vector<const byte *> loose_ptrs_;
+  // log manager will set this to be true when log records are processed (not necessarily flushed, but will not be read
+  // again in the future), so it can be garbage-collected safely.
+  bool log_processed_ = false;
 };
 }  // namespace terrier::transaction
