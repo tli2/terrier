@@ -15,10 +15,9 @@
 #include "transaction/transaction_manager.h"
 #include "util/modeling_benchmark_util.h"
 #include "util/storage_test_util.h"
-#include "util/test_thread_pool.h"
 
-#define LOG_FILE_NAME "concurrency_benchmark.log"
-#define CSV_FILE_NAME "concurrency_benchmark_committed.csv"
+#define LOG_FILE_NAME "contention_benchmark.log"
+#define CSV_FILE_NAME "contention_benchmark_committed.csv"
 
 namespace terrier {
 
@@ -206,11 +205,11 @@ BENCHMARK_DEFINE_F(ContentionBenchmark, RunBenchmark)(benchmark::State &state) {
     StartGC(txn_manager_, 10);
   }
 
-  const uint32_t num_threads = state.range(0);
-  const uint32_t txn_length = state.range(1);
-  const uint32_t insert_percenrage = state.range(2);
-  const uint32_t update_percenrage = state.range(3);
-  const uint32_t num_attrs = state.range(4);
+  const uint32_t num_threads = (uint32_t)state.range(0);
+  const uint32_t txn_length = (uint32_t)state.range(1);
+  const uint32_t insert_percenrage = (uint32_t)state.range(2);
+  const uint32_t update_percenrage = (uint32_t)state.range(3);
+  const uint32_t num_attrs = (uint32_t)state.range(4);
 
   UNUSED_ATTRIBUTE const uint32_t select_percenrage = 100 - insert_percenrage - update_percenrage;
   const std::vector<double> insert_update_select_ratio = {insert_percenrage / 100.0, update_percenrage / 100.0,

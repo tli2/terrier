@@ -103,7 +103,7 @@ ModelingBenchmarkObject::~ModelingBenchmarkObject() {
 
 // Caller is responsible for freeing the returned results if bookkeeping is on.
 void ModelingBenchmarkObject::SimulateOltp(ContentionBenchmarkMetrics *metrics) {
-  TestThreadPool thread_pool;
+  common::WorkerPool thread_pool((uint32_t)task_queues_.size(), {});
 
   auto workload = [&](uint32_t id) {
     while (task_submitting_ == true or task_queues_[id].size() > 0) {
@@ -148,7 +148,7 @@ void ModelingBenchmarkObject::SimulateOltp(ContentionBenchmarkMetrics *metrics) 
       delete txn;
     }
   };
-  thread_pool.RunThreadsUntilFinish(task_queues_.size(), workload);
+  MultiThreadTestUtil::RunThreadsUntilFinish(&thread_pool, (uint32_t)task_queues_.size(), workload);
 }
 
 void ModelingBenchmarkObject::SimulateOneTransaction(terrier::RandomTransaction *txn, uint32_t txn_id,

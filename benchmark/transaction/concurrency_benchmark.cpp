@@ -11,7 +11,6 @@
 #include "transaction/transaction_context.h"
 #include "transaction/transaction_manager.h"
 #include "util/storage_test_util.h"
-#include "util/test_thread_pool.h"
 #include "util/transaction_test_util.h"
 
 #define LOG_FILE_NAME "concurrency_benchmark.log"
@@ -200,8 +199,6 @@ class ConcurrencyBenchmark : public benchmark::Fixture {
 // Insert the num_inserts_ of tuples into a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &state) {
-  TestThreadPool thread_pool;
-
   std::atomic<uint64_t> total_latency(0);
   std::atomic<uint64_t> total_committed(0);
 
@@ -264,7 +261,8 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
       total_committed += thread_total_committed;
     };
     StartTaskSubmitting(1000000000 / txn_rates_);
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    common::WorkerPool thread_pool(num_threads_, {});
+    MultiThreadTestUtil::RunThreadsUntilFinish(&thread_pool, num_threads_, workload);
     EndTaskSubmitting();
   }
 
@@ -275,8 +273,6 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentInsert)(benchmark::State &sta
 // Read the num_reads_ of tuples in a random order from a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State &state) {
-  TestThreadPool thread_pool;
-
   std::atomic<uint64_t> total_latency(0);
   std::atomic<uint64_t> total_committed(0);
 
@@ -348,7 +344,8 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
       total_committed += thread_total_committed;
     };
     StartTaskSubmitting(1000000000 / txn_rates_);
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    common::WorkerPool thread_pool(num_threads_, {});
+    MultiThreadTestUtil::RunThreadsUntilFinish(&thread_pool, num_threads_, workload);
     EndTaskSubmitting();
   }
 
@@ -359,8 +356,6 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomRead)(benchmark::State 
 // Update the num_reads_ of tuples in a random order from a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
-  TestThreadPool thread_pool;
-
   std::atomic<uint64_t> total_latency(0);
   std::atomic<uint64_t> total_committed(0);
 
@@ -446,7 +441,8 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
       total_committed += thread_total_committed;
     };
     StartTaskSubmitting(1000000000 / txn_rates_);
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    common::WorkerPool thread_pool(num_threads_, {});
+    MultiThreadTestUtil::RunThreadsUntilFinish(&thread_pool, num_threads_, workload);
     EndTaskSubmitting();
   }
 
@@ -458,8 +454,6 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomUpdate)(benchmark::Stat
 // Delete the num_reads_ of tuples in a random order from a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::State &state) {
-  TestThreadPool thread_pool;
-
   std::atomic<uint64_t> total_latency(0);
   std::atomic<uint64_t> total_committed(0);
 
@@ -529,7 +523,8 @@ BENCHMARK_DEFINE_F(ConcurrencyBenchmark, ConcurrentRandomDelete)(benchmark::Stat
       total_committed += thread_total_committed;
     };
     StartTaskSubmitting(1000000000 / txn_rates_);
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    common::WorkerPool thread_pool(num_threads_, {});
+    MultiThreadTestUtil::RunThreadsUntilFinish(&thread_pool, num_threads_, workload);
     EndTaskSubmitting();
   }
 

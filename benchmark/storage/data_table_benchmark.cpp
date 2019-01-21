@@ -201,7 +201,6 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomRead)(benchmark::State &s
 // Read the num_reads_ of tuples in a random order from a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomUpdate)(benchmark::State &state) {
-  TestThreadPool thread_pool;
   storage::DataTable read_table(&block_store_, layout_, storage::layout_version_t(0));
   // populate read_table_ by inserting tuples
   // We can use dummy timestamps here since we're not invoking concurrency control
@@ -235,7 +234,8 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomUpdate)(benchmark::State 
         if (update_result == false) num_aborts++;
       }
     };
-    thread_pool.RunThreadsUntilFinish(num_threads_, workload);
+    common::WorkerPool thread_pool(num_threads_, {});
+    MultiThreadTestUtil::RunThreadsUntilFinish(&thread_pool, num_threads_, workload);
   }
 
   state.SetItemsProcessed(state.iterations() * num_reads_ - num_aborts);
