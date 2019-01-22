@@ -187,11 +187,11 @@ class ContentionBenchmark : public benchmark::Fixture {
 };
 
 static void CustomArguments(benchmark::internal::Benchmark *b) {
-  for (int i = 1; i <= 16; i *= 2)
-    for (int j = 1; j <= 9; j += 2)
-      for (int k = 0; k <= 100; k += 10)
-        for (int l = 0; l <= 100 - k; l += 10)
-          for (int m = 8; m <= 16; m += 8) b->Args({i, j, k, l, m});
+  for (int i = 16; i <= 16; i *= 2)
+    for (int j = 5; j <= 5; j += 2)
+      for (int k = 20; k <= 100; k += 10)
+        for (int l = 60; l <= 100 - k; l += 10)
+          for (int m = 8; m <= 8; m += 8) b->Args({i, j, k, l, m});
 }
 
 // Insert the num_inserts_ of tuples into a DataTable concurrently
