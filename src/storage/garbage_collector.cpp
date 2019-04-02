@@ -189,7 +189,7 @@ void GarbageCollector::ReclaimBufferIfVarlen(transaction::TransactionContext *tx
   const BlockLayout &layout = accessor.GetBlockLayout();
   switch (undo_record->Type()) {
     case DeltaRecordType::INSERT:
-    case DeltaRecordType::LOCK:
+    case DeltaRecordType::MOVE:
       return;  // no possibility of outdated varlen to gc
     case DeltaRecordType::DELETE:
       // TODO(Tianyu): Potentially need to be more efficient than linear in column size?
@@ -198,7 +198,7 @@ void GarbageCollector::ReclaimBufferIfVarlen(transaction::TransactionContext *tx
         // Okay to include version vector, as it is never varlen
         if (layout.IsVarlen(col_id)) {
           auto *varlen = reinterpret_cast<VarlenEntry *>(accessor.AccessWithNullCheck(undo_record->Slot(), col_id));
-          if (varlen != nullptr && varlen->NeedReclaim()) txn->loose_ptrs_.emplace(varlen->Content());
+          if (varlen != nullptr && varlen->NeedReclaim()) txn->loose_ptrs_.push_back(varlen->Content());
         }
       }
       break;
@@ -208,7 +208,7 @@ void GarbageCollector::ReclaimBufferIfVarlen(transaction::TransactionContext *tx
         col_id_t col_id = undo_record->Delta()->ColumnIds()[i];
         if (layout.IsVarlen(col_id)) {
           auto *varlen = reinterpret_cast<VarlenEntry *>(undo_record->Delta()->AccessWithNullCheck(i));
-          if (varlen != nullptr && varlen->NeedReclaim()) txn->loose_ptrs_.emplace(varlen->Content());
+          if (varlen != nullptr && varlen->NeedReclaim()) txn->loose_ptrs_.push_back(varlen->Content());
         }
       }
       break;

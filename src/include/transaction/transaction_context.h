@@ -37,7 +37,7 @@ class TransactionContext {
       : start_time_(start), txn_id_(txn_id), undo_buffer_(buffer_pool), redo_buffer_(log_manager, buffer_pool) {}
 
   ~TransactionContext() {
-    for (const byte *ptr : loose_ptrs_) delete[] ptr;
+//    for (const byte *ptr : loose_ptrs_) delete[] ptr;
   }
   /**
    * @return start time of this transaction
@@ -132,8 +132,7 @@ class TransactionContext {
   storage::UndoBuffer undo_buffer_;
   storage::RedoBuffer redo_buffer_;
   // TODO(Tianyu): Maybe not so much of a good idea to do this. Make explicit queue in GC?
-  //
-  std::set<const byte *> loose_ptrs_;
+  std::vector<const byte *> loose_ptrs_;
   // log manager will set this to be true when log records are processed (not necessarily flushed, but will not be read
   // again in the future), so it can be garbage-collected safely.
   bool log_processed_ = false;

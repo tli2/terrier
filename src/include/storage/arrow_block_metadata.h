@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <map>
 #include <unordered_set>
 #include "storage/block_layout.h"
@@ -6,24 +7,55 @@
 #include "storage/storage_util.h"
 
 namespace terrier::storage {
+//template <class T>
+//class ResizableArray {
+// public:
+//  ResizableArray() : values_(nullptr), limit_(0), size_(0) {}
+//
+//  void Append(const T &val) {
+//    Append(&val, 1);
+//  }
+//
+//  void Append(const T *val, uint32_t num) {
+//    if (limit_ < size_ + num) Resize(std::max(limit_ * 2, size_ + num));
+//    std::memcpy(values_, val, sizeof(T) * num);
+//    size_ += num;
+//  }
+//
+//  T *Underlying() {
+//    return values_;
+//  }
+//
+//  uint32_t Size() {
+//    return size_;
+//  }
+//
+//
+// private:
+//  T *values_;
+//  uint32_t limit_;
+//  uint32_t size_;
+//
+//  void Resize(uint32_t to) {
+//    limit_ = to;
+//    T *new_values = common::AllocationUtil::AllocateAligned<T>(limit_);
+//    std::memcpy(new_values, values_, size_ * sizeof(T));
+//    delete[] reinterpret_cast<byte *>(values_);
+//    values_ = new_values;
+//  }
+//};
 
 struct ArrowVarlenColumn {
-  // TODO(Tianyu): Provide a constructor that calls allocate if needed
-  // TODO(Tianyu): The current GC framework only supports dealloaction of simple byte arrays, which means
-  // when deallocating this column we have to extract the pointers instead of writing a destructor. This
-  // is less than ideal but will do for now.
-
-  void Allocate(uint32_t num_values, uint32_t total_size) {
-    varlen_size_ = total_size;
-    num_offsets = num_values + 1;
-    offsets_ = new uint32_t[num_offsets];
-    values_ = common::AllocationUtil::AllocateAligned(total_size);
+  void Allocate() {
+    values_ = common::AllocationUtil::AllocateAligned(values_length_);
+    offsets_ = common::AllocationUtil::AllocateAligned<uint32_t>(offsets_length_);
   }
 
-  uint32_t num_offsets;
-  uint32_t varlen_size_;
-  uint32_t *offsets_ = nullptr;
-  byte *values_ = nullptr;
+  uint32_t values_length_, offsets_length_;
+  byte *values_;
+  uint32_t *offsets_;
+//  ResizableArray<byte> values_;
+//  ResizableArray<uint32_t> offsets_;
 };
 
 // TODO(Tianyu): Can use to specify cases where we don't concat per-block in the future (e.g. no need to put
@@ -41,26 +73,26 @@ struct ArrowColumnInfo {
  * @param varlen the string to be located
  * @return the code of the smallest element >= to varlen.
  */
-inline uint32_t Locate(ArrowColumnInfo *column_info, VarlenEntry *varlen) {
-  TERRIER_ASSERT(column_info->type_ == ArrowColumnType::DICTIONARY_COMPRESSED,
-                 "Can only call Locate on dictionary compressed column");
-  uint32_t lo = 0;
-  uint32_t hi = column_info->varlen_column_.num_offsets;
-  VarlenContentCompare comparator;
-  VarlenEntry rhs;
-  // TODO(Amadou): Early stopping is possible if the comparator could distinguish >= and ==.
-  while (hi - lo > 1) {
-    uint32_t mid = lo + (hi - lo) / 2;
-    uint32_t size = column_info->varlen_column_.offsets_[mid + 1] - column_info->varlen_column_.offsets_[mid];
-    rhs = VarlenEntry::Create(column_info->varlen_column_.values_ + mid, size, false);
-    if (comparator(*varlen, rhs)) {
-      hi = mid;
-    } else {
-      lo = mid;
-    }
-  }
-  return lo;
-}
+//inline uint32_t Locate(ArrowColumnInfo *column_info, VarlenEntry *varlen) {
+//  TERRIER_ASSERT(column_info->type_ == ArrowColumnType::DICTIONARY_COMPRESSED,
+//                 "Can only call Locate on dictionary compressed column");
+//  uint32_t lo = 0;
+//  uint32_t hi = column_info->varlen_column_.num_offsets;
+//  VarlenContentCompare comparator;
+//  VarlenEntry rhs;
+//  // TODO(Amadou): Early stopping is possible if the comparator could distinguish >= and ==.
+//  while (hi - lo > 1) {
+//    uint32_t mid = lo + (hi - lo) / 2;
+//    uint32_t size = column_info->varlen_column_.offsets_[mid + 1] - column_info->varlen_column_.offsets_[mid];
+//    rhs = VarlenEntry::Create(column_info->varlen_column_.values_ + mid, size, false);
+//    if (comparator(*varlen, rhs)) {
+//      hi = mid;
+//    } else {
+//      lo = mid;
+//    }
+//  }
+//  return lo;
+//}
 
 /**
  * This class encapsulates all the information needed by arrow to interpret a block, such as
@@ -107,7 +139,7 @@ class ArrowBlockMetadata {
 
   void Deallocate(const BlockLayout &layout, col_id_t col_id) {
     auto &col_info = GetColumnInfo(layout, col_id);
-    delete[] col_info.indices_;
+//    delete[] col_info.indices_;
     delete[] col_info.varlen_column_.offsets_;
     delete[] col_info.varlen_column_.values_;
   }

@@ -165,17 +165,13 @@ using ProjectionMap = std::unordered_map<catalog::col_oid_t, uint16_t>;
  * Denote whether a record modifies the logical delete column, used when DataTable inspects deltas
  * TODO(Matt): could be used by the GC for recycling
  */
-enum class DeltaRecordType : uint8_t { UPDATE = 0, INSERT, DELETE, LOCK };
+enum class DeltaRecordType : uint8_t { UPDATE = 0, INSERT, DELETE, MOVE };
 
 /**
  * Types of LogRecords
  */
 enum class LogRecordType : uint8_t { REDO = 1, DELETE, COMMIT };
 
-// TODO(Tianyu): This is pretty wasteful. While in theory 4 bytes of size suffices, we pad it to 8 bytes for
-// performance and ease of implementation with the rest of the system. (It is always assumed that one SQL level column
-// is mapped to one data table column). In the long run though, we might want to investigate solutions where the varlen
-// pointer and the size columns are stored in separate columns, so the size column can be 4 bytes.
 /**
  * A varlen entry is always a 32-bit size field and the varlen content,
  * with exactly size many bytes (no extra nul in the end).
@@ -192,7 +188,7 @@ class VarlenEntry {
    *                    be freed by the GC, which simply calls delete.
    * @return constructed VarlenEntry object
    */
-  static VarlenEntry Create(byte *content, uint32_t size, bool reclaim) {
+  static VarlenEntry Create(const byte *content, uint32_t size, bool reclaim) {
     VarlenEntry result;
     TERRIER_ASSERT(size > InlineThreshold(), "small varlen values should be inlined");
     result.size_ = reclaim ? size : (INT32_MIN | size);  // the first bit denotes whether we can reclaim it

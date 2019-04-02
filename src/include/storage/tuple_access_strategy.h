@@ -26,7 +26,7 @@ class TupleAccessStrategy {
     MEM_REINTERPRETATION_ONLY(MiniBlock)
     // return a pointer to the start of the column. (use as an array)
     byte *ColumnStart(const BlockLayout &layout, const col_id_t col_id) {
-      return StorageUtil::AlignedPtr(layout.AttrSize(col_id),
+      return StorageUtil::AlignedPtr(sizeof(uint64_t),  // always padded up to 8 bytes
                                      varlen_contents_ + common::RawBitmap::SizeInBytes(layout.NumSlots()));
     }
 
@@ -222,6 +222,10 @@ class TupleAccessStrategy {
    * @return true if the allocation succeeded, false if no space could be found.
    */
   bool Allocate(RawBlock *block, TupleSlot *slot) const;
+
+  common::RawConcurrentBitmap *AllocationBitmap(RawBlock *block) const {
+    return reinterpret_cast<Block *>(block)->SlotAllocationBitmap(layout_);
+  }
 
   /**
    * Deallocates a slot.

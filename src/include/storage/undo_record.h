@@ -144,7 +144,7 @@ class UndoRecord {
   static UndoRecord *InitializeLock(byte *const head, const transaction::timestamp_t timestamp, const TupleSlot slot,
                                     DataTable *const table) {
     auto *result = reinterpret_cast<UndoRecord *>(head);
-    result->type_ = DeltaRecordType::LOCK;
+    result->type_ = DeltaRecordType::MOVE;
     result->next_ = nullptr;
     result->timestamp_.store(timestamp);
     result->table_ = table;

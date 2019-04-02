@@ -175,18 +175,18 @@ BENCHMARK_REGISTER_F(LargeTransactionBenchmark, TPCCish)->Unit(benchmark::kMilli
 //    ->UseManualTime()
 //    ->MinTime(10);
 
-BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementInsert)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(3);
+//BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementInsert)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(3);
 
 BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementUpdate)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(3);
 
-BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementSelect)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(3);
+//BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementSelect)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(3);
 }  // namespace terrier

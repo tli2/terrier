@@ -161,6 +161,7 @@ struct StorageTestUtil {
     // TODO(Tianyu): Do we ever want to tune this for tests?
     const double null_ratio = 0.1;
     storage::TupleAccessStrategy accessor(layout);  // Have to construct one since we don't have access to data table
+    accessor.InitializeRawBlock(block, storage::layout_version_t(0));
     storage::ProjectedRowInitializer initializer(layout, StorageTestUtil::ProjectionListAllColumns(layout));
     for (uint32_t i = 0; i < layout.NumSlots(); i++) {
       storage::TupleSlot slot;
@@ -183,6 +184,36 @@ struct StorageTestUtil {
     }
     TERRIER_ASSERT(block->insert_head_ == layout.NumSlots(), "The block should be considered full at this point");
     return result;
+  }
+
+  template <class Random>
+  static void PopulateBlockRandomlyNoBookkeeping(
+      const storage::BlockLayout &layout, storage::RawBlock *block, double empty_ratio, Random *const generator) {
+    std::bernoulli_distribution coin(empty_ratio);
+    // TODO(Tianyu): Do we ever want to tune this for tests?
+    const double null_ratio = 0.1;
+    storage::TupleAccessStrategy accessor(layout);  // Have to construct one since we don't have access to data table
+    accessor.InitializeRawBlock(block, storage::layout_version_t(0));
+    storage::ProjectedRowInitializer initializer(layout, StorageTestUtil::ProjectionListAllColumns(layout));
+    auto *redo_buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
+    storage::ProjectedRow *redo = initializer.InitializeRow(redo_buffer);
+    for (uint32_t i = 0; i < layout.NumSlots(); i++) {
+      storage::TupleSlot slot;
+      bool ret UNUSED_ATTRIBUTE = accessor.Allocate(block, &slot);
+      TERRIER_ASSERT(ret && slot == storage::TupleSlot(block, i),
+                     "slot allocation should happen sequentially and succeed");
+      if (coin(*generator)) {
+        // slot will be marked empty
+        accessor.Deallocate(slot);
+        continue;
+      }
+      StorageTestUtil::PopulateRandomRow(redo, layout, null_ratio, generator);
+      // Copy without transactions to simulate a version-free block
+      accessor.SetNotNull(slot, VERSION_POINTER_COLUMN_ID);
+      for (uint16_t j = 0; j < redo->NumColumns(); j++)
+        storage::StorageUtil::CopyAttrFromProjection(accessor, slot, *redo, j);
+    }
+    TERRIER_ASSERT(block->insert_head_ == layout.NumSlots(), "The block should be considered full at this point");
   }
 
   template <class Random>

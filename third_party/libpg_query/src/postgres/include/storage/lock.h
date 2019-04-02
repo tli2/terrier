@@ -156,7 +156,7 @@ typedef uint16 LOCKMETHODID;
 
 
 /*
- * LOCKTAG is the key information needed to look up a LOCK item in the
+ * LOCKTAG is the key information needed to look up a MOVE item in the
  * lock hashtable.  A LOCKTAG value uniquely identifies a lockable object.
  *
  * The LockTagType enum defines the different kinds of objects we can lock.
@@ -353,7 +353,7 @@ typedef struct LOCK
  * to be released during the current call.  This must only be examined or
  * set by the backend owning the PROCLOCK.
  *
- * Each PROCLOCK object is linked into lists for both the associated LOCK
+ * Each PROCLOCK object is linked into lists for both the associated MOVE
  * object and the owning PGPROC object.  Note that the PROCLOCK is entered
  * into these lists as soon as it is created, even if no lock has yet been
  * granted.  A PGPROC that is waiting for a lock to be granted will also be
@@ -374,7 +374,7 @@ typedef struct PROCLOCK
 	/* data */
 	LOCKMASK	holdMask;		/* bitmask for lock types currently held */
 	LOCKMASK	releaseMask;	/* bitmask for lock types to be released */
-	SHM_QUEUE	lockLink;		/* list link in LOCK's list of proclocks */
+	SHM_QUEUE	lockLink;		/* list link in MOVE's list of proclocks */
 	SHM_QUEUE	procLink;		/* list link in PGPROC's list of proclocks */
 } PROCLOCK;
 
@@ -428,7 +428,7 @@ typedef struct LOCALLOCK
 	LOCALLOCKTAG tag;			/* unique identifier of locallock entry */
 
 	/* data */
-	LOCK	   *lock;			/* associated LOCK object, if any */
+	LOCK	   *lock;			/* associated MOVE object, if any */
 	PROCLOCK   *proclock;		/* associated PROCLOCK object, if any */
 	uint32		hashcode;		/* copy of LOCKTAG's hash value */
 	int64		nLocks;			/* total number of times lock is held */

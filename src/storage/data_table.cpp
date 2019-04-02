@@ -72,8 +72,6 @@ bool DataTable::Update(transaction::TransactionContext *txn, TupleSlot slot, con
   // Update the next pointer of the new head of the version chain
   undo->Next() = version_ptr;
 
-  slot.GetBlock()->controller_.WaitUntilHot();
-
   if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
     // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
     // TransactionManager's Rollback() and GC's Unlink logic
@@ -91,34 +89,6 @@ bool DataTable::Update(transaction::TransactionContext *txn, TupleSlot slot, con
     StorageUtil::CopyAttrFromProjection(accessor_, slot, redo, i);
   }
   data_table_counter_.IncrementNumUpdate(1);
-
-  return true;
-}
-
-bool DataTable::Lock(transaction::TransactionContext *txn, TupleSlot slot) {
-  UndoRecord *const undo = txn->UndoRecordAsLock(this, slot);
-  UndoRecord *const version_ptr = AtomicallyReadVersionPtr(slot, accessor_);
-
-  // Since we disallow write-write conflicts, the version vector pointer is essentially an implicit
-  // write lock on the tuple.
-  if (HasConflict(version_ptr, txn) || !Visible(slot, accessor_)) {
-    // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
-    // TransactionManager's Rollback() and GC's Unlink logic
-    undo->Table() = nullptr;
-    return false;
-  }
-
-  // Update the next pointer of the new head of the version chain
-  undo->Next() = version_ptr;
-
-  slot.GetBlock()->controller_.WaitUntilHot();
-
-  if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
-    // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
-    // TransactionManager's Rollback() and GC's Unlink logic
-    undo->Table() = nullptr;
-    return false;
-  }
 
   return true;
 }
@@ -182,7 +152,7 @@ bool DataTable::Delete(transaction::TransactionContext *const txn, const TupleSl
   // Update the next pointer of the new head of the version chain
   undo->Next() = version_ptr;
 
-  slot.GetBlock()->controller_.WaitUntilHot();
+//  slot.GetBlock()->controller_.WaitUntilHot();
   if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
     // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
     // TransactionManager's Rollback() and GC's Unlink logic
@@ -235,9 +205,6 @@ bool DataTable::SelectIntoBuffer(transaction::TransactionContext *const txn, con
     // TODO(Matt): It's possible that if we make some guarantees about where in the version chain INSERTs (last position
     // in version chain) and DELETEs (first position in version chain) can appear that we can optimize this check
     switch (version_ptr->Type()) {
-      case DeltaRecordType::LOCK:
-        // Nothing to do when reading
-        break;
       case DeltaRecordType::UPDATE:
         // Normal delta to be applied. Does not modify the logical delete column.
         StorageUtil::ApplyDelta(accessor_.GetBlockLayout(), *(version_ptr->Delta()), out_buffer);
