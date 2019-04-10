@@ -13,7 +13,7 @@ namespace terrier::storage {
  * Typedef for a standard hash map with varlen entry as the key. The map uses deep equality checks (whether
  * the stored underlying byte string is the same) for key comparison.
  */
-template<class T>
+template <class T>
 using VarlenEntryMap = std::unordered_map<VarlenEntry, T, VarlenContentHasher, VarlenContentDeepEqual>;
 
 /**
@@ -64,15 +64,6 @@ class BlockCompactor {
   void PutInQueue(const std::pair<RawBlock *, DataTable *> &entry) { compaction_queue_.push_front(entry); }
 
  private:
-  // This will identify all the present and deleted tuples in a first pass as well as check for active versions.
-  // If there are active versions then the function returns false to signal that the compaction should not proceed.
-  // The compaction group passed in should only contain the blocks and data table we are interested in compacting,
-  // not any of the calculated metadata.
-  void ScanForGaps(CompactionGroup *cg);
-
-  // Given the identified deleted tuples and assuming that no conflict was detected in the previous scan,
-  // move around tuples to make all the gaps disappear. The transaction could get aborted and end the compaction
-  // process prematurely. Metadata on varlen columns is also updated to help with the following step.
   bool EliminateGaps(CompactionGroup *cg);
 
   bool CheckForVersionsAndGaps(const TupleAccessStrategy &accessor, RawBlock *block);
@@ -80,7 +71,13 @@ class BlockCompactor {
   // Move a tuple and updated associated information in their respective blocks
   bool MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to);
 
-  void GatherVarlens(RawBlock *block, DataTable *table);
+  void GatherVarlens(transaction::TransactionContext *txn, RawBlock *block, DataTable *table);
+
+  void CopyToArrowVarlen(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata, col_id_t col_id,
+                         common::RawConcurrentBitmap *column_bitmap, ArrowColumnInfo *col, VarlenEntry *values);
+
+  void BuildDictionary(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata, col_id_t col_id,
+                       common::RawConcurrentBitmap *column_bitmap, ArrowColumnInfo *col, VarlenEntry *values);
 
   void ComputeFilled(const BlockLayout &layout, std::vector<uint32_t> *filled, const std::vector<uint32_t> &empty) {
     // Reconstruct the list of filled slots

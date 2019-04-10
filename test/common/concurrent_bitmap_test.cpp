@@ -34,7 +34,6 @@ TEST(ConcurrentBitmapTests, SimpleCorrectnessTest) {
     std::vector<bool> stl_bitmap = std::vector<bool>(num_elements);
     ContainerTestUtil::CheckReferenceBitmap<common::RawConcurrentBitmap>(*bitmap, stl_bitmap, num_elements);
     uint32_t num_iterations = 32;
-    std::default_random_engine generator;
     for (uint32_t i = 0; i < num_iterations; ++i) {
       auto element = std::uniform_int_distribution(0, static_cast<int>(num_elements - 1))(generator);
       EXPECT_TRUE(bitmap->Flip(element, bitmap->Test(element)));

@@ -55,7 +55,7 @@ class ArrowUtil {
   static void BuildPrimitiveColumn(const TupleAccessStrategy &accessor, RawBlock *block, col_id_t col_id,
                                    std::vector<std::shared_ptr<arrow::Field>> *schema_vector,
                                    std::vector<std::shared_ptr<arrow::Array>> *table_vector) {
-//    TERRIER_ASSERT(!layout.IsVarlen(col_id), "Calling function for primitive column on a varlen column");
+    //    TERRIER_ASSERT(!layout.IsVarlen(col_id), "Calling function for primitive column on a varlen column");
     const storage::BlockLayout &layout = accessor.GetBlockLayout();
     storage::ArrowBlockMetadata &metadata = accessor.GetArrowBlockMetadata(block);
     auto col_bitmap =
@@ -71,7 +71,7 @@ class ArrowUtil {
   static void BuildVarlenColumn(const TupleAccessStrategy &accessor, RawBlock *block, col_id_t col_id,
                                 std::vector<std::shared_ptr<arrow::Field>> *schema_vector,
                                 std::vector<std::shared_ptr<arrow::Array>> *table_vector) {
-//    TERRIER_ASSERT(!layout.IsVarlen(col_id), "Calling function for primitive column on a varlen column");
+    //    TERRIER_ASSERT(!layout.IsVarlen(col_id), "Calling function for primitive column on a varlen column");
     const storage::BlockLayout &layout = accessor.GetBlockLayout();
     storage::ArrowBlockMetadata &metadata = accessor.GetArrowBlockMetadata(block);
     storage::ArrowVarlenColumn &varlen_col = metadata.GetColumnInfo(layout, col_id).varlen_column_;

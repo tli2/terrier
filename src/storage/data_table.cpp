@@ -72,6 +72,8 @@ bool DataTable::Update(transaction::TransactionContext *txn, TupleSlot slot, con
   // Update the next pointer of the new head of the version chain
   undo->Next() = version_ptr;
 
+  slot.GetBlock()->controller_.WaitUntilHot();
+
   if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
     // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
     // TransactionManager's Rollback() and GC's Unlink logic
@@ -121,6 +123,8 @@ void DataTable::InsertInto(transaction::TransactionContext *txn, const Projected
   // At this point, sequential scan down the block can still see this, except it thinks it is logically deleted if we 0
   // the primary key column
   UndoRecord *undo = txn->UndoRecordForInsert(this, dest);
+  TERRIER_ASSERT(dest.GetBlock()->controller_.CurrentBlockState() == BlockState::HOT,
+                 "Should only be able to insert into hot blocks");
   AtomicallyWriteVersionPtr(dest, accessor_, undo);
   // Set the logically deleted bit to present as the undo record is ready
   accessor_.AccessForceNotNull(dest, VERSION_POINTER_COLUMN_ID);
@@ -152,7 +156,9 @@ bool DataTable::Delete(transaction::TransactionContext *const txn, const TupleSl
   // Update the next pointer of the new head of the version chain
   undo->Next() = version_ptr;
 
-//  slot.GetBlock()->controller_.WaitUntilHot();
+  slot.GetBlock()->controller_.WaitUntilHot();
+
+  //  slot.GetBlock()->controller_.WaitUntilHot();
   if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
     // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
     // TransactionManager's Rollback() and GC's Unlink logic

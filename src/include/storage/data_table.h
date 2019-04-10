@@ -217,7 +217,6 @@ class DataTable {
    */
   bool Delete(transaction::TransactionContext *txn, TupleSlot slot);
 
-
   /**
    * Return a pointer to the performance counter for the data table.
    * @return pointer to the performance counter

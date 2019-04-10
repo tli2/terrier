@@ -7,44 +7,6 @@
 #include "storage/storage_util.h"
 
 namespace terrier::storage {
-//template <class T>
-//class ResizableArray {
-// public:
-//  ResizableArray() : values_(nullptr), limit_(0), size_(0) {}
-//
-//  void Append(const T &val) {
-//    Append(&val, 1);
-//  }
-//
-//  void Append(const T *val, uint32_t num) {
-//    if (limit_ < size_ + num) Resize(std::max(limit_ * 2, size_ + num));
-//    std::memcpy(values_, val, sizeof(T) * num);
-//    size_ += num;
-//  }
-//
-//  T *Underlying() {
-//    return values_;
-//  }
-//
-//  uint32_t Size() {
-//    return size_;
-//  }
-//
-//
-// private:
-//  T *values_;
-//  uint32_t limit_;
-//  uint32_t size_;
-//
-//  void Resize(uint32_t to) {
-//    limit_ = to;
-//    T *new_values = common::AllocationUtil::AllocateAligned<T>(limit_);
-//    std::memcpy(new_values, values_, size_ * sizeof(T));
-//    delete[] reinterpret_cast<byte *>(values_);
-//    values_ = new_values;
-//  }
-//};
-
 struct ArrowVarlenColumn {
   void Allocate() {
     values_ = common::AllocationUtil::AllocateAligned(values_length_);
@@ -54,8 +16,6 @@ struct ArrowVarlenColumn {
   uint32_t values_length_, offsets_length_;
   byte *values_;
   uint32_t *offsets_;
-//  ResizableArray<byte> values_;
-//  ResizableArray<uint32_t> offsets_;
 };
 
 // TODO(Tianyu): Can use to specify cases where we don't concat per-block in the future (e.g. no need to put
@@ -65,6 +25,7 @@ enum class ArrowColumnType : uint8_t { FIXED_LENGTH = 0, GATHERED_VARLEN, DICTIO
 struct ArrowColumnInfo {
   ArrowColumnType type_;
   ArrowVarlenColumn varlen_column_;  // For varlen and dictionary
+  // TODO(Tianyu): Add null bitmap
   uint32_t *indices_ = nullptr;      // for dictionary
 };
 
@@ -73,7 +34,7 @@ struct ArrowColumnInfo {
  * @param varlen the string to be located
  * @return the code of the smallest element >= to varlen.
  */
-//inline uint32_t Locate(ArrowColumnInfo *column_info, VarlenEntry *varlen) {
+// inline uint32_t Locate(ArrowColumnInfo *column_info, VarlenEntry *varlen) {
 //  TERRIER_ASSERT(column_info->type_ == ArrowColumnType::DICTIONARY_COMPRESSED,
 //                 "Can only call Locate on dictionary compressed column");
 //  uint32_t lo = 0;
@@ -139,7 +100,7 @@ class ArrowBlockMetadata {
 
   void Deallocate(const BlockLayout &layout, col_id_t col_id) {
     auto &col_info = GetColumnInfo(layout, col_id);
-//    delete[] col_info.indices_;
+    //    delete[] col_info.indices_;
     delete[] col_info.varlen_column_.offsets_;
     delete[] col_info.varlen_column_.values_;
   }

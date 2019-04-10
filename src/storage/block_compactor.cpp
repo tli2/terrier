@@ -14,34 +14,46 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
 
   for (auto &entry : to_process) {
     BlockAccessController &controller = entry.first->controller_;
-    if (controller.GetBlockState()->load() == BlockAccessController::BlockState::COOLING) {
-        if (!CheckForVersionsAndGaps(entry.second->accessor_, entry.first)) continue;
-        GatherVarlens(entry.first, entry.second);
-        controller.GetBlockState()->store(BlockAccessController::BlockState::FROZEN);
-    } else {
-      // TODO(Tianyu): This is probably fine for now, but we will want to not only compact within a block
-      // but also across blocks to eventually free up slots
-      CompactionGroup cg(txn_manager->BeginTransaction(), entry.second);
-      cg.blocks_to_compact_.emplace(entry.first, std::vector<uint32_t>());
+    switch (controller.CurrentBlockState()) {
+      case BlockState::HOT: {
+        // TODO(Tianyu): This is probably fine for now, but we will want to not only compact within a block
+        // but also across blocks to eventually free up slots
+        CompactionGroup cg(txn_manager->BeginTransaction(), entry.second);
+        cg.blocks_to_compact_.emplace(entry.first, std::vector<uint32_t>());
 
-      // Block can still be inserted into. Hands off.
-      if (entry.first->insert_head_ != entry.second->accessor_.GetBlockLayout().NumSlots()) continue;
-      ScanForGaps(&cg);
-      if (EliminateGaps(&cg)) {
-        txn_manager->Commit(cg.txn_, NoOp, nullptr);
-        BlockAccessController &controller = entry.first->controller_;
-        controller.GetBlockState()->store(BlockAccessController::BlockState::COOLING);
-      } else {
-        txn_manager->Abort(cg.txn_);
+        // Block can still be inserted into. Hands off.
+        if (entry.first->insert_head_ != entry.second->accessor_.GetBlockLayout().NumSlots()) continue;
+
+        if (EliminateGaps(&cg)) {
+          // Has to mark block as cooling before transaction commit, so we have a guarantee that
+          // any older transactions
+          controller.GetBlockState()->store(BlockState::COOLING);
+          txn_manager->Commit(cg.txn_, NoOp, nullptr);
+        } else {
+          txn_manager->Abort(cg.txn_);
+        }
       }
+      case BlockState::COOLING: {
+        if (!CheckForVersionsAndGaps(entry.second->accessor_, entry.first)) continue;
+        // TODO(Tianyu): The use of transaction here is pretty sketchy
+        transaction::TransactionContext *txn = txn_manager->BeginTransaction();
+        GatherVarlens(txn, entry.first, entry.second);
+        controller.GetBlockState()->store(BlockState::FROZEN);
+        txn_manager->Commit(txn, NoOp, nullptr);
+        break;
+      }
+      default:
+        throw std::runtime_error("unexpected control flow");
     }
   }
 }
 
-void BlockCompactor::ScanForGaps(CompactionGroup *cg) {
+bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
   const TupleAccessStrategy &accessor = cg->table_->accessor_;
   const BlockLayout &layout = accessor.GetBlockLayout();
 
+  // This will identify all the present and deleted tuples in a first pass. This should only scan through the bitmap
+  // portion of the data. The system writes down the empty slots for every block.
   for (auto &entry : cg->blocks_to_compact_) {
     RawBlock *block = entry.first;
     std::vector<uint32_t> &empty_slots = entry.second;
@@ -53,11 +65,6 @@ void BlockCompactor::ScanForGaps(CompactionGroup *cg) {
     for (uint32_t offset = 0; offset < layout.NumSlots(); offset++)
       if (!bitmap->Test(offset)) empty_slots.push_back(offset);
   }
-}
-
-bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
-  const TupleAccessStrategy &accessor = cg->table_->accessor_;
-  const BlockLayout &layout = accessor.GetBlockLayout();
 
   // TODO(Tianyu): This process can probably be optimized further for the least amount of movements of tuples. But we
   // are probably close enough to optimal that it does not matter that much
@@ -67,8 +74,7 @@ bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
   // from". These are not two disjoint sets as we will probably need to shuffle tuples within one block to have
   // perfectly compact groups (but only one block within a group needs this)
   std::vector<RawBlock *> all_blocks;
-  for (auto &entry : cg->blocks_to_compact_)
-    all_blocks.push_back(entry.first);
+  for (auto &entry : cg->blocks_to_compact_) all_blocks.push_back(entry.first);
 
   // Sort all the blocks within a group based on the number of filled slots, in descending order.
   std::sort(all_blocks.begin(), all_blocks.end(), [&](RawBlock *a, RawBlock *b) {
@@ -81,7 +87,7 @@ bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
   // We assume that there are a lot more filled slots than empty slots, so we only store the list of empty slots
   // and construct the vector of filled slots on the fly in order to reduce the memory footprint.
   std::vector<uint32_t> filled;
-  // Because we constructed the two lists from sequential scan, slots will always appear in order. We
+  // Because we constructed the filled list from sequential scan, slots will always appear in order. We
   // essentially will fill gaps in order, by using the real tuples in reverse order. (Take the last tuple to
   // fill the first empty slot)
   for (auto taker = all_blocks.begin(), giver = all_blocks.end(); taker <= giver; taker++) {
@@ -110,7 +116,6 @@ bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
   // how those blocks are garbage collected. These blocks should have the same life-cycle as the compacting
   // transaction itself. (i.e. when the txn context is being GCed, we should be able to free these blocks as well)
   // For now we are not implementing this because each compaction group is one block.
-
   return true;
 }
 
@@ -153,79 +158,159 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
 bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor, RawBlock *block) {
   const BlockLayout &layout = accessor.GetBlockLayout();
 
-
   auto *allocation_bitmap = accessor.AllocationBitmap(block);
   auto *version_ptrs = reinterpret_cast<UndoRecord **>(accessor.ColumnStart(block, VERSION_POINTER_COLUMN_ID));
   // We will loop through each block and figure out if any versions showed up between our current read and the
   // earlier read
+  uint32_t num_records = layout.NumSlots();
+  bool unallocated_region_start = false;
   for (uint32_t offset = 0; offset < layout.NumSlots(); offset++) {
-    // TODO(Tianyu): Test contiguous.
-    if (!allocation_bitmap->Test(offset)) continue;
+    if (!allocation_bitmap->Test(offset)) {
+      // This slot is unallocated
+      if (!unallocated_region_start) {
+        // Mark current reason as empty. The transformation process should abort if we see an allocated
+        // slot after this
+        unallocated_region_start = true;
+        // If it is the first such slot, we should take down its offset, because that is the number
+        // of tuples present in the block if the tuples are contiguous with that block.
+        num_records = offset;
+      }
+      // Otherwise, skip
+      continue;
+    }
+
+    // Not contiguous. If the code reaches here the slot must be allocated, and we have seen an unallocated slot before
+    if (unallocated_region_start) return false;
+
+    // Check that there are no versions alive
     auto *record = version_ptrs[offset];
-    // Any version chain should be from our compaction transaction.
     if (record != nullptr) return false;
   }
-  auto state = BlockAccessController::BlockState::COOLING;
   // Check that no other transaction has modified the canary in the block header. If we fail it's okay
   // to leave the block header because someone else must have already flipped it to hot
-  return block->controller_.GetBlockState()->compare_exchange_strong(state,
-                                                                     BlockAccessController::BlockState::FREEZING);
+  auto state = BlockState::COOLING;
+  bool ret = block->controller_.GetBlockState()->compare_exchange_strong(state, BlockState::FREEZING);
+  // At this point we are guaranteed to complete the transformation process. We can start modifying block
+  // header in place.
+  if (ret) accessor.GetArrowBlockMetadata(block).NumRecords() = num_records;
+  return ret;
 }
 
-void BlockCompactor::GatherVarlens(RawBlock *block, DataTable *table) {
+void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBlock *block, DataTable *table) {
   const TupleAccessStrategy &accessor = table->accessor_;
   const BlockLayout &layout = accessor.GetBlockLayout();
   ArrowBlockMetadata &metadata = accessor.GetArrowBlockMetadata(block);
-  auto *allocation_bitmap = accessor.AllocationBitmap(block);
-  for (uint i = 0; i < layout.NumSlots(); i++) {
-    // At the end of allocated block, since the block is guaranteed to be compact at this point
-    if (!allocation_bitmap->Test(i)) {
-      metadata.NumRecords() = i;
-      break;
-    }
-  }
 
-  std::vector<const byte *> ptrs;
   for (col_id_t col_id : layout.AllColumns()) {
     common::RawConcurrentBitmap *column_bitmap = accessor.ColumnNullBitmap(block, col_id);
     if (!layout.IsVarlen(col_id)) {
       // Only need to count null for non-varlens
       for (uint32_t i = 0; i < metadata.NumRecords(); i++)
         if (!column_bitmap->Test(i)) metadata.NullCount(col_id)++;
-    } else {
-      ArrowVarlenColumn &col = metadata.GetColumnInfo(layout, col_id).varlen_column_;
-      auto *values = reinterpret_cast<VarlenEntry *>(accessor.ColumnStart(block, col_id));
+      continue;
+    }
 
-      // Read through every tuple
-      for (uint32_t i = 0; i < metadata.NumRecords(); i++) {
-        if (!column_bitmap->Test(i))
-          // Update null count
-          metadata.NullCount(col_id)++;
-        else
-          // count the total size of varlens
-          col.values_length_ += values[i].Size();
-      }
-
-      col.offsets_length_ = metadata.NumRecords() + 1;
-      col.Allocate();
-      for (uint32_t i = 0, acc = 0; i < metadata.NumRecords(); i++) {
-        if (!column_bitmap->Test(i)) continue;
-        // Only do a gather operation if the column is varlen
-        VarlenEntry &entry = values[i];
-        std::memcpy(col.values_ + acc, entry.Content(), entry.Size());
-        col.offsets_[i] = acc;
-
-        if (entry.NeedReclaim())
-          ptrs.push_back(entry.Content());
-        // TODO(Tianyu): Describe why this is still safe
-        if (entry.Size() > VarlenEntry::InlineThreshold())
-          entry = VarlenEntry::Create(col.values_ + acc, entry.Size(), false);
-        acc += entry.Size();
-      }
-      col.offsets_[metadata.NumRecords()] = col.values_length_;
+    // Otherwise, the column is varlen, need to first check what to do for it
+    ArrowColumnInfo &col_info = metadata.GetColumnInfo(layout, col_id);
+    auto *values = reinterpret_cast<VarlenEntry *>(accessor.ColumnStart(block, col_id));
+    switch (col_info.type_) {
+      case ArrowColumnType::GATHERED_VARLEN:
+        CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
+        break;
+      case ArrowColumnType::DICTIONARY_COMPRESSED:
+        BuildDictionary(txn, &metadata, col_id, column_bitmap, &col_info, values);
+        break;
+      default:
+        throw std::runtime_error("unexpected control flow");
     }
   }
-  (void) ptrs;
+}
+
+void BlockCompactor::CopyToArrowVarlen(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata,
+                                       col_id_t col_id, common::RawConcurrentBitmap *column_bitmap,
+                                       ArrowColumnInfo *col, VarlenEntry *values) {
+  // Read through every tuple and update null count and total varlen size
+  for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
+    if (!column_bitmap->Test(i))
+      // Update null count
+      metadata->NullCount(col_id)++;
+    else
+      // count the total size of varlens
+      col->varlen_column_.values_length_ += values[i].Size();
+  }
+
+  col->varlen_column_.offsets_length_ = metadata->NumRecords() + 1;
+  col->varlen_column_.Allocate();
+  for (uint32_t i = 0, acc = 0; i < metadata->NumRecords(); i++) {
+    if (!column_bitmap->Test(i)) continue;
+    // Only do a gather operation if the column is varlen
+    VarlenEntry &entry = values[i];
+    std::memcpy(col->varlen_column_.values_ + acc, entry.Content(), entry.Size());
+    col->varlen_column_.offsets_[i] = acc;
+
+    // Need to GC
+    if (entry.NeedReclaim()) txn->loose_ptrs_.push_back(entry.Content());
+
+    // TODO(Tianyu): Describe why this is still safe
+    if (entry.Size() > VarlenEntry::InlineThreshold())
+      entry = VarlenEntry::Create(col->varlen_column_.values_ + acc, entry.Size(), false);
+    acc += entry.Size();
+  }
+  col->varlen_column_.offsets_[metadata->NumRecords()] = col->varlen_column_.values_length_;
+}
+
+void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata,
+                                     col_id_t col_id, common::RawConcurrentBitmap *column_bitmap, ArrowColumnInfo *col,
+                                     VarlenEntry *values) {
+  VarlenEntryMap<uint32_t> dictionary;
+  // Read through every tuple and update null count and build the dictionary
+  for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
+    if (!column_bitmap->Test(i)) {
+      // Update null count
+      metadata->NullCount(col_id)++;
+      continue;
+    }
+    auto ret = dictionary.emplace(values[i], 0);
+    // If the string has not been seen before, should add it to dictionary when counting total length.
+    if (ret.second) col->varlen_column_.values_length_ += values[i].Size();
+  }
+
+  col->varlen_column_.offsets_length_ = metadata->NumRecords() + 1;
+  col->varlen_column_.Allocate();
+  col->indices_ = common::AllocationUtil::AllocateAligned<uint32_t>(metadata->NumRecords());
+
+  // TODO(Tianyu): This is retarded, but apparently you cannot retrieve the index of elements in your
+  // c++ map in constant time. Thus we are resorting to primitive means.
+  std::vector<VarlenEntry> corpus;
+  for (auto &entry : dictionary) corpus.push_back(entry.first);
+  std::sort(corpus.begin(), corpus.end(), VarlenContentCompare());
+  // Write the dictionary content to Arrow
+  for (uint32_t i = 0, acc = 0; i < corpus.size(); i++) {
+    VarlenEntry &entry = corpus[i];
+    // write down the dictionary code for this entry
+    dictionary[entry] = i;
+    std::memcpy(col->varlen_column_.values_ + acc, entry.Content(), entry.Size());
+    col->varlen_column_.offsets_[i] = acc;
+    acc += entry.Size();
+  }
+  col->varlen_column_.offsets_[metadata->NumRecords()] = col->varlen_column_.values_length_;
+
+  // Swing all references in the table to point there, and build the encoded column
+  for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
+    if (!column_bitmap->Test(i)) continue;
+    // Only do a gather operation if the column is varlen
+    VarlenEntry &entry = values[i];
+    // Need to GC
+    if (entry.NeedReclaim()) txn->loose_ptrs_.push_back(entry.Content());
+    uint32_t dictionary_code = col->indices_[i] = dictionary[entry];
+
+    byte *dictionary_word = col->varlen_column_.values_ + col->varlen_column_.offsets_[dictionary_code];
+    TERRIER_ASSERT(memcmp(dictionary_word, entry.Content(), entry.Size()) == 0,
+                   "varlen entry should be equal to the dictionary word it is encoded as ");
+    // TODO(Tianyu): Describe why this is still safe
+    if (entry.Size() > VarlenEntry::InlineThreshold())
+      entry = VarlenEntry::Create(dictionary_word, entry.Size(), false);
+  }
 }
 
 }  // namespace terrier::storage

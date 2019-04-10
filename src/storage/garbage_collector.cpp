@@ -75,7 +75,7 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
     // TODO(Tianyu): It is possible to immediately deallocate read-only transactions here. However, doing so
     // complicates logic as the GC cannot delete the transaction before logging has had a chance to process it.
     // It is unlikely to be a major performance issue so I am leaving it unoptimized.
-    if (txn->undo_buffer_.Empty()) {
+    if (txn->IsReadOnly()) {
       // This is a read-only transaction so this is safe to immediately delete
       delete txn;
       txns_processed++;

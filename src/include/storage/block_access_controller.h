@@ -5,6 +5,34 @@
 #include "common/strong_typedef.h"
 
 namespace terrier::storage {
+
+/**
+ * Denotes the state of a block.
+ */
+enum class BlockState : uint32_t {
+  /**
+   * Hot blocks can only be accessed transactionally. Readers are forced to materialize because
+   * the assumption is there are live versions.
+   */
+  HOT = 0,
+  /**
+   * This block is being marked for transformation for Arrow. Transactions are still allowed to proceed,
+   * but will need to explicitly preempt the transformation process by setting this flag back to HOT.
+   * Readers still need to materialize.
+   */
+  COOLING,
+  /**
+   * This block is being worked on actively by the transformation process. Transactions are not allowed to
+   * write to the block, but can still read transactionally. Readers still need to materialize.
+   */
+  FREEZING,
+  /**
+   * This block is fully Arrow-compatible, and can be read in-place by readers. Transactions need to wait
+   * for active readers to finish and flip block status back to hot before proceeding.
+   */
+  FROZEN
+};
+
 // TODO(Tianyu): I need a better name for this...
 /**
  * A block access controller serves as a coarse-grained "lock" for all tuples in a block. The "lock" is in quotes
@@ -15,22 +43,15 @@ namespace terrier::storage {
  * in-place readers from starting.
  */
 class BlockAccessController {
- private:
-  enum class BlockState : uint32_t {
-    HOT = 0,  // The block has recently been worked on transactionally and is likely to be worked on again in the future
-    COOLING,
-    FREEZING,
-    FROZEN    // The block is arrow-compatible and not being transactionally worked on
-  };
-
  public:
   /**
    * Initialize the block access controller.
    */
   void Initialize() {
     // A new block is always hot and has no active readers
-    memset(bytes_, 0, sizeof(uint64_t));
+    std::memset(bytes_, 0, sizeof(uint64_t));
   }
+
   /**
    * Checks whether the block is safe for in-place reads. If the result returns true, the lock is successfully acquired
    * and will need to be explicitly dropped via invocation of ReleaseRead. Otherwise, the block cannot be accessed
@@ -67,7 +88,7 @@ class BlockAccessController {
       BlockState current_state = GetBlockState()->load();
       switch (current_state) {
         case BlockState::FREEZING:
-          continue; // Wait until the compactor finishes before doing anything
+          continue;  // Wait until the compactor finishes before doing anything
         case BlockState::COOLING:
           if (!GetBlockState()->compare_exchange_strong(current_state, BlockState::HOT))
             continue;  // wait until the compactor finishes before doing anything
@@ -85,12 +106,20 @@ class BlockAccessController {
     }
   }
 
+
+  /**
+   * @return state of the current block
+   */
+  BlockState CurrentBlockState() {
+    return GetBlockState()->load();
+  }
+
  private:
   friend class BlockCompactor;
   // we are breaking this down to two fields, (| BlockState (32-bits) | Reader Count (32-bits) |)
   // but may need to compare and swap on the two together sometimes
   byte bytes_[sizeof(uint64_t)];
-
+//    std::atomic<uint64_t> i;
   std::atomic<BlockState> *GetBlockState() { return reinterpret_cast<std::atomic<BlockState> *>(bytes_); }
 
   std::atomic<uint32_t> *GetReaderCount() {
@@ -100,11 +129,11 @@ class BlockAccessController {
   std::pair<BlockState, uint32_t> AtomicallyLoadMembers() {
     uint64_t curr_value = reinterpret_cast<std::atomic<uint64_t> *>(bytes_)->load();
     // mask off respective bytes to turn the two into 32 bit values
-    return {static_cast<BlockState>(curr_value >> 32), curr_value & UINT32_MAX};
+    return {static_cast<BlockState>(curr_value >> 32u), curr_value & UINT32_MAX};
   }
 
   bool UpdateAtomically(BlockState new_state, uint32_t reader_count, const std::pair<BlockState, uint32_t> &expected) {
-    uint64_t desired = (static_cast<uint64_t>(new_state) << 32) + reader_count;
+    uint64_t desired = (static_cast<uint64_t>(new_state) << 32u) + reader_count;
     return reinterpret_cast<std::atomic<uint64_t> *>(bytes_)->compare_exchange_strong(
         desired, *reinterpret_cast<const uint64_t *>(&expected));
   }

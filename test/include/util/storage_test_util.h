@@ -187,8 +187,8 @@ struct StorageTestUtil {
   }
 
   template <class Random>
-  static void PopulateBlockRandomlyNoBookkeeping(
-      const storage::BlockLayout &layout, storage::RawBlock *block, double empty_ratio, Random *const generator) {
+  static void PopulateBlockRandomlyNoBookkeeping(const storage::BlockLayout &layout, storage::RawBlock *block,
+                                                 double empty_ratio, Random *const generator) {
     std::bernoulli_distribution coin(empty_ratio);
     // TODO(Tianyu): Do we ever want to tune this for tests?
     const double null_ratio = 0.1;
