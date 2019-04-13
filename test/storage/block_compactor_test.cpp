@@ -82,7 +82,7 @@ TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
         EXPECT_TRUE(StorageTestUtil::ProjectionListEqualDeep(layout, it->second, read_row));
         for (storage::col_id_t col_id : layout.Varlens()) {
           // We know this equality to hold because the select looks at all the columns
-          auto *entry = reinterpret_cast<storage::VarlenEntry *>(read_row->AccessWithNullCheck(!col_id - 1));
+          auto *entry = reinterpret_cast<storage::VarlenEntry *>(read_row->AccessWithNullCheck(static_cast<uint16_t>(!col_id - 1)));
           if (entry == nullptr) continue;
           // The varlen pointers should now point to within the Arrow data structure
           EXPECT_FALSE(entry->NeedReclaim());
