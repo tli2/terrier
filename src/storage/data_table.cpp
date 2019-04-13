@@ -72,7 +72,7 @@ bool DataTable::Update(transaction::TransactionContext *txn, TupleSlot slot, con
   // Update the next pointer of the new head of the version chain
   undo->Next() = version_ptr;
 
-  slot.GetBlock()->controller_.WaitUntilHot();
+//  slot.GetBlock()->controller_.WaitUntilHot();
 
   if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
     // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
@@ -80,6 +80,8 @@ bool DataTable::Update(transaction::TransactionContext *txn, TupleSlot slot, con
     undo->Table() = nullptr;
     return false;
   }
+
+//  slot.GetBlock()->controller_.ReleaseInPlaceRead();
 
   // Update in place with the new value.
   for (uint16_t i = 0; i < redo.NumColumns(); i++) {

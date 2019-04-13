@@ -30,7 +30,6 @@ class ArrowUtil {
     return arrow::Table::Make(schema, table_vector);
   }
 
- private:
   // TODO(Tianyu):
   // This for now simply returns either a string if input is varlen or a integer of matching length, without regards to
   // potentially richer semantics (doubles, floats, timestamps, etc.). We can imagine that later this functionality be
@@ -51,11 +50,10 @@ class ArrowUtil {
         throw std::runtime_error("Unexpected type size");
     }
   }
-
+ private:
   static void BuildPrimitiveColumn(const TupleAccessStrategy &accessor, RawBlock *block, col_id_t col_id,
                                    std::vector<std::shared_ptr<arrow::Field>> *schema_vector,
                                    std::vector<std::shared_ptr<arrow::Array>> *table_vector) {
-    //    TERRIER_ASSERT(!layout.IsVarlen(col_id), "Calling function for primitive column on a varlen column");
     const storage::BlockLayout &layout = accessor.GetBlockLayout();
     storage::ArrowBlockMetadata &metadata = accessor.GetArrowBlockMetadata(block);
     auto col_bitmap =
@@ -71,7 +69,6 @@ class ArrowUtil {
   static void BuildVarlenColumn(const TupleAccessStrategy &accessor, RawBlock *block, col_id_t col_id,
                                 std::vector<std::shared_ptr<arrow::Field>> *schema_vector,
                                 std::vector<std::shared_ptr<arrow::Array>> *table_vector) {
-    //    TERRIER_ASSERT(!layout.IsVarlen(col_id), "Calling function for primitive column on a varlen column");
     const storage::BlockLayout &layout = accessor.GetBlockLayout();
     storage::ArrowBlockMetadata &metadata = accessor.GetArrowBlockMetadata(block);
     storage::ArrowVarlenColumn &varlen_col = metadata.GetColumnInfo(layout, col_id).varlen_column_;
@@ -81,7 +78,7 @@ class ArrowUtil {
     auto varlen_offset = std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(varlen_col.offsets_),
                                                          sizeof(uint32_t) * (metadata.NumRecords() + 1));
     auto varlen_values_buffer =
-        std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(varlen_col.values_), varlen_col.varlen_size_);
+        std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(varlen_col.values_), varlen_col.values_length_);
     auto varlen_values_array_data =
         arrow::ArrayData::Make(arrow::uint8(), metadata.NumRecords(), {NULLPTR, varlen_values_buffer}, 0);
     table_vector->push_back(arrow::MakeArray(varlen_values_array_data));
