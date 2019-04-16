@@ -13,7 +13,7 @@ namespace terrier::storage {
  * Typedef for a standard hash map with varlen entry as the key. The map uses deep equality checks (whether
  * the stored underlying byte string is the same) for key comparison.
  */
-template <class T>
+template<class T>
 using VarlenEntryMap = std::unordered_map<VarlenEntry, T, VarlenContentHasher, VarlenContentDeepEqual>;
 
 /**
@@ -30,7 +30,8 @@ class BlockCompactor {
     CompactionGroup(transaction::TransactionContext *txn, DataTable *table)
         : txn_(txn),
           table_(table),
-          all_cols_initializer_(table_->accessor_.GetBlockLayout(), table_->accessor_.GetBlockLayout().AllColumns()),
+          all_cols_initializer_(ProjectedRowInitializer::CreateProjectedRowInitializer(table_->accessor_.GetBlockLayout(),
+                                                                                       table_->accessor_.GetBlockLayout().AllColumns())),
           read_buffer_(all_cols_initializer_.InitializeRow(
               common::AllocationUtil::AllocateAligned(all_cols_initializer_.ProjectedRowSize()))) {}
 

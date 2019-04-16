@@ -1,7 +1,6 @@
 #include <vector>
 #include "benchmark/benchmark.h"
 #include "common/scoped_timer.h"
-#include "storage/access_observer.h"
 #include "storage/garbage_collector.h"
 #include "util/transaction_benchmark_util.h"
 
@@ -170,15 +169,17 @@ BENCHMARK_DEFINE_F(LargeTransactionBenchmark, SingleStatementSelect)(benchmark::
 
 //BENCHMARK_REGISTER_F(LargeTransactionBenchmark, TPCCish)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(3);
 
-// BENCHMARK_REGISTER_F(LargeTransactionBenchmark, HighAbortRate)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(10);
+BENCHMARK_REGISTER_F(LargeTransactionBenchmark, HighAbortRate)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(10);
+
 
 // BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementInsert)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
 //    ->MinTime(3);
+
 
 BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementUpdate)
     ->Unit(benchmark::kMillisecond)
@@ -189,4 +190,5 @@ BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementUpdate)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
 //    ->MinTime(3);
+
 }  // namespace terrier

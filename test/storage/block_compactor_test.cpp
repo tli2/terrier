@@ -35,9 +35,9 @@ TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
   auto &arrow_metadata = accessor.GetArrowBlockMetadata(block);
   for (storage::col_id_t col_id : layout.AllColumns()) {
     if (layout.IsVarlen(col_id)) {
-      arrow_metadata.GetColumnInfo(layout, col_id).type_ = storage::ArrowColumnType::GATHERED_VARLEN;
+      arrow_metadata.GetColumnInfo(layout, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
     } else {
-      arrow_metadata.GetColumnInfo(layout, col_id).type_ = storage::ArrowColumnType::FIXED_LENGTH;
+      arrow_metadata.GetColumnInfo(layout, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
     }
   }
 
@@ -49,7 +49,7 @@ TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
   EXPECT_EQ(storage::BlockState::COOLING, block->controller_.CurrentBlockState());
   // Verify the content of the block
   // This transaction is guaranteed to start after the compacting one commits
-  storage::ProjectedRowInitializer initializer(layout, StorageTestUtil::ProjectionListAllColumns(layout));
+  storage::ProjectedRowInitializer initializer = storage::ProjectedRowInitializer::CreateProjectedRowInitializer(layout, StorageTestUtil::ProjectionListAllColumns(layout));
   byte *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
   auto *read_row = initializer.InitializeRow(buffer);
   std::vector<storage::ProjectedRow *> moved_rows;
@@ -103,8 +103,9 @@ TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
   gc.PerformGarbageCollection();
   gc.PerformGarbageCollection();
   delete[] buffer;
-  // Deallocated arrow buffers
-  for (const auto &col_id : layout.AllColumns()) arrow_metadata.Deallocate(layout, col_id);
+  // TODO(Tianyu): Figure out delete
+  // Deallocate arrow buffers
+//  for (const auto &col_id : layout.AllColumns()) delete &arrow_metadata.Deallocate(layout, col_id);
   block_store_.Release(block);
 }
 

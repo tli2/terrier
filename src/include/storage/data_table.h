@@ -14,6 +14,7 @@ class TransactionManager;
 }  // namespace terrier::transaction
 
 namespace terrier::storage {
+
 // clang-format off
 #define DataTableCounterMembers(f) \
   f(uint64_t, NumSelect) \
@@ -51,16 +52,7 @@ class DataTable {
      * pre-fix increment.
      * @return self-reference after the iterator is advanced
      */
-    SlotIterator &operator++() {
-      common::SpinLatch::ScopedSpinLatch guard(&table_->blocks_latch_);
-      if (current_slot_.GetOffset() == table_->accessor_.GetBlockLayout().NumSlots()) {
-        ++block_;
-        current_slot_ = {block_ == table_->blocks_.end() ? nullptr : *block_, 0};
-      } else {
-        current_slot_ = {*block_, current_slot_.GetOffset() + 1};
-      }
-      return *this;
-    }
+    SlotIterator &operator++();
 
     /**
      * post-fix increment.
@@ -98,6 +90,7 @@ class DataTable {
         : table_(table), block_(block) {
       current_slot_ = {block == table->blocks_.end() ? nullptr : *block, offset_in_block};
     }
+
     // TODO(Tianyu): Can potentially collapse this information into the RawBlock so we don't have to hold a pointer to
     // the table anymore. Right now we need the table to know how many slots there are in the block
     const DataTable *table_;
@@ -165,22 +158,13 @@ class DataTable {
   }
 
   /**
-   * @return one past the last tuple slot contained in the data table
+   * Returns one past the last tuple slot contained in the data table. Note that this is not an accurate number when
+   * concurrent accesses are happening, as inserts maybe in flight. However, the number given is always transactionally
+   * correct, as any inserts that might have happened is not going to be visible to the calling transaction.
+   *
+   * @return one past the last tuple slot contained in the data table.
    */
-  SlotIterator end() const {
-    common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
-    return {this, blocks_.end(), 0};
-  }
-
-  /**
-   * @warning NOT the number of tuples currently in the data table. Such a value is not well-defined unless referring
-   * to a transactional snapshot.
-   * @return number of slots allocated for this data table.
-   */
-  uint64_t NumSlots() const {
-    common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
-    return blocks_.size() * accessor_.GetBlockLayout().NumSlots();
-  }
+  SlotIterator end() const;
 
   /**
    * Update the tuple according to the redo buffer given, and update the version chain to link to an
@@ -228,7 +212,6 @@ class DataTable {
   friend class GarbageCollector;
   // The TransactionManager needs to modify VersionPtrs when rolling back aborts
   friend class transaction::TransactionManager;
-  friend class AccessObserver;
   friend class BlockCompactor;
 
   BlockStore *const block_store_;
@@ -272,8 +255,6 @@ class DataTable {
   // The criteria for visibility of a slot are presence (slot is occupied) and not deleted
   // (logical delete bitmap is non-NULL).
   bool Visible(TupleSlot slot, const TupleAccessStrategy &accessor) const;
-
-  bool Lock(transaction::TransactionContext *txn, TupleSlot slot);
 
   // Compares and swaps the version pointer to be the undo record, only if its value is equal to the expected one.
   bool CompareAndSwapVersionPtr(TupleSlot slot, const TupleAccessStrategy &accessor, UndoRecord *expected,

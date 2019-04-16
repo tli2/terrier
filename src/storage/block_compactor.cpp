@@ -213,7 +213,7 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
     // Otherwise, the column is varlen, need to first check what to do for it
     ArrowColumnInfo &col_info = metadata.GetColumnInfo(layout, col_id);
     auto *values = reinterpret_cast<VarlenEntry *>(accessor.ColumnStart(block, col_id));
-    switch (col_info.type_) {
+    switch (col_info.Type()) {
       case ArrowColumnType::GATHERED_VARLEN:
         CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
         break;
@@ -229,6 +229,7 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
 void BlockCompactor::CopyToArrowVarlen(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata,
                                        col_id_t col_id, common::RawConcurrentBitmap *column_bitmap,
                                        ArrowColumnInfo *col, VarlenEntry *values) {
+  uint32_t varlen_size = 0;
   // Read through every tuple and update null count and total varlen size
   for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
     if (!column_bitmap->Test(i))
@@ -236,27 +237,26 @@ void BlockCompactor::CopyToArrowVarlen(transaction::TransactionContext *txn, Arr
       metadata->NullCount(col_id)++;
     else
       // count the total size of varlens
-      col->varlen_column_.values_length_ += values[i].Size();
+      varlen_size += values[i].Size();
   }
 
-  col->varlen_column_.offsets_length_ = metadata->NumRecords() + 1;
-  col->varlen_column_.Allocate();
+  col->VarlenColumn() = {varlen_size, metadata->NumRecords() + 1};
   for (uint32_t i = 0, acc = 0; i < metadata->NumRecords(); i++) {
     if (!column_bitmap->Test(i)) continue;
     // Only do a gather operation if the column is varlen
     VarlenEntry &entry = values[i];
-    std::memcpy(col->varlen_column_.values_ + acc, entry.Content(), entry.Size());
-    col->varlen_column_.offsets_[i] = acc;
+    std::memcpy(col->VarlenColumn().Values() + acc, entry.Content(), entry.Size());
+    col->VarlenColumn().Offsets()[i] = acc;
 
     // Need to GC
     if (entry.NeedReclaim()) txn->loose_ptrs_.push_back(entry.Content());
 
     // TODO(Tianyu): Describe why this is still safe
     if (entry.Size() > VarlenEntry::InlineThreshold())
-      entry = VarlenEntry::Create(col->varlen_column_.values_ + acc, entry.Size(), false);
+      entry = VarlenEntry::Create(col->VarlenColumn().Values() + acc, entry.Size(), false);
     acc += entry.Size();
   }
-  col->varlen_column_.offsets_[metadata->NumRecords()] = col->varlen_column_.values_length_;
+  col->VarlenColumn().Offsets()[metadata->NumRecords()] = col->VarlenColumn().ValuesLength();
 }
 
 void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata,
@@ -264,6 +264,7 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
                                      VarlenEntry *values) {
   VarlenEntryMap<uint32_t> dictionary;
   // Read through every tuple and update null count and build the dictionary
+  uint32_t varlen_size = 0;
   for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
     if (!column_bitmap->Test(i)) {
       // Update null count
@@ -272,12 +273,11 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     }
     auto ret = dictionary.emplace(values[i], 0);
     // If the string has not been seen before, should add it to dictionary when counting total length.
-    if (ret.second) col->varlen_column_.values_length_ += values[i].Size();
+    if (ret.second) varlen_size += values[i].Size();
   }
 
-  col->varlen_column_.offsets_length_ = metadata->NumRecords() + 1;
-  col->varlen_column_.Allocate();
-  col->indices_ = common::AllocationUtil::AllocateAligned<uint32_t>(metadata->NumRecords());
+  col->VarlenColumn() = {varlen_size, metadata->NumRecords() + 1};
+  col->Indices() = common::AllocationUtil::AllocateAligned<uint32_t>(metadata->NumRecords());
 
   // TODO(Tianyu): This is retarded, but apparently you cannot retrieve the index of elements in your
   // c++ map in constant time. Thus we are resorting to primitive means.
@@ -289,11 +289,11 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     VarlenEntry &entry = corpus[i];
     // write down the dictionary code for this entry
     dictionary[entry] = i;
-    std::memcpy(col->varlen_column_.values_ + acc, entry.Content(), entry.Size());
-    col->varlen_column_.offsets_[i] = acc;
+    std::memcpy(col->VarlenColumn().Values() + acc, entry.Content(), entry.Size());
+    col->VarlenColumn().Offsets()[i] = acc;
     acc += entry.Size();
   }
-  col->varlen_column_.offsets_[metadata->NumRecords()] = col->varlen_column_.values_length_;
+  col->VarlenColumn().Offsets()[metadata->NumRecords()] = col->VarlenColumn().ValuesLength();
 
   // Swing all references in the table to point there, and build the encoded column
   for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
@@ -302,9 +302,9 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     VarlenEntry &entry = values[i];
     // Need to GC
     if (entry.NeedReclaim()) txn->loose_ptrs_.push_back(entry.Content());
-    uint32_t dictionary_code = col->indices_[i] = dictionary[entry];
+    uint32_t dictionary_code = col->Indices()[i] = dictionary[entry];
 
-    byte *dictionary_word = col->varlen_column_.values_ + col->varlen_column_.offsets_[dictionary_code];
+    byte *dictionary_word = col->VarlenColumn().Values() + col->VarlenColumn().Offsets()[dictionary_code];
     TERRIER_ASSERT(memcmp(dictionary_word, entry.Content(), entry.Size()) == 0,
                    "varlen entry should be equal to the dictionary word it is encoded as ");
     // TODO(Tianyu): Describe why this is still safe

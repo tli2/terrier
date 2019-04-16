@@ -48,40 +48,61 @@ void DataTable::Scan(transaction::TransactionContext *const txn, SlotIterator *c
   out_buffer->SetNumTuples(filled);
 }
 
-bool DataTable::Update(transaction::TransactionContext *txn, TupleSlot slot, const ProjectedRow &redo) {
+DataTable::SlotIterator &DataTable::SlotIterator::operator++() {
+  common::SpinLatch::ScopedSpinLatch guard(&table_->blocks_latch_);
+  // Jump to the next block if already the last slot in the block.
+  if (current_slot_.GetOffset() == table_->accessor_.GetBlockLayout().NumSlots() - 1) {
+    ++block_;
+    // Cannot dereference if the next block is end(), so just use nullptr to denote
+    current_slot_ = {block_ == table_->blocks_.end() ? nullptr : *block_, 0};
+  } else {
+    current_slot_ = {*block_, current_slot_.GetOffset() + 1};
+  }
+  return *this;
+}
+
+DataTable::SlotIterator DataTable::end() const {
+  common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
+  // TODO(Tianyu): Need to look in detail at how this interacts with compaction when that gets in.
+
+  // The end iterator could either point to an unfilled slot in a block, or point to nothing if every block in the
+  // table is full. In the case that it points to nothing, we will use the end-iterator of the blocks list and
+  // 0 to denote that this is the case. This solution makes increment logic simple and natural.
+  if (blocks_.empty()) return {this, blocks_.end(), 0};
+  auto last_block = --blocks_.end();
+  uint32_t insert_head = (*last_block)->insert_head_;
+  // Last block is full, return the default end iterator that doesn't point to anything
+  if (insert_head == accessor_.GetBlockLayout().NumSlots()) return {this, blocks_.end(), 0};
+  // Otherwise, insert head points to the slot that will be inserted next, which would be exactly what we want.
+  return {this, last_block, insert_head};
+}
+
+bool DataTable::Update(transaction::TransactionContext *const txn, const TupleSlot slot, const ProjectedRow &redo) {
   TERRIER_ASSERT(redo.NumColumns() <= accessor_.GetBlockLayout().NumColumns() - NUM_RESERVED_COLUMNS,
                  "The input buffer cannot change the reserved columns, so it should have fewer attributes.");
   TERRIER_ASSERT(redo.NumColumns() > 0, "The input buffer should modify at least one attribute.");
   UndoRecord *const undo = txn->UndoRecordForUpdate(this, slot, redo);
-  UndoRecord *const version_ptr = AtomicallyReadVersionPtr(slot, accessor_);
+  UndoRecord *version_ptr;
+  do {
+    version_ptr = AtomicallyReadVersionPtr(slot, accessor_);
 
-  // Since we disallow write-write conflicts, the version vector pointer is essentially an implicit
-  // write lock on the tuple.
-  if (HasConflict(version_ptr, txn) || !Visible(slot, accessor_)) {
-    // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
-    // TransactionManager's Rollback() and GC's Unlink logic
-    undo->Table() = nullptr;
-    return false;
-  }
+    // Since we disallow write-write conflicts, the version vector pointer is essentially an implicit
+    // write lock on the tuple.
+    if (HasConflict(version_ptr, txn) || !Visible(slot, accessor_)) {
+      // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
+      // TransactionManager's Rollback() and GC's Unlink logic
+      undo->Table() = nullptr;
+      return false;
+    }
 
-  // Store before-image before making any changes or grabbing lock
-  for (uint16_t i = 0; i < undo->Delta()->NumColumns(); i++) {
-    StorageUtil::CopyAttrIntoProjection(accessor_, slot, undo->Delta(), i);
-  }
+    slot.GetBlock()->controller_.WaitUntilHot();
+    // Store before-image before making any changes or grabbing lock
+    for (uint16_t i = 0; i < undo->Delta()->NumColumns(); i++)
+      StorageUtil::CopyAttrIntoProjection(accessor_, slot, undo->Delta(), i);
 
-  // Update the next pointer of the new head of the version chain
-  undo->Next() = version_ptr;
-
-//  slot.GetBlock()->controller_.WaitUntilHot();
-
-  if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
-    // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
-    // TransactionManager's Rollback() and GC's Unlink logic
-    undo->Table() = nullptr;
-    return false;
-  }
-
-//  slot.GetBlock()->controller_.ReleaseInPlaceRead();
+    // Update the next pointer of the new head of the version chain
+    undo->Next() = version_ptr;
+  } while (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo));
 
   // Update in place with the new value.
   for (uint16_t i = 0; i < redo.NumColumns(); i++) {
@@ -101,7 +122,7 @@ TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const Pr
   TERRIER_ASSERT(redo.NumColumns() == accessor_.GetBlockLayout().NumColumns() - NUM_RESERVED_COLUMNS,
                  "The input buffer never changes the version pointer column, so it should have  exactly 1 fewer "
                  "attribute than the DataTable's layout.");
-  // TODO(Tianyu): Should we assume that we are inserting into a hot block by default?
+
   // Attempt to allocate a new tuple from the block we are working on right now.
   // If that block is full, try to request a new block. Because other concurrent
   // inserts could have already created a new block, we need to use compare and swap
@@ -145,28 +166,31 @@ bool DataTable::Delete(transaction::TransactionContext *const txn, const TupleSl
   // call StageDelete before calling Delete?
   txn->StageDelete(this, slot);
   UndoRecord *const undo = txn->UndoRecordForDelete(this, slot);
-  UndoRecord *const version_ptr = AtomicallyReadVersionPtr(slot, accessor_);
-  // Since we disallow write-write conflicts, the version vector pointer is essentially an implicit
-  // write lock on the tuple.
-  if (HasConflict(version_ptr, txn) || !Visible(slot, accessor_)) {
-    // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
-    // TransactionManager's Rollback() and GC's Unlink logic
-    undo->Table() = nullptr;
-    return false;
-  }
+  UndoRecord *version_ptr;
+  do {
+    version_ptr = AtomicallyReadVersionPtr(slot, accessor_);
+    // Since we disallow write-write conflicts, the version vector pointer is essentially an implicit
+    // write lock on the tuple.
+    if (HasConflict(version_ptr, txn) || !Visible(slot, accessor_)) {
+      // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
+      // TransactionManager's Rollback() and GC's Unlink logic
+      undo->Table() = nullptr;
+      return false;
+    }
 
-  // Update the next pointer of the new head of the version chain
-  undo->Next() = version_ptr;
+    // Update the next pointer of the new head of the version chain
+    undo->Next() = version_ptr;
+  } while (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo));
 
   slot.GetBlock()->controller_.WaitUntilHot();
 
-  //  slot.GetBlock()->controller_.WaitUntilHot();
   if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
     // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
     // TransactionManager's Rollback() and GC's Unlink logic
     undo->Table() = nullptr;
     return false;
   }
+
   // We have the write lock. Go ahead and flip the logically deleted bit to true
   accessor_.SetNull(slot, VERSION_POINTER_COLUMN_ID);
   return true;

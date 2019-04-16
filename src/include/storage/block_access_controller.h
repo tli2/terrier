@@ -35,12 +35,13 @@ enum class BlockState : uint32_t {
 
 // TODO(Tianyu): I need a better name for this...
 /**
- * A block access controller serves as a coarse-grained "lock" for all tuples in a block. The "lock" is in quotes
- * because not all accessor will respect the lock all the time as certain accessors have higher priorities (e.g.
- * transactional updates and reads). More specifically, in-place readers and transactional accessors share locks
- * amongst themselves but not with each other. In-place readers will never wait on the lock as they are given low
- * priority. Transactional accessors will have to wait for all in-place readers to finish but will prevent any other
- * in-place readers from starting.
+ * A block access controller coordinates access among transactional workers, Arrow readers, and the background
+ * transformation thread. More specifically it serves as a coarse-grained "lock" for all tuples in a block. The "lock"
+ * is in quotes because not all accessor will respect the lock all the time as certain accessors have higher priorities
+ * (e.g. transactional updates and reads). More specifically, transactional reads never respect the lock, and
+ * transactional updates share the lock amongst themselves but have to wait for all in-place readers to finish when
+ * grabbing the lock. Arrow readers will never wait on the lock as they are given low priority, and will revert to
+ * reading transactionally if the block is not frozen.
  */
 class BlockAccessController {
  public:

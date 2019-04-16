@@ -62,7 +62,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Strawman)(benchmark::State &state) {
     {
       common::ScopedTimer timer(&elapsed_ms);
       transaction::TransactionContext *txn = txn_manager_.BeginTransaction();
-      storage::ProjectedRowInitializer initializer(layout_, StorageTestUtil::ProjectionListAllColumns(layout_));
+      storage::ProjectedRowInitializer initializer = storage::ProjectedRowInitializer::CreateProjectedRowInitializer(layout_, StorageTestUtil::ProjectionListAllColumns(layout_));
       byte *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
       auto *read_row = initializer.InitializeRow(buffer);
       arrow::Int64Builder int_builder;
@@ -116,9 +116,9 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
-          arrow_metadata.GetColumnInfo(layout_, col_id).type_ = storage::ArrowColumnType::GATHERED_VARLEN;
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
         } else {
-          arrow_metadata.GetColumnInfo(layout_, col_id).type_ = storage::ArrowColumnType::FIXED_LENGTH;
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
         }
       }
       blocks.push_back(block);
@@ -149,9 +149,9 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
-          arrow_metadata.GetColumnInfo(layout_, col_id).type_ = storage::ArrowColumnType::GATHERED_VARLEN;
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
         } else {
-          arrow_metadata.GetColumnInfo(layout_, col_id).type_ = storage::ArrowColumnType::FIXED_LENGTH;
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
         }
       }
       blocks.push_back(block);
@@ -184,9 +184,9 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(ben
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
-          arrow_metadata.GetColumnInfo(layout_, col_id).type_ = storage::ArrowColumnType::DICTIONARY_COMPRESSED;
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::DICTIONARY_COMPRESSED;
         } else {
-          arrow_metadata.GetColumnInfo(layout_, col_id).type_ = storage::ArrowColumnType::FIXED_LENGTH;
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
         }
       }
       blocks.push_back(block);
