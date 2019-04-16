@@ -25,8 +25,8 @@ namespace terrier {
 class TPCCBenchmark : public benchmark::Fixture {
  public:
   void StartLogging() {
-    logging_ = true;
-    log_thread_ = std::thread([this] { LogThreadLoop(); });
+//    logging_ = true;
+//    log_thread_ = std::thread([this] { LogThreadLoop(); });
   }
 
   void EndLogging() {
@@ -62,7 +62,7 @@ class TPCCBenchmark : public benchmark::Fixture {
   const bool only_count_new_order_ = false;
   const int8_t num_threads_ = 4;
   const uint32_t num_precomputed_txns_per_worker_ = 100000;
-  const uint32_t w_payment = 43;
+  const uint32_t w_payment = 44;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
   const uint32_t w_stock_level = 4;

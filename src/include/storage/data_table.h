@@ -213,6 +213,7 @@ class DataTable {
   // The TransactionManager needs to modify VersionPtrs when rolling back aborts
   friend class transaction::TransactionManager;
   friend class BlockCompactor;
+  friend class AccessObserver;
 
   BlockStore *const block_store_;
   const layout_version_t layout_version_;
@@ -230,6 +231,7 @@ class DataTable {
   mutable common::SpinLatch blocks_latch_;
   // to avoid having to grab a latch every time we insert. Failures are very, very infrequent since these
   // only happen when blocks are full, thus we can afford to be optimistic
+  std::vector<RawBlock *> insertion_heads_;
   std::atomic<RawBlock *> insertion_head_ = nullptr;
   mutable DataTableCounter data_table_counter_;
 
