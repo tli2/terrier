@@ -76,7 +76,7 @@ timestamp_t TransactionManager::UpdatingCommitCriticalSection(TransactionContext
   //  Make sure you solve this problem before you remove this latch for whatever reason.
   LogCommit(txn, commit_time, callback, callback_arg);
   // flip all timestamps to be committed
-  for (auto &it : txn->undo_buffer_) it.Timestamp().store(commit_time);
+//  for (auto &it : txn->undo_buffer_) it.Timestamp().store(commit_time);
 
   return commit_time;
 }
@@ -85,6 +85,7 @@ timestamp_t TransactionManager::Commit(TransactionContext *const txn, transactio
                                        void *callback_arg) {
   const timestamp_t result = txn->IsReadOnly() ? ReadOnlyCommitCriticalSection(txn, callback, callback_arg)
                                                : UpdatingCommitCriticalSection(txn, callback, callback_arg);
+  for (auto &it : txn->undo_buffer_) it.Timestamp().store(result);
   {
     // In a critical section, remove this transaction from the table of running transactions
     common::SpinLatch::ScopedSpinLatch guard(&curr_running_txns_latch_);
