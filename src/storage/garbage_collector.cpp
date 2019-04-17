@@ -13,6 +13,7 @@
 namespace terrier::storage {
 
 std::pair<uint32_t, uint32_t> GarbageCollector::PerformGarbageCollection() {
+  if (observer_ != nullptr) observer_->ObserveGCInvocation();
   uint32_t txns_deallocated = ProcessDeallocateQueue();
   STORAGE_LOG_TRACE("GarbageCollector::PerformGarbageCollection(): txns_deallocated: {}", txns_deallocated);
   uint32_t txns_unlinked = ProcessUnlinkQueue();
@@ -100,6 +101,7 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
         // Regardless of the version chain we will need to reclaim deleted slots and any dangling pointers to varlens.
         ReclaimSlotIfDeleted(&undo_record);
         ReclaimBufferIfVarlen(txn, &undo_record);
+        if (observer_ != nullptr) observer_->ObserveWrite(undo_record.Table(), undo_record.Slot());
       }
       txns_to_deallocate_.push_front(txn);
       txns_processed++;

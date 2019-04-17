@@ -7,7 +7,7 @@ TransactionContext *TransactionManager::BeginTransaction() {
   // This latch has to also protect addition of this transaction to the running transaction table. Otherwise,
   // the thread might get scheduled out while other transactions commit, and the GC will deallocate their version
   // chain which may be needed for this transaction, assuming that this transaction does not exist.
-  common::SharedLatch::ScopedSharedLatch guard(&commit_latch_);
+//  common::SharedLatch::ScopedSharedLatch guard(&commit_latch_);
   timestamp_t start_time = time_++;
 
   // TODO(Tianyu):
@@ -55,7 +55,7 @@ timestamp_t TransactionManager::ReadOnlyCommitCriticalSection(TransactionContext
 
 timestamp_t TransactionManager::UpdatingCommitCriticalSection(TransactionContext *const txn, const callback_fn callback,
                                                               void *const callback_arg) {
-  common::SharedLatch::ScopedExclusiveLatch guard(&commit_latch_);
+//  common::SharedLatch::ScopedExclusiveLatch guard(&commit_latch_);
   const timestamp_t commit_time = time_++;
   // TODO(Tianyu):
   // WARNING: This operation has to happen in the critical section to make sure that commits appear in serial order
