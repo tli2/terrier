@@ -6,6 +6,7 @@
 #include "storage/storage_util.h"
 #include "transaction/transaction_context.h"
 #include "transaction/transaction_util.h"
+#include "storage/dirty_globals.h"
 #define MAX_THREADS 40
 
 namespace terrier::storage {
@@ -310,6 +311,7 @@ void DataTable::NewBlock(RawBlock *expected_val) {
   insertion_heads_[id] = new_block;
 //  insertion_head_ = new_block;
   data_table_counter_.IncrementNumNewBlock(1);
+  if (this == DirtyGlobals::history) printf("allocated one block\n");
 }
 
 void DataTable::DeallocateVarlensOnShutdown(RawBlock *block) {
