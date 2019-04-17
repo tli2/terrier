@@ -175,7 +175,7 @@ class SqlTable {
     return {initializer, projection_map};
   }
 
- private:
+// private:
   BlockStore *const block_store_;
   const catalog::table_oid_t oid_;
 

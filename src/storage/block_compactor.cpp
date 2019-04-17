@@ -1,8 +1,12 @@
 #include "storage/block_compactor.h"
+#include "storage/dirty_globals.h"
 #include <algorithm>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+namespace terrier{
+  storage::DataTable *history;
+}
 namespace terrier::storage {
 namespace {
 // for empty callback
@@ -11,8 +15,8 @@ void NoOp(void * /* unused */) {}
 
 void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn_manager) {
   std::forward_list<std::pair<RawBlock *, DataTable *>> to_process = std::move(compaction_queue_);
-
   for (auto &entry : to_process) {
+    if (entry.second != storage::DirtyGlobals::history) continue;
     BlockAccessController &controller = entry.first->controller_;
     switch (controller.CurrentBlockState()) {
       case BlockState::HOT: {
@@ -90,7 +94,7 @@ bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
   // Because we constructed the filled list from sequential scan, slots will always appear in order. We
   // essentially will fill gaps in order, by using the real tuples in reverse order. (Take the last tuple to
   // fill the first empty slot)
-  for (auto taker = all_blocks.begin(), giver = all_blocks.end(); taker <= giver; taker++) {
+  for (auto taker = all_blocks.begin(), giver = all_blocks.end(); taker <= giver && taker != all_blocks.end(); taker++) {
     // Again, we know these finds will not return end() because we constructed the vector from the map
     std::vector<uint32_t> &taker_empty = cg->blocks_to_compact_.find(*taker)->second;
 

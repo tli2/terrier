@@ -5,6 +5,7 @@
 #include "common/scoped_timer.h"
 #include "common/worker_pool.h"
 #include "storage/garbage_collector.h"
+#include "storage/garbage_collector.h"
 #include "storage/storage_defs.h"
 #include "tpcc/builder.h"
 #include "tpcc/database.h"
@@ -16,10 +17,11 @@
 #include "tpcc/stock_level.h"
 #include "tpcc/worker.h"
 #include "tpcc/workload.h"
+#include "storage/block_compactor.h"
 #include "transaction/transaction_manager.h"
+#include "storage/dirty_globals.h"
 
 namespace terrier {
-
 #define LOG_FILE_NAME "./tpcc.log"
 
 class TPCCBenchmark : public benchmark::Fixture {
@@ -36,7 +38,9 @@ class TPCCBenchmark : public benchmark::Fixture {
   }
 
   void StartGC(transaction::TransactionManager *const txn_manager) {
-    gc_ = new storage::GarbageCollector(txn_manager);
+
+    gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
+//    gc_ = new storage::GarbageCollector(txn_manager);
     run_gc_ = true;
     gc_thread_ = std::thread([this] { GCThreadLoop(); });
   }
@@ -50,6 +54,16 @@ class TPCCBenchmark : public benchmark::Fixture {
     delete gc_;
   }
 
+  void StartCompactor(transaction::TransactionManager *const txn_manager) {
+    run_compactor_ = true;
+    compactor_thread_ = std::thread([this, txn_manager] { CompactorThreadLoop(txn_manager); });
+  }
+
+  void EndCompactor() {
+    run_compactor_ = false;
+    compactor_thread_.join();
+  }
+
   const uint64_t blockstore_size_limit_ = 1000;
   const uint64_t blockstore_reuse_limit_ = 1000;
   const uint64_t buffersegment_size_limit_ = 1000000;
@@ -58,11 +72,13 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::RecordBufferSegmentPool buffer_pool_{buffersegment_size_limit_, buffersegment_reuse_limit_};
   std::default_random_engine generator_;
   storage::LogManager *log_manager_ = nullptr;
+  storage::BlockCompactor compactor_;
+  storage::AccessObserver access_observer_{&compactor_};
 
   const bool only_count_new_order_ = false;
   const int8_t num_threads_ = 4;
   const uint32_t num_precomputed_txns_per_worker_ = 100000;
-  const uint32_t w_payment = 44;
+  const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
   const uint32_t w_stock_level = 4;
@@ -84,7 +100,7 @@ class TPCCBenchmark : public benchmark::Fixture {
   std::thread gc_thread_;
   storage::GarbageCollector *gc_ = nullptr;
   volatile bool run_gc_ = false;
-  const std::chrono::milliseconds gc_period_{10};
+  const std::chrono::milliseconds gc_period_{1};
 
   void GCThreadLoop() {
     while (run_gc_) {
@@ -92,6 +108,18 @@ class TPCCBenchmark : public benchmark::Fixture {
       gc_->PerformGarbageCollection();
     }
   }
+
+  std::thread compactor_thread_;
+  volatile bool run_compactor_ = false;
+  const std::chrono::milliseconds compaction_period_{10};
+
+  void CompactorThreadLoop(transaction::TransactionManager *const txn_manager) {
+    while (run_compactor_) {
+      std::this_thread::sleep_for(compaction_period_);
+      compactor_.ProcessCompactionQueue(txn_manager);
+    }
+  }
+
 };
 
 // NOLINTNEXTLINE
@@ -146,6 +174,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     // build the TPCC database
     //    log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
     auto *const tpcc_db = tpcc_builder.Build();
+    storage::DirtyGlobals::history = tpcc_db->history_table_->table_.data_table;
 
     // prepare the workers
     workers.clear();
@@ -156,9 +185,10 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     tpcc::Loader::PopulateDatabase(&txn_manager, &generator_, tpcc_db, workers);
     //    log_manager_->Process();  // log all of the Inserts from table creation
     StartGC(&txn_manager);
+
     //    StartLogging();
     std::this_thread::sleep_for(std::chrono::seconds(1));  // Let GC clean up
-
+    StartCompactor(&txn_manager);
     // define the TPCC workload
     auto tpcc_workload = [&](int8_t worker_id) {
       auto new_order = tpcc::NewOrder(tpcc_db);
@@ -210,6 +240,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
 
     // cleanup
     //    EndLogging();
+    EndCompactor();
     EndGC();
     delete tpcc_db;
     //    delete log_manager_;

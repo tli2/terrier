@@ -4,13 +4,18 @@
 namespace terrier::storage {
 void AccessObserver::ObserveGCInvocation() {
   gc_epoch_++;
-  for (auto &entry : table_references_by_epoch_) {
+  auto it = table_references_by_epoch_.begin();
+  for (auto end = table_references_by_epoch_.end();
+       it != end; ++it) {
+    auto &entry = *it;
     // Data still within threshold
-    if (entry.first + COLD_DATA_EPOCH_THRESHOLD >= gc_epoch_) return;
+    if (entry.first + COLD_DATA_EPOCH_THRESHOLD >= gc_epoch_) break;
     // Otherwise, we consider the block cold and can shove them into the compactor's queue for
     // processing
-    for (auto &pair : entry.second) compactor_->PutInQueue(pair);
+    for (auto &pair : entry.second)
+      compactor_->PutInQueue(pair);
   }
+  table_references_by_epoch_.erase(table_references_by_epoch_.begin(), it);
 }
 
 void AccessObserver::ObserveWrite(DataTable *table, TupleSlot slot) {
