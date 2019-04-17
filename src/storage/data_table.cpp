@@ -307,7 +307,6 @@ void DataTable::NewBlock(RawBlock *expected_val) {
 //  if (expected_val != insertion_head_) return;
   RawBlock *new_block = block_store_->Get();
   accessor_.InitializeRawBlock(new_block, layout_version_);
-  blocks_.push_back(new_block);
   insertion_heads_[id] = new_block;
 //  insertion_head_ = new_block;
   data_table_counter_.IncrementNumNewBlock(1);
