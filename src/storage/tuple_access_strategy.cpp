@@ -35,7 +35,7 @@ void TupleAccessStrategy::InitializeRawBlock(RawBlock *const raw, const layout_v
   result->SlotAllocationBitmap(layout_)->UnsafeClear(layout_.NumSlots());
   result->Column(layout_, VERSION_POINTER_COLUMN_ID)->NullBitmap()->UnsafeClear(layout_.NumSlots());
   auto &arrow_metadata = GetArrowBlockMetadata(raw);
-  for (uint32_t i = 0; i < layout_.NumColumns(); i++) {
+  for (uint16_t i = 0; i < layout_.NumColumns(); i++) {
     col_id_t id(i);
     if (layout_.IsVarlen(id))
       arrow_metadata.GetColumnInfo(layout_, id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
