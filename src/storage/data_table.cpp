@@ -86,6 +86,7 @@ bool DataTable::Update(transaction::TransactionContext *const txn, const TupleSl
                  "The input buffer cannot change the reserved columns, so it should have fewer attributes.");
   TERRIER_ASSERT(redo.NumColumns() > 0, "The input buffer should modify at least one attribute.");
   UndoRecord *const undo = txn->UndoRecordForUpdate(this, slot, redo);
+  slot.GetBlock()->controller_.WaitUntilHot();
   UndoRecord *version_ptr;
   do {
     version_ptr = AtomicallyReadVersionPtr(slot, accessor_);
@@ -99,7 +100,6 @@ bool DataTable::Update(transaction::TransactionContext *const txn, const TupleSl
       return false;
     }
 
-    slot.GetBlock()->controller_.WaitUntilHot();
     // Store before-image before making any changes or grabbing lock
     for (uint16_t i = 0; i < undo->Delta()->NumColumns(); i++)
       StorageUtil::CopyAttrIntoProjection(accessor_, slot, undo->Delta(), i);
@@ -172,6 +172,7 @@ bool DataTable::Delete(transaction::TransactionContext *const txn, const TupleSl
   // call StageDelete before calling Delete?
   txn->StageDelete(this, slot);
   UndoRecord *const undo = txn->UndoRecordForDelete(this, slot);
+  slot.GetBlock()->controller_.WaitUntilHot();
   UndoRecord *version_ptr;
   do {
     version_ptr = AtomicallyReadVersionPtr(slot, accessor_);
@@ -183,19 +184,9 @@ bool DataTable::Delete(transaction::TransactionContext *const txn, const TupleSl
       undo->Table() = nullptr;
       return false;
     }
-
     // Update the next pointer of the new head of the version chain
     undo->Next() = version_ptr;
   } while (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo));
-
-  slot.GetBlock()->controller_.WaitUntilHot();
-
-  if (!CompareAndSwapVersionPtr(slot, accessor_, version_ptr, undo)) {
-    // Mark this UndoRecord as never installed by setting the table pointer to nullptr. This is inspected in the
-    // TransactionManager's Rollback() and GC's Unlink logic
-    undo->Table() = nullptr;
-    return false;
-  }
 
   // We have the write lock. Go ahead and flip the logically deleted bit to true
   accessor_.SetNull(slot, VERSION_POINTER_COLUMN_ID);

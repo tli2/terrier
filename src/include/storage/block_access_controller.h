@@ -100,7 +100,6 @@ class BlockAccessController {
         case BlockState::HOT:
           // Although the block is already hot, we may need to wait for any straggling readers to finish
           while (GetReaderCount()->load() != 0) __asm__ __volatile__("pause;");
-          GetReaderCount()->fetch_add(1);
           return;
         default:
           throw std::runtime_error("unexpected control flow");
