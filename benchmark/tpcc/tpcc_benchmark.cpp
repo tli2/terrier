@@ -245,7 +245,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     EndCompactor();
     EndGC();
     delete tpcc_db;
-        delete log_manager_;
+    delete log_manager_;
   }
 
   // Clean up the buffers from any non-inlined VarlenEntrys in the precomputed args

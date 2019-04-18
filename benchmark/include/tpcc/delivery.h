@@ -274,6 +274,7 @@ class Delivery {
 //      std::this_thread::yield();
 //    }
     txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
+    return true;
   }
 };
 
