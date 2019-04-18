@@ -4,9 +4,13 @@
 namespace terrier::storage {
 void AccessObserver::ObserveGCInvocation() {
   gc_epoch_++;
-  for (auto &entry : last_touched_) {
-    if (entry.second.first + COLD_DATA_EPOCH_THRESHOLD < gc_epoch_)
-      compactor_->PutInQueue({entry.first, entry.second.second});
+  for (auto it = last_touched_.begin(), end = last_touched_.end(); it != end;) {
+    if (it->second.first + COLD_DATA_EPOCH_THRESHOLD < gc_epoch_) {
+      compactor_->PutInQueue({it->first, it->second.second});
+      it = last_touched_.erase(it);
+    } else {
+      ++it;
+    }
   }
 }
 
