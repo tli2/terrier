@@ -15,7 +15,7 @@ class BlockCompactor;
 /**
  * The access observer is attached to the storage engine's garbage collector in order to make decisions about
  * whether a block is cooling down from frequent access. Its observe methods are invoked from the garbage collector
- * when relevent events fire. It is then free to make a decision whether to send a block into the compactor's queue
+ * when relavent events fire. It is then free to make a decision whether to send a block into the compactor's queue
  * to freeze asynchronously.
  *
  * Notice that although the observation step is light weight, it does happen on the garbage collection thread and thus
@@ -51,11 +51,11 @@ class AccessObserver {
   // Here RawBlock * should suffice as a unique identifier of the block. Although a block can be
   // reused, that process should only be triggered through compaction, which happens only if the
   // reference to said block is identified as cold and leaves the table.
-  std::unordered_map<RawBlock *, uint64_t> last_touched_;
+  std::unordered_map<RawBlock *, std::pair<uint64_t, DataTable *>> last_touched_;
   // Sorted table references by epoch. We can easily do range scans on this data structure to get
   // cold blocks given current epoch and some threshold for a block to be cold.
-  std::map<uint64_t, std::unordered_map<RawBlock *, DataTable *>> table_references_by_epoch_;
-  std::unordered_set<RawBlock *> no_longer_insertable_;
+//  std::map<uint64_t, std::unordered_map<RawBlock *, DataTable *>> table_references_by_epoch_;
+//  std::unordered_set<RawBlock *> no_longer_insertable_;
   BlockCompactor *const compactor_;
 };
 }  // namespace terrier::storage
