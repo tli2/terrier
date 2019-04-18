@@ -12,23 +12,22 @@ void LogManager::Process() {
       buffer = flush_queue_.front();
       flush_queue_.pop();
     }
-    for (LogRecord &record : IterableBufferSegment<LogRecord>(buffer)) {
-      if (record.RecordType() == LogRecordType::COMMIT) {
-        auto *commit_record = record.GetUnderlyingRecordBodyAs<CommitRecord>();
+    LogRecord &record = *reinterpret_cast<LogRecord *>(buffer->last_record_);
+//    for (LogRecord &record : IterableBufferSegment<LogRecord>(buffer)) {
+    if (record.RecordType() == LogRecordType::COMMIT) {
+      auto *commit_record = record.GetUnderlyingRecordBodyAs<CommitRecord>();
 
-        // If a transaction is read-only, then the only record it generates is its commit record. This commit record is
-        // necessary for the transaction's callback function to be invoked, but there is no need to serialize it, as
-        // it corresponds to a transaction with nothing to redo.
-        if (!commit_record->IsReadOnly()) SerializeRecord(record);
-        commits_in_buffer_.emplace_back(commit_record->Callback(), commit_record->CallbackArg());
-        // Not safe to mark read only transactions as the transactions are deallocated preemptively without waiting for
-        // logging (there is nothing to log after all)
-        if (!commit_record->IsReadOnly()) commit_record->Txn()->log_processed_ = true;
-      } else {
-        // Any record that is not a commit record is always serialized.`
-        SerializeRecord(record);
-      }
+      // If a transaction is read-only, then the only record it generates is its commit record. This commit record is
+      // necessary for the transaction's callback function to be invoked, but there is no need to serialize it, as
+      // it corresponds to a transaction with nothing to redo.
+//        if (!commit_record->IsReadOnly()) SerializeRecord(record);
+      commits_in_buffer_.emplace_back(commit_record->Callback(), commit_record->CallbackArg());
+      // Not safe to mark read only transactions as the transactions are deallocated preemptively without waiting for
+      // logging (there is nothing to log after all)
+      if (!commit_record->IsReadOnly()) commit_record->Txn()->log_processed_ = true;
     }
+//    }
+    out_.BufferWrite(buffer->bytes_, buffer->size_);
     buffer_pool_->Release(buffer);
   }
   Flush();

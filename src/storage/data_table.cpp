@@ -310,8 +310,9 @@ void DataTable::NewBlock(RawBlock *expected_val) {
   accessor_.InitializeRawBlock(new_block, layout_version_);
   insertion_heads_[id] = new_block;
 //  insertion_head_ = new_block;
+  blocks_.push_back(new_block);
   data_table_counter_.IncrementNumNewBlock(1);
-  if (this == DirtyGlobals::history) printf("allocating new block\n");
+//  if (this == DirtyGlobals::history) printf("allocating new block\n");
 }
 
 void DataTable::DeallocateVarlensOnShutdown(RawBlock *block) {

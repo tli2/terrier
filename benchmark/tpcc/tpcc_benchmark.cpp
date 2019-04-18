@@ -133,7 +133,8 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
   thread_pool_.Startup();
 
   // we need transactions, TPCC database, and GC
-  transaction::TransactionManager txn_manager(&buffer_pool_, true, LOGGING_DISABLED);
+  log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
+  transaction::TransactionManager txn_manager(&buffer_pool_, true, log_manager_);
   auto tpcc_builder = tpcc::Builder(&block_store_);
 
   // random number generation is slow, so we precompute the args
@@ -172,7 +173,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
   // NOLINTNEXTLINE
   for (auto _ : state) {
     // build the TPCC database
-    //    log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
+
     auto *const tpcc_db = tpcc_builder.Build();
     storage::DirtyGlobals::history = tpcc_db->history_table_->table_.data_table;
 
