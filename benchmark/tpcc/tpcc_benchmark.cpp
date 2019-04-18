@@ -22,13 +22,13 @@
 #include "storage/dirty_globals.h"
 
 namespace terrier {
-#define LOG_FILE_NAME "./tpcc.log"
+#define LOG_FILE_NAME "/mnt/ramdisk/tpcc.log"
 
 class TPCCBenchmark : public benchmark::Fixture {
  public:
   void StartLogging() {
-//    logging_ = true;
-//    log_thread_ = std::thread([this] { LogThreadLoop(); });
+    logging_ = true;
+    log_thread_ = std::thread([this] { LogThreadLoop(); });
   }
 
   void EndLogging() {
@@ -39,8 +39,8 @@ class TPCCBenchmark : public benchmark::Fixture {
 
   void StartGC(transaction::TransactionManager *const txn_manager) {
 
-    gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
-    // gc_ = new storage::GarbageCollector(txn_manager);
+//    gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
+    gc_ = new storage::GarbageCollector(txn_manager);
     run_gc_ = true;
     gc_thread_ = std::thread([this] { GCThreadLoop(); });
   }
@@ -183,10 +183,10 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     }
 
     tpcc::Loader::PopulateDatabase(&txn_manager, &generator_, tpcc_db, workers);
-    //    log_manager_->Process();  // log all of the Inserts from table creation
+    log_manager_->Process();  // log all of the Inserts from table creation
     StartGC(&txn_manager);
 
-    //    StartLogging();
+    StartLogging();
     std::this_thread::sleep_for(std::chrono::seconds(1));  // Let GC clean up
     StartCompactor(&txn_manager);
     // define the TPCC workload
@@ -236,15 +236,14 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
       thread_pool_.WaitUntilAllFinished();
     }
 
-    state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
-
-    // cleanup
-    //    EndLogging();
     tpcc_db->history_table_->table_.data_table->InspectTable();
+    state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+    // cleanup
+    EndLogging();
     EndCompactor();
     EndGC();
     delete tpcc_db;
-    //    delete log_manager_;
+        delete log_manager_;
   }
 
   // Clean up the buffers from any non-inlined VarlenEntrys in the precomputed args

@@ -153,6 +153,10 @@ struct Util {
     return storage::VarlenEntry::Create(varlen, static_cast<uint32_t>(astring.length()), true);
   }
 
+  static void NotifyLogFinished(void *var) {
+    *reinterpret_cast<bool *>(var) = true;
+  }
+
  private:
   template <class Random>
   static char AlphaNumericChar(const bool numeric_only, Random *const generator) {
