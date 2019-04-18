@@ -340,6 +340,7 @@ struct Loader {
     }
 
     txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
+
   }
 
   template <class Random>

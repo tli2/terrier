@@ -264,8 +264,11 @@ class OrderStatus {
                      "We already confirmed that this is a committed order above, so none of these should fail.");
     }
 
-    txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
-
+    bool done = false;
+    txn_manager->Commit(txn, Util::NotifyLogFinished, &done);
+    while (!done) {
+      std::this_thread::yield();
+    }
     return true;
   }
 };

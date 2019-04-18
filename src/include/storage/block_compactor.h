@@ -93,6 +93,6 @@ class BlockCompactor {
     }
   }
 
-  std::forward_list<std::unordered_map<RawBlock *, DataTable *>> compaction_queue_;
+  std::forward_list<std::pair<RawBlock *, DataTable *>> compaction_queue_;
 };
 }  // namespace terrier::storage

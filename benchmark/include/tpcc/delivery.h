@@ -268,7 +268,11 @@ class Delivery {
       }
     }
 
-    txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
+    bool done = false;
+    txn_manager->Commit(txn, Util::NotifyLogFinished, &done);
+    while (!done) {
+      std::this_thread::yield();
+    }
     return true;
   }
 };
