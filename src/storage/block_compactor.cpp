@@ -32,6 +32,10 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
           // Has to mark block as cooling before transaction commit, so we have a guarantee that
           // any older transactions
           controller.GetBlockState()->store(BlockState::COOLING);
+          if (cg.txn_->IsReadOnly()) {
+            cg.txn_->compacted_ = entry.first;
+            cg.txn_->table_ = entry.second;
+          }
           txn_manager->Commit(cg.txn_, NoOp, nullptr);
         } else {
           txn_manager->Abort(cg.txn_);
