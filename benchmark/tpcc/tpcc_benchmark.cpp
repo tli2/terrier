@@ -240,6 +240,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
 
     // cleanup
     //    EndLogging();
+    tpcc_db->history_table_->table_.data_table->InspectTable();
     EndCompactor();
     EndGC();
     delete tpcc_db;

@@ -21,7 +21,6 @@ DataTable::DataTable(BlockStore *const store, const BlockLayout &layout, const l
 }
 
 DataTable::~DataTable() {
-  printf("invoked\n");
   common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
   for (RawBlock *block : blocks_) {
     DeallocateVarlensOnShutdown(block);

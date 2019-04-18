@@ -207,6 +207,32 @@ class DataTable {
    */
   DataTableCounter *GetDataTableCounter() { return &data_table_counter_; }
 
+  void InspectTable() {
+    std::unordered_map<BlockState, uint32_t> counts;
+    uint32_t total_count = 0;
+    for (RawBlock *block : blocks_) {
+      total_count++;
+      counts[block->controller_.CurrentBlockState()]++;
+    }
+    printf("Total number of blocks %u\n", total_count);
+    for (auto &entry : counts) {
+      switch (entry.first) {
+        case BlockState::HOT:
+          printf("number of hot blocks %u\n", entry.second);
+          break;
+        case BlockState::COOLING:
+          printf("number of hot blocks %u\n", entry.second);
+          break;
+        case BlockState::FREEZING:
+          printf("number of hot blocks %u\n", entry.second);
+          break;
+        case BlockState::FROZEN:
+          printf("number of hot blocks %u\n", entry.second);
+          break;
+      }
+    }
+  }
+
  private:
   // The GarbageCollector needs to modify VersionPtrs when pruning version chains
   friend class GarbageCollector;
