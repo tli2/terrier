@@ -42,7 +42,7 @@ class AccessObserver {
    * Notice that not all writes will be captured in this case. For example, an aborted transaction might not show up
    * here. All committed transactions are guaranteed to show up here.
    */
-  void ObserveWrite(DataTable *table, TupleSlot slot);
+  void ObserveWrite(DataTable *table, RawBlock *slot);
 
  private:
   uint64_t gc_epoch_ = 0;  // estimate time using the number of times GC has run

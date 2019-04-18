@@ -36,6 +36,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
         } else {
           txn_manager->Abort(cg.txn_);
         }
+        break;
       }
       case BlockState::COOLING: {
         if (!CheckForVersionsAndGaps(entry.second->accessor_, entry.first)) continue;

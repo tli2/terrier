@@ -82,6 +82,7 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
     // complicates logic as the GC cannot delete the transaction before logging has had a chance to process it.
     // It is unlikely to be a major performance issue so I am leaving it unoptimized.
     if (txn->IsReadOnly()) {
+      if (txn->compacted_ != nullptr && observer_ != nullptr) observer_->ObserveWrite(txn->table_, txn->compacted_);
       // This is a read-only transaction so this is safe to immediately delete
       delete txn;
       txns_processed++;
@@ -101,7 +102,7 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
         // Regardless of the version chain we will need to reclaim deleted slots and any dangling pointers to varlens.
         ReclaimSlotIfDeleted(&undo_record);
         ReclaimBufferIfVarlen(txn, &undo_record);
-        if (observer_ != nullptr) observer_->ObserveWrite(undo_record.Table(), undo_record.Slot());
+        if (observer_ != nullptr) observer_->ObserveWrite(undo_record.Table(), undo_record.Slot().GetBlock());
       }
       txns_to_deallocate_.push_front(txn);
       txns_processed++;

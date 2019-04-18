@@ -14,8 +14,7 @@ void AccessObserver::ObserveGCInvocation() {
   }
 }
 
-void AccessObserver::ObserveWrite(DataTable *table, TupleSlot slot) {
-  RawBlock *block = slot.GetBlock();
+void AccessObserver::ObserveWrite(DataTable *table, RawBlock *block) {
   if (block->insert_head_ == table->accessor_.GetBlockLayout().NumSlots())
     last_touched_[block] = {gc_epoch_, table};
 }

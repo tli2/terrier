@@ -126,6 +126,8 @@ class TransactionContext {
   friend class storage::BlockCompactor;
   const timestamp_t start_time_;
   std::atomic<timestamp_t> txn_id_;
+  storage::RawBlock *compacted_ = nullptr;
+  storage::DataTable *table_ = nullptr;
   storage::UndoBuffer undo_buffer_;
   storage::RedoBuffer redo_buffer_;
   // TODO(Tianyu): Maybe not so much of a good idea to do this. Make explicit queue in GC?
