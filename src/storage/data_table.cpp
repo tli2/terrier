@@ -21,6 +21,7 @@ DataTable::DataTable(BlockStore *const store, const BlockLayout &layout, const l
 }
 
 DataTable::~DataTable() {
+  printf("invoked\n");
   common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
   for (RawBlock *block : blocks_) {
     DeallocateVarlensOnShutdown(block);
@@ -311,7 +312,7 @@ void DataTable::NewBlock(RawBlock *expected_val) {
   insertion_heads_[id] = new_block;
 //  insertion_head_ = new_block;
   data_table_counter_.IncrementNumNewBlock(1);
-  if (this == DirtyGlobals::history) printf("allocated one block\n");
+  if (this == DirtyGlobals::history) printf("allocating new block\n");
 }
 
 void DataTable::DeallocateVarlensOnShutdown(RawBlock *block) {

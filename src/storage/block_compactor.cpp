@@ -36,19 +36,25 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
             cg.txn_->compacted_ = entry.first;
             cg.txn_->table_ = entry.second;
           }
+	  printf("compaction of block %p successful\n", entry.first);
           txn_manager->Commit(cg.txn_, NoOp, nullptr);
         } else {
+          printf("compaction of block %p failed!!!\n", entry.first);
           txn_manager->Abort(cg.txn_);
         }
         break;
       }
       case BlockState::COOLING: {
-        if (!CheckForVersionsAndGaps(entry.second->accessor_, entry.first)) continue;
-        // TODO(Tianyu): The use of transaction here is pretty sketchy
+        if (!CheckForVersionsAndGaps(entry.second->accessor_, entry.first)) {
+		printf("Gathering of block %p failed\n", entry.first);
+		continue;
+	}
+        // TODO(Tianyu): The use of transaction here is pretty sketchy	
         transaction::TransactionContext *txn = txn_manager->BeginTransaction();
         GatherVarlens(txn, entry.first, entry.second);
         controller.GetBlockState()->store(BlockState::FROZEN);
         txn_manager->Commit(txn, NoOp, nullptr);
+	printf("Gathering of block %p successful!\n", entry.first);
         break;
       }
       default:
@@ -189,11 +195,18 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
     }
 
     // Not contiguous. If the code reaches here the slot must be allocated, and we have seen an unallocated slot before
-    if (unallocated_region_start) return false;
+    if (unallocated_region_start) {
+	    printf("not contiguous\n");
+	    return false;
+    }
+	
 
     // Check that there are no versions alive
     auto *record = version_ptrs[offset];
-    if (record != nullptr) return false;
+    if (record != nullptr) {
+	    printf("has versions\n");
+	    return false;
+    }
   }
   // Check that no other transaction has modified the canary in the block header. If we fail it's okay
   // to leave the block header because someone else must have already flipped it to hot
@@ -202,6 +215,7 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
   // At this point we are guaranteed to complete the transformation process. We can start modifying block
   // header in place.
   if (ret) accessor.GetArrowBlockMetadata(block).NumRecords() = num_records;
+  if (!ret) printf("compare exchange failed\n");
   return ret;
 }
 

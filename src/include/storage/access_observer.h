@@ -11,7 +11,7 @@ class DataTable;
 class BlockCompactor;
 // TODO(Tianyu): Probably need to be smarter than this to identify true hot or cold data, but this
 // will do for now.
-#define COLD_DATA_EPOCH_THRESHOLD 100
+#define COLD_DATA_EPOCH_THRESHOLD 10
 /**
  * The access observer is attached to the storage engine's garbage collector in order to make decisions about
  * whether a block is cooling down from frequent access. Its observe methods are invoked from the garbage collector

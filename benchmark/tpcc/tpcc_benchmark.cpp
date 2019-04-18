@@ -40,7 +40,7 @@ class TPCCBenchmark : public benchmark::Fixture {
   void StartGC(transaction::TransactionManager *const txn_manager) {
 
     gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
-//    gc_ = new storage::GarbageCollector(txn_manager);
+    // gc_ = new storage::GarbageCollector(txn_manager);
     run_gc_ = true;
     gc_thread_ = std::thread([this] { GCThreadLoop(); });
   }
@@ -64,10 +64,10 @@ class TPCCBenchmark : public benchmark::Fixture {
     compactor_thread_.join();
   }
 
-  const uint64_t blockstore_size_limit_ = 1000;
-  const uint64_t blockstore_reuse_limit_ = 1000;
-  const uint64_t buffersegment_size_limit_ = 1000000;
-  const uint64_t buffersegment_reuse_limit_ = 1000000;
+  const uint64_t blockstore_size_limit_ = 50000;
+  const uint64_t blockstore_reuse_limit_ = 50000;
+  const uint64_t buffersegment_size_limit_ = 5000000;
+  const uint64_t buffersegment_reuse_limit_ = 5000000;
   storage::BlockStore block_store_{blockstore_size_limit_, blockstore_reuse_limit_};
   storage::RecordBufferSegmentPool buffer_pool_{buffersegment_size_limit_, buffersegment_reuse_limit_};
   std::default_random_engine generator_;
@@ -76,8 +76,8 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::AccessObserver access_observer_{&compactor_};
 
   const bool only_count_new_order_ = false;
-  const int8_t num_threads_ = 4;
-  const uint32_t num_precomputed_txns_per_worker_ = 100000;
+  const int8_t num_threads_ = 8;
+  const uint32_t num_precomputed_txns_per_worker_ = 1000000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
