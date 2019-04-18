@@ -235,12 +235,13 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
         thread_pool_.SubmitTask([i, &tpcc_workload] { tpcc_workload(i); });
       }
       thread_pool_.WaitUntilAllFinished();
+      printf("transactions all submitted\n");
+      EndLogging();
     }
 
     tpcc_db->history_table_->table_.data_table->InspectTable();
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
     // cleanup
-    EndLogging();
     EndCompactor();
     EndGC();
     delete tpcc_db;

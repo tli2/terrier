@@ -582,11 +582,12 @@ class NewOrder {
                                                                      [](const storage::TupleSlot &) { return false; });
       TERRIER_ASSERT(index_insert_result, "Order Line index insertion failed.");
     }
-    bool done = false;
-    txn_manager->Commit(txn, Util::NotifyLogFinished, &done);
-    while (!done) {
-      std::this_thread::yield();
-    }
+//    bool done = false;
+//    txn_manager->Commit(txn, Util::NotifyLogFinished, &done);
+//    while (!done) {
+//      std::this_thread::yield();
+//    }
+    txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
 
     total_amount = total_amount * (1 - c_discount) * (1 + w_tax + d_tax);
 

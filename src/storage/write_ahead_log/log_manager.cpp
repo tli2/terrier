@@ -27,7 +27,7 @@ void LogManager::Process() {
       if (!commit_record->IsReadOnly()) commit_record->Txn()->log_processed_ = true;
     }
 //    }
-    out_.BufferWrite(buffer->bytes_, buffer->size_);
+    out_.WriteUnsynced(buffer->bytes_, buffer->size_);
     buffer_pool_->Release(buffer);
   }
   Flush();

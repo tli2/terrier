@@ -139,12 +139,12 @@ class StockLevel {
       low_stock = static_cast<uint8_t>(low_stock + static_cast<uint8_t>(it.second < args.s_quantity_threshold));
     }
 
-    bool done = false;
-    txn_manager->Commit(txn, Util::NotifyLogFinished, &done);
-    while (!done) {
-      std::this_thread::yield();
-    }
-    return true;
+//    bool done = false;
+//    txn_manager->Commit(txn, Util::NotifyLogFinished, &done);
+//    while (!done) {
+//      std::this_thread::yield();
+//    }
+    txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
   }
 };
 

@@ -268,12 +268,12 @@ class Delivery {
       }
     }
 
-    bool done = false;
-    txn_manager->Commit(txn, Util::NotifyLogFinished, &done);
-    while (!done) {
-      std::this_thread::yield();
-    }
-    return true;
+//    bool done = false;
+//    txn_manager->Commit(txn, Util::NotifyLogFinished, &done);
+//    while (!done) {
+//      std::this_thread::yield();
+//    }
+    txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
   }
 };
 
