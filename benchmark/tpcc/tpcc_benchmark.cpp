@@ -175,7 +175,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     // build the TPCC database
 
     auto *const tpcc_db = tpcc_builder.Build();
-    storage::DirtyGlobals::history = tpcc_db->history_table_->table_.data_table;
+    storage::DirtyGlobals::tpcc_db = tpcc_db;
 
     // prepare the workers
     workers.clear();

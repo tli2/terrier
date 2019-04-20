@@ -12,6 +12,7 @@
 #include "tpcc/workload.h"
 #include "transaction/transaction_manager.h"
 #include "util/transaction_benchmark_util.h"
+#include "storage/dirty_globals.h"
 
 namespace terrier::tpcc {
 
@@ -302,6 +303,38 @@ class NewOrder {
     }
 
     order_line_index_inserts_.reserve(15);
+
+   storage::DirtyGlobals::o_id_insert_pr_offset = o_id_insert_pr_offset;
+   storage::DirtyGlobals::o_d_id_insert_pr_offset = o_d_id_insert_pr_offset;
+   storage::DirtyGlobals::o_w_id_insert_pr_offset = o_w_id_insert_pr_offset;
+    storage::DirtyGlobals::o_c_id_insert_pr_offset = o_c_id_insert_pr_offset;
+    storage::DirtyGlobals::o_entry_d_insert_pr_offset = o_entry_d_insert_pr_offset;
+    storage::DirtyGlobals::o_carrier_id_insert_pr_offset = o_carrier_id_insert_pr_offset;
+    storage::DirtyGlobals::o_ol_cnt_insert_pr_offset = o_ol_cnt_insert_pr_offset;
+    storage::DirtyGlobals::o_all_local_insert_pr_offset = o_all_local_insert_pr_offset;
+
+    storage::DirtyGlobals::o_id_key_pr_offset = o_id_key_pr_offset;
+    storage::DirtyGlobals::o_d_id_key_pr_offset = o_d_id_key_pr_offset;
+    storage::DirtyGlobals::o_w_id_key_pr_offset = o_w_id_key_pr_offset;
+    storage::DirtyGlobals::o_id_secondary_key_pr_offset = o_id_secondary_key_pr_offset;
+    storage::DirtyGlobals::o_d_id_secondary_key_pr_offset = o_d_id_secondary_key_pr_offset;
+    storage::DirtyGlobals::o_w_id_secondary_key_pr_offset = o_w_id_secondary_key_pr_offset;
+    storage::DirtyGlobals::o_c_id_secondary_key_pr_offset = o_c_id_secondary_key_pr_offset;
+
+    storage::DirtyGlobals::ol_o_id_insert_pr_offset = ol_o_id_insert_pr_offset;
+    storage::DirtyGlobals::ol_d_id_insert_pr_offset = ol_d_id_insert_pr_offset;
+    storage::DirtyGlobals::ol_w_id_insert_pr_offset = ol_w_id_insert_pr_offset;
+    storage::DirtyGlobals::ol_number_insert_pr_offset = ol_number_insert_pr_offset;
+    storage::DirtyGlobals::ol_i_id_insert_pr_offset = ol_i_id_insert_pr_offset;
+    storage::DirtyGlobals::ol_supply_w_id_insert_pr_offset = ol_supply_w_id_insert_pr_offset;
+    storage::DirtyGlobals::ol_delivery_d_insert_pr_offset = ol_delivery_d_insert_pr_offset;
+    storage::DirtyGlobals::ol_quantity_insert_pr_offset = ol_quantity_insert_pr_offset;
+    storage::DirtyGlobals::ol_amount_insert_pr_offset = ol_amount_insert_pr_offset;
+    storage::DirtyGlobals::ol_dist_info_insert_pr_offset = ol_dist_info_insert_pr_offset;
+    storage::DirtyGlobals::ol_o_id_key_pr_offset = ol_o_id_key_pr_offset;
+    storage::DirtyGlobals::ol_d_id_key_pr_offset = ol_d_id_key_pr_offset;
+    storage::DirtyGlobals::ol_w_id_key_pr_offset = ol_w_id_key_pr_offset;
+    storage::DirtyGlobals::ol_number_key_pr_offset = ol_number_key_pr_offset;
   }
 
   // 2.4.2

@@ -4,6 +4,10 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <tpcc/database.h>
+#include "tpcc/database.h"
+#include "storage/sql_table.h"
+#include "storage/index/bwtree_index.h"
 namespace terrier{
   storage::DataTable *history;
 }
@@ -16,7 +20,6 @@ void NoOp(void * /* unused */) {}
 void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn_manager) {
   std::forward_list<std::pair<RawBlock *, DataTable *>> to_process = std::move(compaction_queue_);
   for (auto &entry : to_process) {
-    if (entry.second != storage::DirtyGlobals::history) continue;
     BlockAccessController &controller = entry.first->controller_;
     switch (controller.CurrentBlockState()) {
       case BlockState::HOT: {
@@ -36,7 +39,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
             cg.txn_->compacted_ = entry.first;
             cg.txn_->table_ = entry.second;
           }
-	  printf("compaction of block %p successful\n", entry.first);
+          printf("compaction of block %p successful\n", entry.first);
           txn_manager->Commit(cg.txn_, NoOp, nullptr);
         } else {
           printf("compaction of block %p failed!!!\n", entry.first);
@@ -54,7 +57,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
         GatherVarlens(txn, entry.first, entry.second);
         controller.GetBlockState()->store(BlockState::FROZEN);
         txn_manager->Commit(txn, NoOp, nullptr);
-	printf("Gathering of block %p successful!\n", entry.first);
+	    printf("Gathering of block %p successful!\n", entry.first);
         break;
       }
       default:
@@ -167,7 +170,40 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
 
   // The delete can fail if a concurrent transaction is updating said tuple. We will have to abort if this is
   // the case.
-  return cg->table_->Delete(cg->txn_, from);
+  bool ret = cg->table_->Delete(cg->txn_, from);
+  if (!ret) return false;
+  if (cg->table_ == DirtyGlobals::tpcc_db->history_table_->table_.data_table) {
+    // No compaction should ever happen
+    throw std::runtime_error("no compaction should happen on the history table");
+  } else if (cg->table_ == DirtyGlobals::tpcc_db->item_table_->table_.data_table) {
+    // No compaction should ever happen
+    throw std::runtime_error("no compaction should happen on the item table");
+  } else if (cg->table_ == DirtyGlobals::tpcc_db->order_table_->table_.data_table) {
+    throw std::runtime_error("why you delete order");
+  } else if (cg->table_ == DirtyGlobals::tpcc_db->order_line_table_->table_.data_table) {
+    const auto order_line_key_pr_initializer = DirtyGlobals::tpcc_db->order_line_index_->GetProjectedRowInitializer();
+    TERRIER_ASSERT(order_line_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
+    auto *const order_line_key = order_line_key_pr_initializer.InitializeRow(buf_);
+
+    std::memcpy(order_line_key->AccessForceNotNull(DirtyGlobals::ol_w_id_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_w_id_insert_pr_offset),
+                sizeof(int8_t));
+    std::memcpy(order_line_key->AccessForceNotNull(DirtyGlobals::ol_d_id_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_d_id_insert_pr_offset),
+                sizeof(int8_t));
+    std::memcpy(order_line_key->AccessForceNotNull(DirtyGlobals::ol_o_id_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_o_id_insert_pr_offset),
+                sizeof(int32_t));
+    std::memcpy(order_line_key->AccessForceNotNull(DirtyGlobals::ol_number_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_number_insert_pr_offset),
+                sizeof(int8_t));
+
+    bool index_ret UNUSED_ATTRIBUTE = DirtyGlobals::tpcc_db->order_line_index_->ConditionalInsert(*order_line_key, to,
+                                                                   [](const storage::TupleSlot &) { return false; });
+    return true;
+  } else {
+    throw std::runtime_error("unexpected table being compacted");
+  }
 }
 
 bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor, RawBlock *block) {

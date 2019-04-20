@@ -85,6 +85,13 @@ class Database {
   storage::index::Index *const order_secondary_index_;
   storage::index::Index *const order_line_index_;
 
+  bool ShouldTransform(storage::DataTable *table) {
+    return table == order_table_->table_.data_table
+        || table == history_table_->table_.data_table
+        || table == item_table_->table_.data_table
+        || table == order_line_table_->table_.data_table;
+  }
+
  private:
   friend class Builder;
 

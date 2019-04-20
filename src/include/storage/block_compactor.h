@@ -6,7 +6,7 @@
 #include "storage/data_table.h"
 #include "storage/storage_defs.h"
 #include "transaction/transaction_manager.h"
-
+#define BUF_SIZE 4096
 namespace terrier::storage {
 
 /**
@@ -94,5 +94,6 @@ class BlockCompactor {
   }
 
   std::forward_list<std::pair<RawBlock *, DataTable *>> compaction_queue_;
+  byte buf_[BUF_SIZE];
 };
 }  // namespace terrier::storage

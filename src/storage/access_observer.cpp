@@ -1,5 +1,7 @@
 #include "storage/access_observer.h"
 #include "storage/block_compactor.h"
+#include "storage/dirty_globals.h"
+#include "tpcc/database.h"
 
 namespace terrier::storage {
 void AccessObserver::ObserveGCInvocation() {
@@ -15,7 +17,8 @@ void AccessObserver::ObserveGCInvocation() {
 }
 
 void AccessObserver::ObserveWrite(DataTable *table, RawBlock *block) {
-  if (block->insert_head_ == table->accessor_.GetBlockLayout().NumSlots())
+  if (block->insert_head_ == table->accessor_.GetBlockLayout().NumSlots()
+      && DirtyGlobals::tpcc_db->ShouldTransform(table))
     last_touched_[block] = {gc_epoch_, table};
 }
 
