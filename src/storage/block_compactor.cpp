@@ -37,17 +37,17 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
             cg.txn_->compacted_ = entry.first;
             cg.txn_->table_ = entry.second;
           }
-          printf("compaction of block %p successful\n", entry.first);
+//          printf("compaction of block %p successful\n", entry.first);
           txn_manager->Commit(cg.txn_, NoOp, nullptr);
         } else {
-          printf("compaction of block %p failed!!!\n", entry.first);
+//          printf("compaction of block %p failed!!!\n", entry.first);
           txn_manager->Abort(cg.txn_);
         }
         break;
       }
       case BlockState::COOLING: {
         if (!CheckForVersionsAndGaps(entry.second->accessor_, entry.first)) {
-          printf("Gathering of block %p failed\n", entry.first);
+//          printf("Gathering of block %p failed\n", entry.first);
           continue;
         }
         // TODO(Tianyu): The use of transaction here is pretty sketchy	
@@ -55,7 +55,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
         GatherVarlens(txn, entry.first, entry.second);
         controller.GetBlockState()->store(BlockState::FROZEN);
         txn_manager->Commit(txn, NoOp, nullptr);
-        printf("Gathering of block %p successful!\n", entry.first);
+//        printf("Gathering of block %p successful!\n", entry.first);
         break;
       }
       case BlockState::FROZEN:
@@ -146,7 +146,7 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   // Read out the tuple to copy
   RedoRecord *record = cg->txn_->StageWrite(cg->table_, to, cg->all_cols_initializer_);
   bool valid UNUSED_ATTRIBUTE = cg->table_->Select(cg->txn_, from, record->Delta());
-  TERRIER_ASSERT(valid, "this read should not return an invisible tuple");
+  if (!valid) return false;
   // Because the GC will assume all varlen pointers are unique and deallocate the same underlying
   // varlen for every update record, we need to mark subsequent records that reference the same
   // varlen value as not reclaimable so as to not double-free
@@ -185,14 +185,6 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
     const auto order_key_pr_initializer = DirtyGlobals::tpcc_db->order_index_->GetProjectedRowInitializer();
     TERRIER_ASSERT(order_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
     auto *const order_key = order_key_pr_initializer.InitializeRow(buf_);
-    if (record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset) == nullptr)
-      printf("id null\n");
-    if (record->Delta()->AccessWithNullCheck(DirtyGlobals::o_d_id_insert_pr_offset) == nullptr)
-      printf("d id null\n");
-    if (record->Delta()->AccessWithNullCheck(DirtyGlobals::o_w_id_insert_pr_offset) == nullptr)
-      printf("w id null\n");
-    if (record->Delta()->AccessWithNullCheck(DirtyGlobals::o_c_id_insert_pr_offset) == nullptr)
-      printf("c id null\n");
 
     std::memcpy(order_key->AccessForceNotNull(DirtyGlobals::o_id_key_pr_offset),
                 record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
@@ -214,16 +206,16 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
                 record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
                 sizeof(int32_t));
     std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_d_id_secondary_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_d_id_insert_pr_offset),
                 sizeof(int8_t));
-    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_w_id_key_pr_offset),
+    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_w_id_secondary_key_pr_offset),
                 record->Delta()->AccessWithNullCheck(DirtyGlobals::o_w_id_insert_pr_offset),
                 sizeof(int8_t));
     std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_c_id_secondary_key_pr_offset),
                 record->Delta()->AccessWithNullCheck(DirtyGlobals::o_c_id_insert_pr_offset),
                 sizeof(int32_t));
     DirtyGlobals::tpcc_db->order_secondary_index_->Insert(*order_secondary_key, to);
-
+    return true;
   } else if (cg->table_ == DirtyGlobals::tpcc_db->order_line_table_->table_.data_table) {
     const auto order_line_key_pr_initializer = DirtyGlobals::tpcc_db->order_line_index_->GetProjectedRowInitializer();
     TERRIER_ASSERT(order_line_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
@@ -247,7 +239,6 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   } else {
     throw std::runtime_error("unexpected table being compacted");
   }
-  throw std::runtime_error("WTF");
 }
 
 bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor, RawBlock *block) {
@@ -276,7 +267,7 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
 
     // Not contiguous. If the code reaches here the slot must be allocated, and we have seen an unallocated slot before
     if (unallocated_region_start) {
-      printf("not contiguous\n");
+//      printf("not contiguous\n");
       return false;
     }
 
@@ -284,7 +275,7 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
     // Check that there are no versions alive
     auto *record = version_ptrs[offset];
     if (record != nullptr) {
-      printf("has versions\n");
+//      printf("has versions\n");
       return false;
     }
   }
@@ -295,7 +286,7 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
   // At this point we are guaranteed to complete the transformation process. We can start modifying block
   // header in place.
   if (ret) accessor.GetArrowBlockMetadata(block).NumRecords() = num_records;
-  if (!ret) printf("compare exchange failed\n");
+//  if (!ret) printf("compare exchange failed\n");
   return ret;
 }
 
