@@ -356,7 +356,7 @@ class NewOrder {
     *reinterpret_cast<int8_t *>(warehouse_key->AccessForceNotNull(0)) = args.w_id;
 
     std::vector<storage::TupleSlot> index_scan_results;
-    db->warehouse_index_->ScanKey(*warehouse_key, &index_scan_results);
+    db->warehouse_index_->ScanKey(*txn, *warehouse_key, &index_scan_results);
     TERRIER_ASSERT(index_scan_results.size() == 1, "Warehouse index lookup failed.");
 
     // Select W_TAX in table
@@ -374,7 +374,7 @@ class NewOrder {
     *reinterpret_cast<int8_t *>(district_key->AccessForceNotNull(d_w_id_key_pr_offset)) = args.w_id;
 
     index_scan_results.clear();
-    db->district_index_->ScanKey(*district_key, &index_scan_results);
+    db->district_index_->ScanKey(*txn, *district_key, &index_scan_results);
     TERRIER_ASSERT(index_scan_results.size() == 1, "District index lookup failed.");
 
     // Select D_TAX, D_NEXT_O_ID in table
@@ -402,7 +402,7 @@ class NewOrder {
     *reinterpret_cast<int8_t *>(customer_key->AccessForceNotNull(c_w_id_key_pr_offset)) = args.w_id;
 
     index_scan_results.clear();
-    db->customer_index_->ScanKey(*customer_key, &index_scan_results);
+    db->customer_index_->ScanKey(*txn, *customer_key, &index_scan_results);
     TERRIER_ASSERT(index_scan_results.size() == 1, "Customer index lookup failed.");
 
     // Select C_DISCOUNT, C_LAST, and C_CREDIT in table
@@ -444,7 +444,7 @@ class NewOrder {
       auto *const item_key = item_key_pr_initializer.InitializeRow(worker->item_key_buffer);
       *reinterpret_cast<int32_t *>(item_key->AccessForceNotNull(0)) = item.ol_i_id;
       index_scan_results.clear();
-      db->item_index_->ScanKey(*item_key, &index_scan_results);
+      db->item_index_->ScanKey(*txn, *item_key, &index_scan_results);
 
       if (index_scan_results.empty()) {
         TERRIER_ASSERT(item.ol_i_id == 8491138, "It's the unused value.");
@@ -471,7 +471,7 @@ class NewOrder {
       *reinterpret_cast<int8_t *>(stock_key->AccessForceNotNull(s_w_id_key_pr_offset)) = item.ol_supply_w_id;
 
       index_scan_results.clear();
-      db->stock_index_->ScanKey(*stock_key, &index_scan_results);
+      db->stock_index_->ScanKey(*txn, *stock_key, &index_scan_results);
       TERRIER_ASSERT(index_scan_results.size() == 1, "Stock index lookup failed.");
 
       // Select S_QUANTITY, S_DIST_xx (xx = args.d_id), S_YTD, S_ORDER_CNT, S_REMOTE_CNT, S_DATA in table
@@ -572,8 +572,7 @@ class NewOrder {
     *reinterpret_cast<int8_t *>(new_order_key->AccessForceNotNull(no_d_id_key_pr_offset)) = args.d_id;
     *reinterpret_cast<int8_t *>(new_order_key->AccessForceNotNull(no_w_id_key_pr_offset)) = args.w_id;
 
-    bool UNUSED_ATTRIBUTE index_insert_result = db->new_order_index_->ConditionalInsert(
-        *new_order_key, new_order_slot, [](const storage::TupleSlot &) { return false; });
+    bool UNUSED_ATTRIBUTE index_insert_result = db->new_order_index_->InsertUnique(*txn, *new_order_key, new_order_slot);
     TERRIER_ASSERT(index_insert_result, "New Order index insertion failed.");
 
     // insert in Order index
@@ -585,7 +584,7 @@ class NewOrder {
     *reinterpret_cast<int8_t *>(order_key->AccessForceNotNull(o_w_id_key_pr_offset)) = args.w_id;
 
     index_insert_result =
-        db->order_index_->ConditionalInsert(*order_key, order_slot, [](const storage::TupleSlot &) { return false; });
+        db->order_index_->InsertUnique(*txn, *order_key, order_slot);
     TERRIER_ASSERT(index_insert_result, "Order index insertion failed.");
 
     // insert in Order secondary index
@@ -611,8 +610,7 @@ class NewOrder {
       *reinterpret_cast<int32_t *>(order_line_key->AccessForceNotNull(ol_o_id_key_pr_offset)) = ol_item.o_id;
       *reinterpret_cast<int8_t *>(order_line_key->AccessForceNotNull(ol_number_key_pr_offset)) = ol_item.ol_number;
 
-      index_insert_result = db->order_line_index_->ConditionalInsert(*order_line_key, ol_item.slot,
-                                                                     [](const storage::TupleSlot &) { return false; });
+      index_insert_result = db->order_line_index_->InsertUnique(*txn, *order_line_key, ol_item.slot);
       TERRIER_ASSERT(index_insert_result, "Order Line index insertion failed.");
     }
 //    bool done = false;

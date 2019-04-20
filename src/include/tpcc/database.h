@@ -2,18 +2,10 @@
 
 #include <utility>
 #include "common/macros.h"
-
-namespace terrier::storage {
-class SqlTable;
-namespace index {
-class Index;
-}
-}  // namespace terrier::storage
-
-namespace terrier::catalog {
-class Schema;
-}
-
+#include "storage/index/index_defs.h"
+#include "storage/index/index.h"
+#include "storage/sql_table.h"
+#include "catalog/schema.h"
 // TODO(Matt): it seems many fields can be smaller than INTEGER
 
 namespace terrier::tpcc {
@@ -86,8 +78,7 @@ class Database {
   storage::index::Index *const order_line_index_;
 
   bool ShouldTransform(storage::DataTable *table) {
-    return table == order_table_->table_.data_table
-        || table == history_table_->table_.data_table
+    return  table == history_table_->table_.data_table
         || table == item_table_->table_.data_table
         || table == order_line_table_->table_.data_table;
   }

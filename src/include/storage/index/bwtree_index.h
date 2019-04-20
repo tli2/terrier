@@ -27,8 +27,8 @@ class BwTreeIndex final : public Index {
   ~BwTreeIndex() final { delete bwtree_; }
 
   bool Insert(const ProjectedRow &tuple, const TupleSlot location) final {
-    TERRIER_ASSERT(GetConstraintType() == ConstraintType::DEFAULT,
-                   "This Insert is designed for secondary indexes with no uniqueness constraints.");
+//    TERRIER_ASSERT(GetConstraintType() == ConstraintType::DEFAULT,
+//                   "This Insert is designed for secondary indexes with no uniqueness constraints.");
     KeyType index_key;
     index_key.SetFromProjectedRow(tuple, metadata_);
     return bwtree_->Insert(index_key, location, false);

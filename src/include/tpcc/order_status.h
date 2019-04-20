@@ -153,7 +153,7 @@ class OrderStatus {
       *reinterpret_cast<int8_t *>(customer_key->AccessForceNotNull(c_w_id_key_pr_offset)) = args.w_id;
 
       index_scan_results.clear();
-      db->customer_index_->ScanKey(*customer_key, &index_scan_results);
+      db->customer_index_->ScanKey(*txn, *customer_key, &index_scan_results);
       TERRIER_ASSERT(index_scan_results.size() == 1, "Customer index lookup failed.");
       customer_slot = index_scan_results[0];
     } else {
@@ -167,7 +167,7 @@ class OrderStatus {
       *reinterpret_cast<int8_t *>(customer_name_key->AccessForceNotNull(c_w_id_name_key_pr_offset)) = args.w_id;
 
       index_scan_results.clear();
-      db->customer_name_index_->ScanKey(*customer_name_key, &index_scan_results);
+      db->customer_name_index_->ScanKey(*txn, *customer_name_key, &index_scan_results);
       TERRIER_ASSERT(!index_scan_results.empty(), "Customer Name index lookup failed.");
 
       if (index_scan_results.size() > 1) {
@@ -221,7 +221,7 @@ class OrderStatus {
     *reinterpret_cast<int32_t *>(order_secondary_high_key->AccessForceNotNull(o_c_id_secondary_key_pr_offset)) = c_id;
 
     index_scan_results.clear();
-    db->order_secondary_index_->Scan(*order_secondary_low_key, *order_secondary_high_key, &index_scan_results);
+    db->order_secondary_index_->ScanAscending(*txn, *order_secondary_low_key, *order_secondary_high_key, &index_scan_results);
     TERRIER_ASSERT(!index_scan_results.empty(),
                    "Order index lookup failed. There should always be at least one order for each customer.");
 
@@ -250,10 +250,10 @@ class OrderStatus {
     *reinterpret_cast<int32_t *>(order_line_high_key->AccessForceNotNull(ol_o_id_key_pr_offset)) = o_id;
 
     index_scan_results.clear();
-    db->order_line_index_->Scan(*order_line_low_key, *order_line_high_key, &index_scan_results);
+    db->order_line_index_->ScanAscending(*txn, *order_line_low_key, *order_line_high_key, &index_scan_results);
 
-    TERRIER_ASSERT(!index_scan_results.empty() && index_scan_results.size() <= 15,
-                   "There should be at least 1 Order Line item, but no more than 15.");
+//    TERRIER_ASSERT(!index_scan_results.empty() && index_scan_results.size() <= 15,
+//                   "There should be at least 1 Order Line item, but no more than 15.");
 
     // Select OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DELIVERY_D for every result of the index scan
     auto *const order_line_select_tuple =

@@ -9,9 +9,6 @@
 #include "storage/sql_table.h"
 #include "storage/index/bwtree_index.h"
 #include "storage/index/index_defs.h"
-namespace terrier{
-  storage::DataTable *history;
-}
 namespace terrier::storage {
 namespace {
 // for empty callback
@@ -50,18 +47,22 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
       }
       case BlockState::COOLING: {
         if (!CheckForVersionsAndGaps(entry.second->accessor_, entry.first)) {
-		printf("Gathering of block %p failed\n", entry.first);
-		continue;
-	}
+          printf("Gathering of block %p failed\n", entry.first);
+          continue;
+        }
         // TODO(Tianyu): The use of transaction here is pretty sketchy	
         transaction::TransactionContext *txn = txn_manager->BeginTransaction();
         GatherVarlens(txn, entry.first, entry.second);
         controller.GetBlockState()->store(BlockState::FROZEN);
         txn_manager->Commit(txn, NoOp, nullptr);
-	    printf("Gathering of block %p successful!\n", entry.first);
+        printf("Gathering of block %p successful!\n", entry.first);
         break;
       }
+      case BlockState::FROZEN:
+        printf("WTF, frozen\n");
+        throw std::runtime_error("unexpected control flow");
       default:
+        printf("WTF, freezing\n");
         throw std::runtime_error("unexpected control flow");
     }
   }
@@ -109,7 +110,8 @@ bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
   // Because we constructed the filled list from sequential scan, slots will always appear in order. We
   // essentially will fill gaps in order, by using the real tuples in reverse order. (Take the last tuple to
   // fill the first empty slot)
-  for (auto taker = all_blocks.begin(), giver = all_blocks.end(); taker <= giver && taker != all_blocks.end(); taker++) {
+  for (auto taker = all_blocks.begin(), giver = all_blocks.end(); taker <= giver && taker != all_blocks.end();
+       taker++) {
     // Again, we know these finds will not return end() because we constructed the vector from the map
     std::vector<uint32_t> &taker_empty = cg->blocks_to_compact_.find(*taker)->second;
 
@@ -175,12 +177,13 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   if (!ret) return false;
   if (cg->table_ == DirtyGlobals::tpcc_db->history_table_->table_.data_table) {
     // No compaction should ever happen
-    throw std::runtime_error("no compaction should happen on the history table");
+//    throw std::runtime_error("no compaction should happen on the history table");
+    return true;
   } else if (cg->table_ == DirtyGlobals::tpcc_db->item_table_->table_.data_table) {
     // No compaction should ever happen
     throw std::runtime_error("no compaction should happen on the item table");
   } else if (cg->table_ == DirtyGlobals::tpcc_db->order_table_->table_.data_table) {
-    throw std::runtime_error("why you delete order");
+//    throw std::runtime_error("why you delete order");
   } else if (cg->table_ == DirtyGlobals::tpcc_db->order_line_table_->table_.data_table) {
     const auto order_line_key_pr_initializer = DirtyGlobals::tpcc_db->order_line_index_->GetProjectedRowInitializer();
     TERRIER_ASSERT(order_line_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
@@ -199,12 +202,12 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
                 record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_number_insert_pr_offset),
                 sizeof(int8_t));
 
-    bool index_ret UNUSED_ATTRIBUTE = DirtyGlobals::tpcc_db->order_line_index_->ConditionalInsert(*order_line_key, to,
-                                                                   [](const storage::TupleSlot &) { return false; });
+    bool index_ret UNUSED_ATTRIBUTE = DirtyGlobals::tpcc_db->order_line_index_->Insert(*order_line_key, to);
     return true;
   } else {
     throw std::runtime_error("unexpected table being compacted");
   }
+  throw std::runtime_error("WTF");
 }
 
 bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor, RawBlock *block) {
@@ -233,16 +236,16 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
 
     // Not contiguous. If the code reaches here the slot must be allocated, and we have seen an unallocated slot before
     if (unallocated_region_start) {
-	    printf("not contiguous\n");
-	    return false;
+      printf("not contiguous\n");
+      return false;
     }
-	
+
 
     // Check that there are no versions alive
     auto *record = version_ptrs[offset];
     if (record != nullptr) {
-	    printf("has versions\n");
-	    return false;
+      printf("has versions\n");
+      return false;
     }
   }
   // Check that no other transaction has modified the canary in the block header. If we fail it's okay
@@ -274,14 +277,17 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
     ArrowColumnInfo &col_info = metadata.GetColumnInfo(layout, col_id);
     auto *values = reinterpret_cast<VarlenEntry *>(accessor.ColumnStart(block, col_id));
     switch (col_info.Type()) {
-      case ArrowColumnType::GATHERED_VARLEN:
-        CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
+      case ArrowColumnType::GATHERED_VARLEN:CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
         break;
       case ArrowColumnType::DICTIONARY_COMPRESSED:
-        BuildDictionary(txn, &metadata, col_id, column_bitmap, &col_info, values);
+        BuildDictionary(txn,
+                        &metadata,
+                        col_id,
+                        column_bitmap,
+                        &col_info,
+                        values);
         break;
-      default:
-        throw std::runtime_error("unexpected control flow");
+      default:throw std::runtime_error("unexpected control flow");
     }
   }
 }

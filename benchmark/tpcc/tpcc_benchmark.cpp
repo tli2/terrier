@@ -39,8 +39,8 @@ class TPCCBenchmark : public benchmark::Fixture {
 
   void StartGC(transaction::TransactionManager *const txn_manager) {
 
-//    gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
-    gc_ = new storage::GarbageCollector(txn_manager);
+    gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
+//    gc_ = new storage::GarbageCollector(txn_manager);
     run_gc_ = true;
     gc_thread_ = std::thread([this] { GCThreadLoop(); });
   }
@@ -76,7 +76,7 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::AccessObserver access_observer_{&compactor_};
 
   const bool only_count_new_order_ = false;
-  const int8_t num_threads_ = 8;
+  const int8_t num_threads_ = 2;
   const uint32_t num_precomputed_txns_per_worker_ = 1000000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
@@ -133,8 +133,8 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
   thread_pool_.Startup();
 
   // we need transactions, TPCC database, and GC
-  log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
-  transaction::TransactionManager txn_manager(&buffer_pool_, true, log_manager_);
+//  log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
+  transaction::TransactionManager txn_manager(&buffer_pool_, true, LOGGING_DISABLED);
   auto tpcc_builder = tpcc::Builder(&block_store_);
 
   // random number generation is slow, so we precompute the args
@@ -182,12 +182,12 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     for (int8_t i = 0; i < num_threads_; i++) {
       workers.emplace_back(tpcc_db);
     }
-
+    printf("loading database...\n");
     tpcc::Loader::PopulateDatabase(&txn_manager, &generator_, tpcc_db, workers);
-    log_manager_->Process();  // log all of the Inserts from table creation
+//    log_manager_->Process();  // log all of the Inserts from table creation
     StartGC(&txn_manager);
 
-    StartLogging();
+//    StartLogging();
     std::this_thread::sleep_for(std::chrono::seconds(1));  // Let GC clean up
     StartCompactor(&txn_manager);
     // define the TPCC workload
@@ -226,7 +226,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
         }
       }
     };
-
+    printf("starting workload\n");
     // run the TPCC workload to completion
     uint64_t elapsed_ms;
     {
@@ -236,7 +236,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
       }
       thread_pool_.WaitUntilAllFinished();
       printf("transactions all submitted\n");
-      EndLogging();
+//      EndLogging();
     }
 
     tpcc_db->history_table_->table_.data_table->InspectTable();

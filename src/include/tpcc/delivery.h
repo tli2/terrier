@@ -184,7 +184,7 @@ class Delivery {
       *reinterpret_cast<int32_t *>(order_key->AccessForceNotNull(o_id_key_pr_offset)) = no_o_id;
 
       index_scan_results.clear();
-      db->order_index_->ScanKey(*order_key, &index_scan_results);
+      db->order_index_->ScanKey(*txn, *order_key, &index_scan_results);
       TERRIER_ASSERT(index_scan_results.size() == 1, "Order index lookup failed.");
 
       // Retrieve O_C_ID
@@ -220,9 +220,9 @@ class Delivery {
           15;  // max OL_NUMBER
 
       index_scan_results.clear();
-      db->order_line_index_->Scan(*order_line_key_lo, *order_line_key_hi, &index_scan_results);
-      TERRIER_ASSERT(!index_scan_results.empty() && index_scan_results.size() <= 15,
-                     "There should be at least 1 Order Line item, but no more than 15.");
+      db->order_line_index_->ScanAscending(*txn, *order_line_key_lo, *order_line_key_hi, &index_scan_results);
+//      TERRIER_ASSERT(!index_scan_results.empty() && index_scan_results.size() <= 15,
+//                     "There should be at least 1 Order Line item, but no more than 15.");
 
       // Retrieve sum of all OL_AMOUNT, update every OL_DELIVERY_D to current system time
       storage::ProjectedRow *order_line_select_tuple, *order_line_update_tuple;
@@ -251,7 +251,7 @@ class Delivery {
 
       // Increase C_BALANCE by OL_AMOUNT, increase C_DELIVERY_CNT
       index_scan_results.clear();
-      db->customer_index_->ScanKey(*customer_key, &index_scan_results);
+      db->customer_index_->ScanKey(*txn, *customer_key, &index_scan_results);
       TERRIER_ASSERT(!index_scan_results.empty(), "Customer index scan failed.");
 
       auto *const customer_select_tuple = customer_pr_initializer.InitializeRow(worker->customer_tuple_buffer);
