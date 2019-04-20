@@ -227,13 +227,13 @@ class DataTable {
           printf("number of hot blocks %u\n", entry.second);
           break;
         case BlockState::COOLING:
-          printf("number of hot blocks %u\n", entry.second);
+          printf("number of cooling blocks %u\n", entry.second);
           break;
         case BlockState::FREEZING:
-          printf("number of hot blocks %u\n", entry.second);
+          printf("number of freezing blocks %u\n", entry.second);
           break;
         case BlockState::FROZEN:
-          printf("number of hot blocks %u\n", entry.second);
+          printf("number of frozen blocks %u\n", entry.second);
           break;
       }
     }

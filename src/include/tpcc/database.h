@@ -80,6 +80,7 @@ class Database {
   bool ShouldTransform(storage::DataTable *table) {
     return  table == history_table_->table_.data_table
         || table == item_table_->table_.data_table
+        || table == order_table_->table_.data_table
         || table == order_line_table_->table_.data_table;
   }
 

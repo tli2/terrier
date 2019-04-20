@@ -238,8 +238,14 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
       printf("transactions all submitted\n");
 //      EndLogging();
     }
-
+    printf("history table:\n");
     tpcc_db->history_table_->table_.data_table->InspectTable();
+    printf("item table:\n");
+    tpcc_db->item_table_->table_.data_table->InspectTable();
+    printf("order table:\n");
+    tpcc_db->order_table_->table_.data_table->InspectTable();
+    printf("order_line table:\n");
+    tpcc_db->order_line_table_->table_.data_table->InspectTable();
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
     // cleanup
     EndCompactor();

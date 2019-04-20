@@ -176,14 +176,46 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   bool ret = cg->table_->Delete(cg->txn_, from);
   if (!ret) return false;
   if (cg->table_ == DirtyGlobals::tpcc_db->history_table_->table_.data_table) {
-    // No compaction should ever happen
+    // No Indexes
 //    throw std::runtime_error("no compaction should happen on the history table");
     return true;
   } else if (cg->table_ == DirtyGlobals::tpcc_db->item_table_->table_.data_table) {
     // No compaction should ever happen
     throw std::runtime_error("no compaction should happen on the item table");
   } else if (cg->table_ == DirtyGlobals::tpcc_db->order_table_->table_.data_table) {
-//    throw std::runtime_error("why you delete order");
+    const auto order_key_pr_initializer = DirtyGlobals::tpcc_db->order_index_->GetProjectedRowInitializer();
+    TERRIER_ASSERT(order_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
+    auto *const order_key = order_key_pr_initializer.InitializeRow(buf_);
+    std::memcpy(order_key->AccessForceNotNull(DirtyGlobals::o_id_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
+                sizeof(int32_t));
+    std::memcpy(order_key->AccessForceNotNull(DirtyGlobals::o_d_id_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_d_id_insert_pr_offset),
+                sizeof(int8_t));
+    std::memcpy(order_key->AccessForceNotNull(DirtyGlobals::o_w_id_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_w_id_insert_pr_offset),
+                sizeof(int8_t));
+    DirtyGlobals::tpcc_db->order_index_->Insert(*order_key, to);
+
+    // insert in Order secondary index
+    const auto order_secondary_key_pr_initializer = DirtyGlobals::tpcc_db->order_secondary_index_->GetProjectedRowInitializer();
+    TERRIER_ASSERT(order_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
+    auto *const order_secondary_key =
+        order_secondary_key_pr_initializer.InitializeRow(buf_);
+    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_id_secondary_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
+                sizeof(int32_t));
+    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_d_id_secondary_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
+                sizeof(int8_t));
+    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_w_id_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_w_id_insert_pr_offset),
+                sizeof(int8_t));
+    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_c_id_secondary_key_pr_offset),
+                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_c_id_insert_pr_offset),
+                sizeof(int32_t));
+    DirtyGlobals::tpcc_db->order_secondary_index_->Insert(*order_secondary_key, to);
+
   } else if (cg->table_ == DirtyGlobals::tpcc_db->order_line_table_->table_.data_table) {
     const auto order_line_key_pr_initializer = DirtyGlobals::tpcc_db->order_line_index_->GetProjectedRowInitializer();
     TERRIER_ASSERT(order_line_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
@@ -202,7 +234,7 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
                 record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_number_insert_pr_offset),
                 sizeof(int8_t));
 
-    bool index_ret UNUSED_ATTRIBUTE = DirtyGlobals::tpcc_db->order_line_index_->Insert(*order_line_key, to);
+    DirtyGlobals::tpcc_db->order_line_index_->Insert(*order_line_key, to);
     return true;
   } else {
     throw std::runtime_error("unexpected table being compacted");
