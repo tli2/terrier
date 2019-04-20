@@ -8,6 +8,7 @@
 #include "tpcc/database.h"
 #include "storage/sql_table.h"
 #include "storage/index/bwtree_index.h"
+#include "storage/index/index_defs.h"
 namespace terrier{
   storage::DataTable *history;
 }
