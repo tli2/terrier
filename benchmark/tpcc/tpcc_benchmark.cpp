@@ -76,7 +76,7 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::AccessObserver access_observer_{&compactor_};
 
   const bool only_count_new_order_ = false;
-  const int8_t num_threads_ = 2;
+  const int8_t num_threads_ = 1;
   const uint32_t num_precomputed_txns_per_worker_ = 1000000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;

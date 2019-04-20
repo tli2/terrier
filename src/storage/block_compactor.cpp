@@ -185,6 +185,15 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
     const auto order_key_pr_initializer = DirtyGlobals::tpcc_db->order_index_->GetProjectedRowInitializer();
     TERRIER_ASSERT(order_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
     auto *const order_key = order_key_pr_initializer.InitializeRow(buf_);
+    if (record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset) == nullptr)
+      printf("id null\n");
+    if (record->Delta()->AccessWithNullCheck(DirtyGlobals::o_d_id_insert_pr_offset) == nullptr)
+      printf("d id null\n");
+    if (record->Delta()->AccessWithNullCheck(DirtyGlobals::o_w_id_insert_pr_offset) == nullptr)
+      printf("w id null\n");
+    if (record->Delta()->AccessWithNullCheck(DirtyGlobals::o_c_id_insert_pr_offset) == nullptr)
+      printf("c id null\n");
+
     std::memcpy(order_key->AccessForceNotNull(DirtyGlobals::o_id_key_pr_offset),
                 record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
                 sizeof(int32_t));
