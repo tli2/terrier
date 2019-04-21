@@ -42,7 +42,7 @@ class AccessObserver {
    * Notice that not all writes will be captured in this case. For example, an aborted transaction might not show up
    * here. All committed transactions are guaranteed to show up here.
    */
-  void ObserveWrite(DataTable *table, RawBlock *slot);
+  void ObserveWrite(RawBlock *slot);
 
  private:
   uint64_t gc_epoch_ = 0;  // estimate time using the number of times GC has run
@@ -51,7 +51,7 @@ class AccessObserver {
   // Here RawBlock * should suffice as a unique identifier of the block. Although a block can be
   // reused, that process should only be triggered through compaction, which happens only if the
   // reference to said block is identified as cold and leaves the table.
-  std::unordered_map<RawBlock *, std::pair<uint64_t, DataTable *>> last_touched_;
+  std::unordered_map<RawBlock *, uint64_t> last_touched_;
   // Sorted table references by epoch. We can easily do range scans on this data structure to get
   // cold blocks given current epoch and some threshold for a block to be cold.
 //  std::map<uint64_t, std::unordered_map<RawBlock *, DataTable *>> table_references_by_epoch_;

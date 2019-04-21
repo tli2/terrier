@@ -245,6 +245,7 @@ class Delivery {
           txn_manager->Abort(txn);
           return false;
         }
+      }
 
       // Look up C_W_ID, C_D_ID, C_ID
       const auto customer_key_pr_initializer = db->customer_index_->GetProjectedRowInitializer();

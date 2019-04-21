@@ -16,26 +16,26 @@ void NoOp(void * /* unused */) {}
 }  // namespace
 
 void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn_manager) {
-  std::forward_list<std::pair<RawBlock *, DataTable *>> to_process = std::move(compaction_queue_);
-  for (auto &entry : to_process) {
-    BlockAccessController &controller = entry.first->controller_;
+  std::forward_list<RawBlock *> to_process = std::move(compaction_queue_);
+  for (auto &block : to_process) {
+    BlockAccessController &controller = block->controller_;
     switch (controller.CurrentBlockState()) {
       case BlockState::HOT: {
         // TODO(Tianyu): This is probably fine for now, but we will want to not only compact within a block
         // but also across blocks to eventually free up slots
-        CompactionGroup cg(txn_manager->BeginTransaction(), entry.second);
-        cg.blocks_to_compact_.emplace(entry.first, std::vector<uint32_t>());
+        CompactionGroup cg(txn_manager->BeginTransaction(), block->data_table_);
+        cg.blocks_to_compact_.emplace(block, std::vector<uint32_t>());
 
         // Block can still be inserted into. Hands off.
-        if (entry.first->insert_head_ != entry.second->accessor_.GetBlockLayout().NumSlots()) continue;
+        if (block->insert_head_ != block->data_table_->accessor_.GetBlockLayout().NumSlots()) continue;
 
         if (EliminateGaps(&cg)) {
           // Has to mark block as cooling before transaction commit, so we have a guarantee that
           // any older transactions
           controller.GetBlockState()->store(BlockState::COOLING);
           if (cg.txn_->IsReadOnly()) {
-            cg.txn_->compacted_ = entry.first;
-            cg.txn_->table_ = entry.second;
+            cg.txn_->compacted_ = block;
+            cg.txn_->table_ = block->data_table_;
           }
 //          printf("compaction of block %p successful\n", entry.first);
           txn_manager->Commit(cg.txn_, NoOp, nullptr);
@@ -46,13 +46,13 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
         break;
       }
       case BlockState::COOLING: {
-        if (!CheckForVersionsAndGaps(entry.second->accessor_, entry.first)) {
+        if (!CheckForVersionsAndGaps(block->data_table_->accessor_, block)) {
 //          printf("Gathering of block %p failed\n", entry.first);
           continue;
         }
         // TODO(Tianyu): The use of transaction here is pretty sketchy	
         transaction::TransactionContext *txn = txn_manager->BeginTransaction();
-        GatherVarlens(txn, entry.first, entry.second);
+        GatherVarlens(txn, block, block->data_table_);
         controller.GetBlockState()->store(BlockState::FROZEN);
         txn_manager->Commit(txn, NoOp, nullptr);
 //        printf("Gathering of block %p successful!\n", entry.first);

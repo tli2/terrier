@@ -62,7 +62,7 @@ class BlockCompactor {
    * Adds a block associated with a data table to the compaction to be processed in the future.
    * @param entry the block (and its parent data table) that needs to be processed by the compactor
    */
-  void PutInQueue(const std::pair<RawBlock *, DataTable *> &entry) { compaction_queue_.push_front(entry); }
+  void PutInQueue(RawBlock *block) { compaction_queue_.push_front(block); }
 
  private:
   bool EliminateGaps(CompactionGroup *cg);
@@ -93,7 +93,7 @@ class BlockCompactor {
     }
   }
 
-  std::forward_list<std::pair<RawBlock *, DataTable *>> compaction_queue_;
+  std::forward_list<RawBlock *> compaction_queue_;
   byte buf_[BUF_SIZE];
 };
 }  // namespace terrier::storage

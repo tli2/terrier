@@ -35,6 +35,7 @@ void TupleAccessStrategy::InitializeRawBlock(RawBlock *const raw, const layout_v
   // Intentional unsafe cast
   raw->layout_version_ = layout_version;
   raw->insert_head_ = 0;
+  raw->controller_.Initialize();
   auto *result = reinterpret_cast<TupleAccessStrategy::Block *>(raw);
   result->GetArrowBlockMetadata().Initialize(GetBlockLayout().NumColumns());
   auto &arrow_metadata = GetArrowBlockMetadata(raw);

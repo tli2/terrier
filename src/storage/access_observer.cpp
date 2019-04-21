@@ -7,8 +7,8 @@ namespace terrier::storage {
 void AccessObserver::ObserveGCInvocation() {
   gc_epoch_++;
   for (auto it = last_touched_.begin(), end = last_touched_.end(); it != end;) {
-    if (it->second.first + COLD_DATA_EPOCH_THRESHOLD < gc_epoch_) {
-      compactor_->PutInQueue({it->first, it->second.second});
+    if (it->second + COLD_DATA_EPOCH_THRESHOLD < gc_epoch_) {
+      compactor_->PutInQueue(it->first);
       it = last_touched_.erase(it);
     } else {
       ++it;
@@ -16,10 +16,10 @@ void AccessObserver::ObserveGCInvocation() {
   }
 }
 
-void AccessObserver::ObserveWrite(DataTable *table, RawBlock *block) {
-  if (block->insert_head_ == table->accessor_.GetBlockLayout().NumSlots()
-      && DirtyGlobals::tpcc_db->ShouldTransform(table))
-    last_touched_[block] = {gc_epoch_, table};
+void AccessObserver::ObserveWrite(RawBlock *block) {
+  if (block->insert_head_ == block->data_table_->accessor_.GetBlockLayout().NumSlots()
+      && DirtyGlobals::tpcc_db->ShouldTransform(block->data_table_))
+    last_touched_[block] = gc_epoch_;
 }
 
 }  // namespace terrier::storage
