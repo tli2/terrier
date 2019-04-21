@@ -25,7 +25,7 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   }
 
  protected:
-  storage::BlockStore block_store_{1000, 1000};
+  storage::BlockStore block_store_{5000, 5000};
   std::default_random_engine generator_;
   storage::RecordBufferSegmentPool buffer_pool_{100000, 100000};
   storage::BlockLayout layout_{{8, 8, VARLEN_COLUMN}};
@@ -37,17 +37,17 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   storage::BlockCompactor compactor_;
 
   uint32_t num_blocks_ = 100;
-  double percent_empty_ = 0.05;
+  double percent_empty_ = 0.0;
 
 };
 
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Strawman)(benchmark::State &state) {
   std::vector<storage::RawBlock *> start_blocks;
-  for (uint32_t i = 0; i < 100; i++) {
+  for (uint32_t i = 0; i < num_blocks_; i++) {
     storage::RawBlock *block = block_store_.Get();
     block->data_table_ = &table_;
-    StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
+    StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
     start_blocks.push_back(block);
   }
   // NOLINTNEXTLINE
@@ -105,7 +105,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Strawman)(benchmark::State &state) {
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
   }
-  state.SetItemsProcessed(100 * static_cast<int64_t>(state.iterations()));
+  state.SetItemsProcessed(num_blocks_ * static_cast<int64_t>(state.iterations()));
 }
 
 // NOLINTNEXTLINE
@@ -113,10 +113,10 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
   // NOLINTNEXTLINE
   for (auto _ : state) {
     std::vector<storage::RawBlock *> blocks;
-    for (uint32_t i = 0; i < 100; i++) {
+    for (uint32_t i = 0; i < num_blocks_; i++) {
       storage::RawBlock *block = block_store_.Get();
       block->data_table_ = &table_;
-      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
@@ -139,7 +139,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
   }
-  state.SetItemsProcessed(static_cast<int64_t>(100 * state.iterations()));
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
 }
 
 // NOLINTNEXTLINE
@@ -147,10 +147,10 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &
   // NOLINTNEXTLINE
   for (auto _ : state) {
     std::vector<storage::RawBlock *> blocks;
-    for (uint32_t i = 0; i < 100; i++) {
+    for (uint32_t i = 0; i < num_blocks_; i++) {
       storage::RawBlock *block = block_store_.Get();
       block->data_table_ = &table_;
-      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
@@ -175,7 +175,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
   }
-  state.SetItemsProcessed(static_cast<int64_t>(100 * state.iterations()));
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
 }
 
 // NOLINTNEXTLINE
@@ -183,10 +183,10 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(ben
   // NOLINTNEXTLINE
   for (auto _ : state) {
     std::vector<storage::RawBlock *> blocks;
-    for (uint32_t i = 0; i < 100; i++) {
+    for (uint32_t i = 0; i < num_blocks_; i++) {
       storage::RawBlock *block = block_store_.Get();
       block->data_table_ = &table_;
-      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
@@ -211,25 +211,25 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(ben
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
   }
-  state.SetItemsProcessed(static_cast<int64_t>(100 * state.iterations()));
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
 }
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(2);
 
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, CompactionThroughput)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2);
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, CompactionThroughput)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2);
 
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, GatherThroughput)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2);
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, GatherThroughput)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2);
 
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2);
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2);
 
 
 }  // namespace terrier
