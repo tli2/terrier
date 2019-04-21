@@ -320,7 +320,8 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
                         &col_info,
                         values);
         break;
-      default:throw std::runtime_error("unexpected control flow");
+      default:
+        throw std::runtime_error("unexpected control flow");
     }
   }
 }

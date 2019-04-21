@@ -200,8 +200,11 @@ class Delivery {
       auto *order_update_tuple = order_update_pr_initializer.InitializeRow(worker->order_tuple_buffer);
       *reinterpret_cast<int8_t *>(order_update_tuple->AccessForceNotNull(0)) = args.o_carrier_id;
       bool update_result UNUSED_ATTRIBUTE = db->order_table_->Update(txn, order_slot, *order_update_tuple);
-      TERRIER_ASSERT(select_result,
-                     "Order update failed. This assertion assumes 1:1 mapping between warehouse and workers.");
+      if (!update_result) {
+        // This can fail due to remote orders
+        txn_manager->Abort(txn);
+        return false;
+      }
 
       // Look up OL_W_ID, OL_D_ID, OL_O_ID
       const auto order_line_key_pr_initializer = db->order_line_index_->GetProjectedRowInitializer();
@@ -237,9 +240,11 @@ class Delivery {
         order_line_update_tuple = order_line_update_pr_initializer.InitializeRow(worker->order_line_tuple_buffer);
         *reinterpret_cast<uint64_t *>(order_line_update_tuple->AccessForceNotNull(0)) = args.ol_delivery_d;
         update_result = db->order_line_table_->Update(txn, tuple_slot, *order_line_update_tuple);
-//        TERRIER_ASSERT(update_result,
-//                       "Order Line update failed. This assertion assumes 1:1 mapping between warehouse and workers.");
-      }
+        if (!update_result) {
+          // This can fail due to remote orders
+          txn_manager->Abort(txn);
+          return false;
+        }
 
       // Look up C_W_ID, C_D_ID, C_ID
       const auto customer_key_pr_initializer = db->customer_index_->GetProjectedRowInitializer();

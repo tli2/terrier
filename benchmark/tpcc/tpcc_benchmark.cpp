@@ -238,6 +238,10 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
       printf("transactions all submitted\n");
 //      EndLogging();
     }
+    state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+    // cleanup
+    EndCompactor();
+    EndGC();
     printf("history table:\n");
     tpcc_db->history_table_->table_.data_table->InspectTable();
     printf("item table:\n");
@@ -246,10 +250,6 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     tpcc_db->order_table_->table_.data_table->InspectTable();
     printf("order_line table:\n");
     tpcc_db->order_line_table_->table_.data_table->InspectTable();
-    state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
-    // cleanup
-    EndCompactor();
-    EndGC();
     delete tpcc_db;
     delete log_manager_;
   }

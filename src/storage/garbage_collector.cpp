@@ -95,6 +95,7 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
       // Safe to garbage collect.
       for (auto &undo_record : txn->undo_buffer_) {
         DataTable *&table = undo_record.Table();
+        if (table == nullptr) throw std::runtime_error("committed transactions should not have undo records that point to null");
         // Each version chain needs to be traversed and truncated at most once every GC period. Check
         // if we have already visited this tuple slot; if not, proceed to prune the version chain.
         if (visited_slots.insert(undo_record.Slot()).second)
