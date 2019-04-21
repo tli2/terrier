@@ -72,14 +72,6 @@ class ArrowVarlenColumn {
   }
 
   /**
-   * Destructs an ArrowVarlenColumn
-   */
-  ~ArrowVarlenColumn() {
-    delete[] values_;
-    delete[] offsets_;
-  }
-
-  /**
    * @return length of the values array
    */
   uint32_t ValuesLength() const { return values_length_; }
@@ -99,6 +91,11 @@ class ArrowVarlenColumn {
    */
   uint32_t *Offsets() const { return offsets_; }
 
+  void Deallocate() {
+    delete[] values_;
+    delete[] offsets_;
+  }
+
  private:
   uint32_t values_length_ = 0, offsets_length_ = 0;
   byte *values_ = nullptr;
@@ -108,8 +105,6 @@ class ArrowVarlenColumn {
 
 class ArrowColumnInfo {
  public:
-  ~ArrowColumnInfo() { delete[] indices_; }
-
   /**
    * @return type of the Arrow Column
    */
@@ -128,6 +123,11 @@ class ArrowColumnInfo {
     TERRIER_ASSERT(type_ == ArrowColumnType::DICTIONARY_COMPRESSED,
                    "this array is only meaningful if the column is dicationary compressed");
     return indices_;
+  }
+
+  void Deallocate() {
+    delete[] indices_;
+    varlen_column_.Deallocate();
   }
 
  private:

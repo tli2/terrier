@@ -337,23 +337,25 @@ void BlockCompactor::CopyToArrowVarlen(transaction::TransactionContext *txn, Arr
       varlen_size += values[i].Size();
   }
 
-  col->VarlenColumn() = {varlen_size, metadata->NumRecords() + 1};
+  ArrowVarlenColumn new_col(varlen_size, metadata->NumRecords() + 1);
+
   for (uint32_t i = 0, acc = 0; i < metadata->NumRecords(); i++) {
     if (!column_bitmap->Test(i)) continue;
     // Only do a gather operation if the column is varlen
     VarlenEntry &entry = values[i];
-    std::memcpy(col->VarlenColumn().Values() + acc, entry.Content(), entry.Size());
-    col->VarlenColumn().Offsets()[i] = acc;
+    std::memcpy(new_col.Values() + acc, entry.Content(), entry.Size());
+    new_col.Offsets()[i] = acc;
 
     // Need to GC
     if (entry.NeedReclaim()) txn->loose_ptrs_.push_back(entry.Content());
 
     // TODO(Tianyu): Describe why this is still safe
     if (entry.Size() > VarlenEntry::InlineThreshold())
-      entry = VarlenEntry::Create(col->VarlenColumn().Values() + acc, entry.Size(), false);
+      entry = VarlenEntry::Create(new_col.Values() + acc, entry.Size(), false);
     acc += entry.Size();
   }
-  col->VarlenColumn().Offsets()[metadata->NumRecords()] = col->VarlenColumn().ValuesLength();
+  new_col.Offsets()[metadata->NumRecords()] = new_col.ValuesLength();
+  col->VarlenColumn() = std::move(new_col);
 }
 
 void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata,
@@ -373,8 +375,9 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     if (ret.second) varlen_size += values[i].Size();
   }
 
-  col->VarlenColumn() = {varlen_size, metadata->NumRecords() + 1};
+  col->Deallocate();
   col->Indices() = common::AllocationUtil::AllocateAligned<uint32_t>(metadata->NumRecords());
+  ArrowVarlenColumn new_col(varlen_size, metadata->NumRecords() + 1);
 
   // TODO(Tianyu): This is retarded, but apparently you cannot retrieve the index of elements in your
   // c++ map in constant time. Thus we are resorting to primitive means.
@@ -386,11 +389,11 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     VarlenEntry &entry = corpus[i];
     // write down the dictionary code for this entry
     dictionary[entry] = i;
-    std::memcpy(col->VarlenColumn().Values() + acc, entry.Content(), entry.Size());
-    col->VarlenColumn().Offsets()[i] = acc;
+    std::memcpy(new_col.Values() + acc, entry.Content(), entry.Size());
+    new_col.Offsets()[i] = acc;
     acc += entry.Size();
   }
-  col->VarlenColumn().Offsets()[metadata->NumRecords()] = col->VarlenColumn().ValuesLength();
+  new_col.Offsets()[metadata->NumRecords()] = new_col.ValuesLength();
 
   // Swing all references in the table to point there, and build the encoded column
   for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
@@ -401,13 +404,14 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     if (entry.NeedReclaim()) txn->loose_ptrs_.push_back(entry.Content());
     uint32_t dictionary_code = col->Indices()[i] = dictionary[entry];
 
-    byte *dictionary_word = col->VarlenColumn().Values() + col->VarlenColumn().Offsets()[dictionary_code];
+    byte *dictionary_word = new_col.Values() + new_col.Offsets()[dictionary_code];
     TERRIER_ASSERT(memcmp(dictionary_word, entry.Content(), entry.Size()) == 0,
                    "varlen entry should be equal to the dictionary word it is encoded as ");
     // TODO(Tianyu): Describe why this is still safe
     if (entry.Size() > VarlenEntry::InlineThreshold())
       entry = VarlenEntry::Create(dictionary_word, entry.Size(), false);
   }
+  col->VarlenColumn() = std::move(new_col);
 }
 
 }  // namespace terrier::storage

@@ -24,6 +24,8 @@ DataTable::~DataTable() {
   common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
   for (RawBlock *block : blocks_) {
     DeallocateVarlensOnShutdown(block);
+    for (col_id_t i : accessor_.GetBlockLayout().Varlens())
+      accessor_.GetArrowBlockMetadata(block).GetColumnInfo(accessor_.GetBlockLayout(), i).Deallocate();
     block_store_->Release(block);
   }
 }
