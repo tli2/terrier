@@ -25,8 +25,8 @@ namespace terrier::storage {
 #define VERSION_POINTER_COLUMN_ID ::terrier::storage::col_id_t(0)
 #define NUM_RESERVED_COLUMNS 1u
 
-STRONG_TYPEDEF(col_id_t, uint16_t);
-STRONG_TYPEDEF(layout_version_t, uint16_t);
+STRONG_TYPEDEF(col_id_t, uint16_t)
+STRONG_TYPEDEF(layout_version_t, uint32_t)
 
 class DataTable;
 
@@ -42,11 +42,6 @@ struct alignas(common::Constants::BLOCK_SIZE) RawBlock {
    * Data Table for this RawBlock. This is used by indexes and GC to get back to the DataTable given only a TupleSlot
    */
   DataTable *data_table_;
-
-  /**
-   * Padding for flags or whatever we may want in the future.
-   */
-  uint16_t padding_;
 
   /**
    * Layout version.
@@ -72,6 +67,8 @@ struct alignas(common::Constants::BLOCK_SIZE) RawBlock {
   // A Block needs to always be aligned to 1 MB, so we can get free bytes to
   // store offsets within a block in ine 8-byte word.
 };
+
+static_assert(sizeof(RawBlock) == common::Constants::BLOCK_SIZE, "Incorrect block size calculation");
 
 /**
  * A TupleSlot represents a physical location of a tuple in memory.
