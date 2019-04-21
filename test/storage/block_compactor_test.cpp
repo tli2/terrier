@@ -21,10 +21,12 @@ TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
   storage::TupleAccessStrategy accessor(layout);
   storage::RawBlock *block = block_store_.Get();
 
+
   accessor.InitializeRawBlock(block, storage::layout_version_t(0));
 
   // Technically, the block above is not "in" the table, but since we don't sequential scan that does not matter
   storage::DataTable table(&block_store_, layout, storage::layout_version_t(0));
+  block->data_table_ = &table;
   storage::RecordBufferSegmentPool buffer_pool{10000, 10000};
   // Enable GC to cleanup transactions started by the block compactor
   transaction::TransactionManager txn_manager(&buffer_pool, true, LOGGING_DISABLED);
@@ -43,7 +45,7 @@ TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
 
   // Compact the block
   storage::BlockCompactor compactor;
-  compactor.PutInQueue({block, &table});
+  compactor.PutInQueue(block);
   compactor.ProcessCompactionQueue(&txn_manager);  // should always succeed with no other threads
 
   EXPECT_EQ(storage::BlockState::COOLING, block->controller_.CurrentBlockState());
@@ -64,7 +66,7 @@ TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
   txn_manager.Commit(txn, [](void *) -> void {}, nullptr);
   gc.PerformGarbageCollection();
 
-  compactor.PutInQueue({block, &table});
+  compactor.PutInQueue(block);
   compactor.ProcessCompactionQueue(&txn_manager);
 
   txn = txn_manager.BeginTransaction();

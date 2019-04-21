@@ -46,6 +46,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Strawman)(benchmark::State &state) {
   std::vector<storage::RawBlock *> start_blocks;
   for (uint32_t i = 0; i < 100; i++) {
     storage::RawBlock *block = block_store_.Get();
+    block->data_table_ = &table_;
     StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
     start_blocks.push_back(block);
   }
@@ -114,6 +115,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
     std::vector<storage::RawBlock *> blocks;
     for (uint32_t i = 0; i < 100; i++) {
       storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
       StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
@@ -126,7 +128,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
       blocks.push_back(block);
     }
     // generate our table and instantiate GC
-    for (storage::RawBlock *block : blocks) compactor_.PutInQueue({block, &table_});
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
     uint64_t elapsed_ms;
     {
       common::ScopedTimer timer(&elapsed_ms);
@@ -147,6 +149,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &
     std::vector<storage::RawBlock *> blocks;
     for (uint32_t i = 0; i < 100; i++) {
       storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
       StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
@@ -159,11 +162,11 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &
       blocks.push_back(block);
     }
     // generate our table and instantiate GC
-    for (storage::RawBlock *block : blocks) compactor_.PutInQueue({block, &table_});
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
     compactor_.ProcessCompactionQueue(&txn_manager_);
     gc_.PerformGarbageCollection();
     gc_.PerformGarbageCollection();
-    for (storage::RawBlock *block : blocks) compactor_.PutInQueue({block, &table_});
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
     uint64_t elapsed_ms;
     {
       common::ScopedTimer timer(&elapsed_ms);
@@ -182,6 +185,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(ben
     std::vector<storage::RawBlock *> blocks;
     for (uint32_t i = 0; i < 100; i++) {
       storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
       StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
@@ -194,11 +198,11 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(ben
       blocks.push_back(block);
     }
     // generate our table and instantiate GC
-    for (storage::RawBlock *block : blocks) compactor_.PutInQueue({block, &table_});
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
     compactor_.ProcessCompactionQueue(&txn_manager_);
     gc_.PerformGarbageCollection();
     gc_.PerformGarbageCollection();
-    for (storage::RawBlock *block : blocks) compactor_.PutInQueue({block, &table_});
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
     uint64_t elapsed_ms;
     {
       common::ScopedTimer timer(&elapsed_ms);
