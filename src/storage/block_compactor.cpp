@@ -379,8 +379,8 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
   }
 
   // TODO(Tianyu): Rewrite
-  col->Deallocate();
-  col->Indices() = common::AllocationUtil::AllocateAligned<uint32_t>(metadata->NumRecords());
+
+  uint32_t *new_indices = common::AllocationUtil::AllocateAligned<uint32_t>(metadata->NumRecords());
   ArrowVarlenColumn new_col(varlen_size, metadata->NumRecords() + 1);
 
   // TODO(Tianyu): This is retarded, but apparently you cannot retrieve the index of elements in your
@@ -406,7 +406,7 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     VarlenEntry &entry = values[i];
     // Need to GC
     if (entry.NeedReclaim()) txn->loose_ptrs_.push_back(entry.Content());
-    uint32_t dictionary_code = col->Indices()[i] = dictionary[entry];
+    uint32_t dictionary_code = new_indices[i] = dictionary[entry];
 
     byte *dictionary_word = new_col.Values() + new_col.Offsets()[dictionary_code];
     TERRIER_ASSERT(memcmp(dictionary_word, entry.Content(), entry.Size()) == 0,
@@ -415,6 +415,8 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     if (entry.Size() > VarlenEntry::InlineThreshold())
       entry = VarlenEntry::Create(dictionary_word, entry.Size(), false);
   }
+  col->Deallocate();
+  col->Indices() = new_indices;
   col->VarlenColumn() = std::move(new_col);
 }
 
