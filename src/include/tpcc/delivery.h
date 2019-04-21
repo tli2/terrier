@@ -237,8 +237,8 @@ class Delivery {
         order_line_update_tuple = order_line_update_pr_initializer.InitializeRow(worker->order_line_tuple_buffer);
         *reinterpret_cast<uint64_t *>(order_line_update_tuple->AccessForceNotNull(0)) = args.ol_delivery_d;
         update_result = db->order_line_table_->Update(txn, tuple_slot, *order_line_update_tuple);
-        TERRIER_ASSERT(update_result,
-                       "Order Line update failed. This assertion assumes 1:1 mapping between warehouse and workers.");
+//        TERRIER_ASSERT(update_result,
+//                       "Order Line update failed. This assertion assumes 1:1 mapping between warehouse and workers.");
       }
 
       // Look up C_W_ID, C_D_ID, C_ID

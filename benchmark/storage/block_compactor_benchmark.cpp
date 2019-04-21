@@ -62,7 +62,9 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Strawman)(benchmark::State &state) {
     {
       common::ScopedTimer timer(&elapsed_ms);
       transaction::TransactionContext *txn = txn_manager_.BeginTransaction();
-      storage::ProjectedRowInitializer initializer = storage::ProjectedRowInitializer::CreateProjectedRowInitializer(layout_, StorageTestUtil::ProjectionListAllColumns(layout_));
+      storage::ProjectedRowInitializer initializer =
+          storage::ProjectedRowInitializer::CreateProjectedRowInitializer(layout_,
+              StorageTestUtil::ProjectionListAllColumns(layout_));
       byte *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
       auto *read_row = initializer.InitializeRow(buffer);
       arrow::Int64Builder int_builder;

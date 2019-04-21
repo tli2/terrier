@@ -102,7 +102,7 @@ bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
     // We know these finds will not return end() because we constructed the vector from the map
     return a_empty < b_empty;
   });
-
+  cg->all_cols_initializer_.InitializeRow(cg->read_buffer_);
   // We assume that there are a lot more filled slots than empty slots, so we only store the list of empty slots
   // and construct the vector of filled slots on the fly in order to reduce the memory footprint.
   std::vector<uint32_t> filled;
@@ -144,9 +144,11 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   const BlockLayout &layout = accessor.GetBlockLayout();
 
   // Read out the tuple to copy
+
+  if (!cg->table_->Select(cg->txn_, from, cg->read_buffer_)) return false;
   RedoRecord *record = cg->txn_->StageWrite(cg->table_, to, cg->all_cols_initializer_);
-  bool valid UNUSED_ATTRIBUTE = cg->table_->Select(cg->txn_, from, record->Delta());
-  if (!valid) return false;
+  std::memcpy(record->Delta(), cg->read_buffer_, cg->all_cols_initializer_.ProjectedRowSize());
+
   // Because the GC will assume all varlen pointers are unique and deallocate the same underlying
   // varlen for every update record, we need to mark subsequent records that reference the same
   // varlen value as not reclaimable so as to not double-free
