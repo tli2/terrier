@@ -337,6 +337,7 @@ void BlockCompactor::CopyToArrowVarlen(transaction::TransactionContext *txn, Arr
       varlen_size += values[i].Size();
   }
 
+  // TODO(Tianyu): Rewrite
   ArrowVarlenColumn new_col(varlen_size, metadata->NumRecords() + 1);
 
   for (uint32_t i = 0, acc = 0; i < metadata->NumRecords(); i++) {
@@ -375,6 +376,7 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
     if (ret.second) varlen_size += values[i].Size();
   }
 
+  // TODO(Tianyu): Rewrite
   col->Deallocate();
   col->Indices() = common::AllocationUtil::AllocateAligned<uint32_t>(metadata->NumRecords());
   ArrowVarlenColumn new_col(varlen_size, metadata->NumRecords() + 1);

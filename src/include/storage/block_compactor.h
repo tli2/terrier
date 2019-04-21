@@ -85,7 +85,7 @@ class BlockCompactor {
     // Since the list of empty slots is sorted, we can use a counter j to keep track of the next empty slot that
     // we have not encountered yet
     for (uint32_t i = 0, j = 0; i < layout.NumSlots(); i++) {
-      if (empty[j] != i)
+      if (j >= empty.size() || empty[j] != i)
         // Not empty, must be filled
         filled->push_back(i);
       else
