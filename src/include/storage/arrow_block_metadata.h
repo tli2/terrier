@@ -93,7 +93,9 @@ class ArrowVarlenColumn {
 
   void Deallocate() {
     delete[] values_;
+    values_ = nullptr;
     delete[] offsets_;
+    offsets_ = nullptr;
   }
 
  private:
