@@ -64,6 +64,8 @@ class BlockCompactor {
    */
   void PutInQueue(RawBlock *block) { compaction_queue_.push_front(block); }
 
+  void EmptyQueue() { compaction_queue_.clear(); }
+
  private:
   bool EliminateGaps(CompactionGroup *cg);
 

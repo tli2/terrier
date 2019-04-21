@@ -56,6 +56,7 @@ class TPCCBenchmark : public benchmark::Fixture {
 
   void StartCompactor(transaction::TransactionManager *const txn_manager) {
     run_compactor_ = true;
+    compactor_.EmptyQueue();
     compactor_thread_ = std::thread([this, txn_manager] { CompactorThreadLoop(txn_manager); });
   }
 
