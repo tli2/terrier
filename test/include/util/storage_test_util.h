@@ -161,6 +161,7 @@ struct StorageTestUtil {
     // TODO(Tianyu): Do we ever want to tune this for tests?
     const double null_ratio = 0.1;
     storage::TupleAccessStrategy accessor(layout);  // Have to construct one since we don't have access to data table
+    accessor.InitializeRawBlock(block, storage::layout_version_t(0));
     storage::ProjectedRowInitializer initializer(layout, StorageTestUtil::ProjectionListAllColumns(layout));
     for (uint32_t i = 0; i < layout.NumSlots(); i++) {
       storage::TupleSlot slot;

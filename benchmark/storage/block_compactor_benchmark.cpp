@@ -34,9 +34,9 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
   // NOLINTNEXTLINE
   for (auto _ : state) {
     std::vector<storage::RawBlock *> blocks;
-    for (uint32_t i = 0; i < 100; i++) {
+    for (uint32_t i = 0; i < num_blocks_; i++) {
       storage::RawBlock *block = block_store_.Get();
-      StorageTestUtil::PopulateBlockRandomly(layout_, block, 0.05, &generator_);
+      StorageTestUtil::PopulateBlockRandomly(layout_, block, percent_empty_, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
@@ -59,12 +59,12 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
   }
-  state.SetItemsProcessed(static_cast<int64_t>(100 * state.iterations()));
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
 }
 
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, CompactionThroughput)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2);
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, CompactionThroughput)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2);
 
 }  // namespace terrier
