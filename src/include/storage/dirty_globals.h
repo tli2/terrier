@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <atomic>
 namespace terrier::tpcc {
 class Database;
 }
@@ -38,6 +39,9 @@ struct DirtyGlobals {
   static uint8_t ol_d_id_key_pr_offset;
   static uint8_t ol_w_id_key_pr_offset;
   static uint8_t ol_number_key_pr_offset;
+
+  static std::atomic<uint32_t> blocked_transactions;
+  static std::atomic<uint32_t> aborted_transactions;
 
 };
 

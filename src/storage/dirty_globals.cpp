@@ -33,5 +33,7 @@ uint8_t DirtyGlobals::ol_o_id_key_pr_offset = 0;
 uint8_t DirtyGlobals::ol_d_id_key_pr_offset = 0;
 uint8_t DirtyGlobals::ol_w_id_key_pr_offset = 0;
 uint8_t DirtyGlobals::ol_number_key_pr_offset = 0;
+std::atomic<uint32_t> DirtyGlobals::blocked_transactions = 0;
+std::atomic<uint32_t> DirtyGlobals::aborted_transactions = 0;
 }  // namespace terrier::storage
 

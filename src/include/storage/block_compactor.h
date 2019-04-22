@@ -96,6 +96,6 @@ class BlockCompactor {
   }
 
   std::forward_list<RawBlock *> compaction_queue_;
-  byte buf_[BUF_SIZE];
+//  byte buf_[BUF_SIZE];
 };
 }  // namespace terrier::storage

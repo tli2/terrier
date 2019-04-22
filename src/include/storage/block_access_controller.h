@@ -3,7 +3,7 @@
 #include <utility>
 #include "common/macros.h"
 #include "common/strong_typedef.h"
-
+#include "storage/dirty_globals.h"
 namespace terrier::storage {
 
 /**
@@ -85,14 +85,19 @@ class BlockAccessController {
    * blocks until all in-place readers have left to be able to perform in-place modifications.
    */
   void WaitUntilHot() {
+    bool blocked = false;
     while (true) {
       BlockState current_state = GetBlockState()->load();
       switch (current_state) {
         case BlockState::FREEZING:
+          blocked = true;
           continue;  // Wait until the compactor finishes before doing anything
         case BlockState::COOLING:
-          if (!GetBlockState()->compare_exchange_strong(current_state, BlockState::HOT))
-            continue;  // wait until the compactor finishes before doing anything
+          if (!GetBlockState()->compare_exchange_strong(current_state, BlockState::HOT)) {
+            blocked = true;
+            continue;
+          }
+              // wait until the compactor finishes before doing anything
           // intentional fall through
         case BlockState::FROZEN:
           GetBlockState()->store(BlockState::HOT);
@@ -100,11 +105,13 @@ class BlockAccessController {
         case BlockState::HOT:
           // Although the block is already hot, we may need to wait for any straggling readers to finish
           while (GetReaderCount()->load() != 0) __asm__ __volatile__("pause;");
-          return;
+          break;
         default:
           throw std::runtime_error("unexpected control flow");
       }
+      break;
     }
+    if (blocked) DirtyGlobals::blocked_transactions++;
   }
 
 

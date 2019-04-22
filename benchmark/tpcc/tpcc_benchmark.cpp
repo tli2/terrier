@@ -77,8 +77,8 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::AccessObserver access_observer_{&compactor_};
 
   const bool only_count_new_order_ = false;
-  const int8_t num_threads_ = 8;
-  const uint32_t num_precomputed_txns_per_worker_ = 100000;
+  const int8_t num_threads_ = 4;
+  const uint32_t num_precomputed_txns_per_worker_ = 10000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
@@ -200,26 +200,26 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
       auto stock_level = tpcc::StockLevel(tpcc_db);
 
       for (uint32_t i = 0; i < num_precomputed_txns_per_worker_; i++) {
-        const auto &txn_args = precomputed_args[worker_id][i];
+        auto &txn_args = precomputed_args[worker_id][i];
         switch (txn_args.type) {
           case tpcc::TransactionType::NewOrder: {
-            new_order.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args);
+            if (!new_order.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args)) txn_args.aborted++;
             break;
           }
           case tpcc::TransactionType::Payment: {
-            payment.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args);
+            if (!payment.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args)) txn_args.aborted++;
             break;
           }
           case tpcc::TransactionType::OrderStatus: {
-            order_status.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args);
+            if (!order_status.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args)) txn_args.aborted++;
             break;
           }
           case tpcc::TransactionType::Delivery: {
-            delivery.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args);
+            if (!delivery.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args)) txn_args.aborted++;
             break;
           }
           case tpcc::TransactionType::StockLevel: {
-            stock_level.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args);
+            if (!stock_level.Execute(&txn_manager, &generator_, tpcc_db, &workers[worker_id], txn_args)) txn_args.aborted++;
             break;
           }
           default:
@@ -251,6 +251,14 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     tpcc_db->order_table_->table_.data_table->InspectTable();
     printf("order_line table:\n");
     tpcc_db->order_line_table_->table_.data_table->InspectTable();
+    printf("\n\n\n");
+    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
+    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
+    uint32_t aborted = 0;
+    for (auto &entry : precomputed_args)
+      for (auto &arg : entry)
+        aborted += arg.aborted;
+    printf("number of transactions aborted: %u\n", aborted);
     delete tpcc_db;
     delete log_manager_;
   }

@@ -119,6 +119,7 @@ struct TransactionArgs {
   int8_t o_carrier_id;              // Delivery
   uint64_t ol_delivery_d;           // Delivery
   int8_t s_quantity_threshold;      // StockLevel
+  uint32_t aborted = 0;
 };
 
 // 2.4.1

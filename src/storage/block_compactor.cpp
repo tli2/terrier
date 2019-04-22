@@ -241,6 +241,7 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
 //  } else {
 //    throw std::runtime_error("unexpected table being compacted");
 //  }
+  return true;
 }
 
 bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor, RawBlock *block) {
