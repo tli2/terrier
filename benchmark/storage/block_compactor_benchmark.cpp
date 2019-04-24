@@ -69,7 +69,7 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
     printf("With %f percent empty, %u tuples moved in total\n", percent_empty, compactor_.tuples_moved_);
   }
 
-  void RunCompaction(benchmark::State &state, double percent_empty, storage::ArrowColumnType type) {
+  void RunCompaction(benchmark::State &state, double percent_empty, storage::ArrowColumnType type=storage::ArrowColumnType::GATHERED_VARLEN) {
     // NOLINTNEXTLINE
     for (auto _ : state) {
       std::vector<storage::RawBlock *> blocks;
@@ -204,8 +204,37 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Strawman)(benchmark::State &state) {
 }
 
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::State &state) {
-  RunCompaction(state, percent_empty_)
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction0)(benchmark::State &state) {
+  RunCompaction(state, 0.0);
+}
+
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction001)(benchmark::State &state) {
+  RunCompaction(state, 0.01);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction005)(benchmark::State &state) {
+  RunCompaction(state, 0.05);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction01)(benchmark::State &state) {
+  RunCompaction(state, 0.1);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction02)(benchmark::State &state) {
+  RunCompaction(state, 0.2);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction04)(benchmark::State &state) {
+  RunCompaction(state, 0.4);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction06)(benchmark::State &state) {
+  RunCompaction(state, 0.6);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction08)(benchmark::State &state) {
+  RunCompaction(state, 0.8);
 }
 
 // NOLINTNEXTLINE
@@ -239,7 +268,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput06)(benchmark::State &stat
 
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput08)(benchmark::State &state) {
-  RunFull(state, 0.8)
+  RunFull(state, 0.8);
 }
 
 
