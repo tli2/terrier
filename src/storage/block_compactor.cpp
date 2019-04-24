@@ -106,6 +106,7 @@ bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {
     // We know these finds will not return end() because we constructed the vector from the map
     return a_empty < b_empty;
   });
+
   cg->all_cols_initializer_.InitializeRow(cg->read_buffer_);
   // We assume that there are a lot more filled slots than empty slots, so we only store the list of empty slots
   // and construct the vector of filled slots on the fly in order to reduce the memory footprint.

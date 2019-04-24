@@ -29,16 +29,66 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   uint32_t num_blocks_ = 500;
   double percent_empty_ = 0.01;
 
+  uint32_t CalculateOptimal(std::vector<storage::RawBlock *> blocks) {
+    std::unordered_map<storage::RawBlock *, uint32_t> num_tuples;
+    uint32_t total_num_tuples = 0;
+    const storage::TupleAccessStrategy &accessor = table_.accessor_;
+    const storage::BlockLayout &layout = accessor.GetBlockLayout();
+    for (storage::RawBlock *block : blocks) {
+      uint32_t &count = num_tuples[block];
+      auto *bitmap = accessor.AllocationBitmap(block);
+      for (uint32_t offset = 0; offset < layout.NumSlots(); offset++) {
+        if (!bitmap->Test(offset)) {
+          count++;
+          total_num_tuples++;
+        }
+      }
+    }
+
+    std::sort(blocks.begin(), blocks.end(), [&](storage::RawBlock *a, storage::RawBlock *b) {
+      auto a_filled = num_tuples[a];
+      auto b_filled = num_tuples[b];
+      // We know these finds will not return end() because we constructed the vector from the map
+      return a_filled >= b_filled;
+    });
+
+    uint32_t f_size = total_num_tuples / layout.NumSlots();
+    uint32_t p_size = total_num_tuples % layout.NumSlots();
+    uint32_t min_movement = UINT32_MAX;
+    for (storage::RawBlock *p : blocks) {
+      uint32_t num_movements = 0;
+      auto *bitmap = accessor.AllocationBitmap(p);
+      for (uint32_t offset = 0; offset < p_size; offset++) {
+        if (!bitmap->Test(offset)) {
+          num_movements++;
+          total_num_tuples++;
+        }
+      }
+      uint32_t num_f = 0;
+      for (storage::RawBlock *f : blocks) {
+        if (f == p) continue;
+        num_f++;
+        num_movements += layout.NumSlots() - num_tuples[f];
+        if (num_f == f_size) break;
+      }
+      if (num_movements < min_movement) min_movement = num_movements;
+    }
+    return min_movement;
+  }
+
   void RunFull(benchmark::State &state, double percent_empty,
       storage::ArrowColumnType type = storage::ArrowColumnType::GATHERED_VARLEN) {
+    uint32_t num_tuples = 0;
+    uint32_t optimal_move = 0;
     // NOLINTNEXTLINE
     for (auto _ : state) {
       compactor_.tuples_moved_ = 0;
+      num_tuples = 0;
       std::vector<storage::RawBlock *> blocks;
       for (uint32_t i = 0; i < num_blocks_; i++) {
         storage::RawBlock *block = block_store_.Get();
         block->data_table_ = &table_;
-        StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty, &generator_);
+        num_tuples += StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty, &generator_);
         auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
         for (storage::col_id_t col_id : layout_.AllColumns()) {
           if (layout_.IsVarlen(col_id))
@@ -48,6 +98,7 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
         }
         blocks.push_back(block);
       }
+      optimal_move = CalculateOptimal(blocks);
       for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
       uint64_t compaction_ms;
       {
@@ -66,7 +117,8 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
       state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
     }
     state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
-    printf("With %f percent empty, %u tuples moved in total\n", percent_empty, compactor_.tuples_moved_);
+
+    printf("With %f percent empty, %u tuples in total, optimal %u tuples moved in total\n", percent_empty, num_tuples, optimal_move);
   }
 
   void RunCompaction(benchmark::State &state, double percent_empty, storage::ArrowColumnType type=storage::ArrowColumnType::GATHERED_VARLEN) {
@@ -310,51 +362,46 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput08)(benchmark::State &stat
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(2);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction0)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction001)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(1);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction005)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction01)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction02)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction02)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction04)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction06)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction08)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction005)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction01)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction02)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction02)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction04)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction06)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction08)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput001)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()

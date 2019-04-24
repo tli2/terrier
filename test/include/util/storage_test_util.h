@@ -191,8 +191,9 @@ struct StorageTestUtil {
   }
 
   template<class Random>
-  static void PopulateBlockRandomlyNoBookkeeping(const storage::BlockLayout &layout, storage::RawBlock *block,
+  static uint32_t PopulateBlockRandomlyNoBookkeeping(const storage::BlockLayout &layout, storage::RawBlock *block,
                                                  double empty_ratio, Random *const generator) {
+    uint32_t result = 0;
     std::bernoulli_distribution coin(empty_ratio);
     // TODO(Tianyu): Do we ever want to tune this for tests?
     const double null_ratio = 0.1;
@@ -213,6 +214,7 @@ struct StorageTestUtil {
         accessor.Deallocate(slot);
         continue;
       }
+      result++;
       StorageTestUtil::PopulateRandomRow(redo, layout, null_ratio, generator);
       // Copy without transactions to simulate a version-free block
       accessor.SetNotNull(slot, VERSION_POINTER_COLUMN_ID);
@@ -220,6 +222,7 @@ struct StorageTestUtil {
         storage::StorageUtil::CopyAttrFromProjection(accessor, slot, *redo, j);
     }
     TERRIER_ASSERT(block->insert_head_ == layout.NumSlots(), "The block should be considered full at this point");
+    return result;
   }
 
   template<class Random>

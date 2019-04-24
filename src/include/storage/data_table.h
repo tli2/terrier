@@ -239,7 +239,7 @@ class DataTable {
     }
   }
 
- private:
+// private:
   // The GarbageCollector needs to modify VersionPtrs when pruning version chains
   friend class GarbageCollector;
   // The TransactionManager needs to modify VersionPtrs when rolling back aborts
