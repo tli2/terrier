@@ -301,6 +301,7 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
   for (col_id_t col_id : layout.AllColumns()) {
     common::RawConcurrentBitmap *column_bitmap = accessor.ColumnNullBitmap(block, col_id);
     if (!layout.IsVarlen(col_id)) {
+      metadata.NullCount(col_id) = 0;
       // Only need to count null for non-varlens
       for (uint32_t i = 0; i < metadata.NumRecords(); i++)
         if (!column_bitmap->Test(i)) metadata.NullCount(col_id)++;
@@ -311,7 +312,8 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
     ArrowColumnInfo &col_info = metadata.GetColumnInfo(layout, col_id);
     auto *values = reinterpret_cast<VarlenEntry *>(accessor.ColumnStart(block, col_id));
     switch (col_info.Type()) {
-      case ArrowColumnType::GATHERED_VARLEN:CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
+      case ArrowColumnType::GATHERED_VARLEN:
+        CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
         break;
       case ArrowColumnType::DICTIONARY_COMPRESSED:
         BuildDictionary(txn,
@@ -333,6 +335,7 @@ void BlockCompactor::CopyToArrowVarlen(transaction::TransactionContext *txn, Arr
   uint32_t varlen_size = 0;
   // Read through every tuple and update null count and total varlen size
   for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
+    metadata->NullCount(col_id) = 0;
     if (!column_bitmap->Test(i))
       // Update null count
       metadata->NullCount(col_id)++;
@@ -370,6 +373,7 @@ void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, Arrow
   // Read through every tuple and update null count and build the dictionary
   uint32_t varlen_size = 0;
   for (uint32_t i = 0; i < metadata->NumRecords(); i++) {
+    metadata->NullCount(col_id) = 0;
     if (!column_bitmap->Test(i)) {
       // Update null count
       metadata->NullCount(col_id)++;

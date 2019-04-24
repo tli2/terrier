@@ -161,19 +161,22 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &
       }
       blocks.push_back(block);
     }
-    // generate our table and instantiate GC
     for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
-    compactor_.ProcessCompactionQueue(&txn_manager_);
-    gc_.PerformGarbageCollection();
-    gc_.PerformGarbageCollection();
-    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
-    uint64_t elapsed_ms;
+    uint64_t compaction_ms;
     {
-      common::ScopedTimer timer(&elapsed_ms);
+      common::ScopedTimer timer(&compaction_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    gc_.PerformGarbageCollection();
+    gc_.PerformGarbageCollection();
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t gather_ms;
+    {
+      common::ScopedTimer timer(&gather_ms);
       compactor_.ProcessCompactionQueue(&txn_manager_);
     }
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
-    state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+    state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
   }
   state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
 }
@@ -216,20 +219,20 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(ben
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(2);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, CompactionThroughput)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2);
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, CompactionThroughput)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, GatherThroughput)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2);
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2);
 
 
 }  // namespace terrier
