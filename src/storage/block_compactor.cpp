@@ -176,6 +176,7 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   // the case.
   bool ret = cg->table_->Delete(cg->txn_, from);
   if (!ret) return false;
+  /*
   if (cg->table_ == DirtyGlobals::tpcc_db->history_table_->table_.data_table) {
     // No Indexes
 //    throw std::runtime_error("no compaction should happen on the history table");
@@ -240,7 +241,7 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
     return true;
   } else {
     throw std::runtime_error("unexpected table being compacted");
-  }
+  }*/
   return true;
 }
 

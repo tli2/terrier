@@ -37,7 +37,7 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   storage::BlockCompactor compactor_;
 
   uint32_t num_blocks_ = 100;
-  double percent_empty_ = 0.0;
+  double percent_empty_ = 0.01;
 
 };
 
@@ -143,14 +143,242 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
 }
 
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &state) {
+//BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput)(benchmark::State &state) {
+//  // NOLINTNEXTLINE
+//  for (auto _ : state) {
+//    std::vector<storage::RawBlock *> blocks;
+//    for (uint32_t i = 0; i < num_blocks_; i++) {
+//      storage::RawBlock *block = block_store_.Get();
+//      block->data_table_ = &table_;
+//      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
+//      auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
+//      for (storage::col_id_t col_id : layout_.AllColumns()) {
+//        if (layout_.IsVarlen(col_id)) {
+//          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
+//        } else {
+//          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+//        }
+//      }
+//      blocks.push_back(block);
+//    }
+//    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+//    uint64_t compaction_ms;
+//    {
+//      common::ScopedTimer timer(&compaction_ms);
+//      compactor_.ProcessCompactionQueue(&txn_manager_);
+//    }
+//    gc_.PerformGarbageCollection();
+//    gc_.PerformGarbageCollection();
+//    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+//    uint64_t gather_ms;
+//    {
+//      common::ScopedTimer timer(&gather_ms);
+//      compactor_.ProcessCompactionQueue(&txn_manager_);
+//    }
+//    for (storage::RawBlock *block : blocks) block_store_.Release(block);
+//    state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
+//  }
+//  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
+//}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput001)(benchmark::State &state) {
   // NOLINTNEXTLINE
   for (auto _ : state) {
     std::vector<storage::RawBlock *> blocks;
     for (uint32_t i = 0; i < num_blocks_; i++) {
       storage::RawBlock *block = block_store_.Get();
       block->data_table_ = &table_;
-      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.01, &generator_);
+      auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
+      for (storage::col_id_t col_id : layout_.AllColumns()) {
+        if (layout_.IsVarlen(col_id)) {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
+        } else {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+        }
+      }
+      blocks.push_back(block);
+    }
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t compaction_ms;
+    {
+      common::ScopedTimer timer(&compaction_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    gc_.PerformGarbageCollection();
+    gc_.PerformGarbageCollection();
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t gather_ms;
+    {
+      common::ScopedTimer timer(&gather_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    for (storage::RawBlock *block : blocks) block_store_.Release(block);
+    state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
+  }
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput005)(benchmark::State &state) {
+  // NOLINTNEXTLINE
+  for (auto _ : state) {
+    std::vector<storage::RawBlock *> blocks;
+    for (uint32_t i = 0; i < num_blocks_; i++) {
+      storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.05, &generator_);
+      auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
+      for (storage::col_id_t col_id : layout_.AllColumns()) {
+        if (layout_.IsVarlen(col_id)) {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
+        } else {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+        }
+      }
+      blocks.push_back(block);
+    }
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t compaction_ms;
+    {
+      common::ScopedTimer timer(&compaction_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    gc_.PerformGarbageCollection();
+    gc_.PerformGarbageCollection();
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t gather_ms;
+    {
+      common::ScopedTimer timer(&gather_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    for (storage::RawBlock *block : blocks) block_store_.Release(block);
+    state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
+  }
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput01)(benchmark::State &state) {
+  // NOLINTNEXTLINE
+  for (auto _ : state) {
+    std::vector<storage::RawBlock *> blocks;
+    for (uint32_t i = 0; i < num_blocks_; i++) {
+      storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.1, &generator_);
+      auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
+      for (storage::col_id_t col_id : layout_.AllColumns()) {
+        if (layout_.IsVarlen(col_id)) {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
+        } else {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+        }
+      }
+      blocks.push_back(block);
+    }
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t compaction_ms;
+    {
+      common::ScopedTimer timer(&compaction_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    gc_.PerformGarbageCollection();
+    gc_.PerformGarbageCollection();
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t gather_ms;
+    {
+      common::ScopedTimer timer(&gather_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    for (storage::RawBlock *block : blocks) block_store_.Release(block);
+    state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
+  }
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput02)(benchmark::State &state) {
+  // NOLINTNEXTLINE
+  for (auto _ : state) {
+    std::vector<storage::RawBlock *> blocks;
+    for (uint32_t i = 0; i < num_blocks_; i++) {
+      storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.2, &generator_);
+      auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
+      for (storage::col_id_t col_id : layout_.AllColumns()) {
+        if (layout_.IsVarlen(col_id)) {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
+        } else {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+        }
+      }
+      blocks.push_back(block);
+    }
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t compaction_ms;
+    {
+      common::ScopedTimer timer(&compaction_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    gc_.PerformGarbageCollection();
+    gc_.PerformGarbageCollection();
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t gather_ms;
+    {
+      common::ScopedTimer timer(&gather_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    for (storage::RawBlock *block : blocks) block_store_.Release(block);
+    state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
+  }
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput04)(benchmark::State &state) {
+  // NOLINTNEXTLINE
+  for (auto _ : state) {
+    std::vector<storage::RawBlock *> blocks;
+    for (uint32_t i = 0; i < num_blocks_; i++) {
+      storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.4, &generator_);
+      auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
+      for (storage::col_id_t col_id : layout_.AllColumns()) {
+        if (layout_.IsVarlen(col_id)) {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
+        } else {
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+        }
+      }
+      blocks.push_back(block);
+    }
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t compaction_ms;
+    {
+      common::ScopedTimer timer(&compaction_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    gc_.PerformGarbageCollection();
+    gc_.PerformGarbageCollection();
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t gather_ms;
+    {
+      common::ScopedTimer timer(&gather_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    for (storage::RawBlock *block : blocks) block_store_.Release(block);
+    state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
+  }
+  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput06)(benchmark::State &state) {
+  // NOLINTNEXTLINE
+  for (auto _ : state) {
+    std::vector<storage::RawBlock *> blocks;
+    for (uint32_t i = 0; i < num_blocks_; i++) {
+      storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.6, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
@@ -182,40 +410,80 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &
 }
 
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(benchmark::State &state) {
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput08)(benchmark::State &state) {
   // NOLINTNEXTLINE
   for (auto _ : state) {
     std::vector<storage::RawBlock *> blocks;
     for (uint32_t i = 0; i < num_blocks_; i++) {
       storage::RawBlock *block = block_store_.Get();
       block->data_table_ = &table_;
-      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
+      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, 0.8, &generator_);
       auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
       for (storage::col_id_t col_id : layout_.AllColumns()) {
         if (layout_.IsVarlen(col_id)) {
-          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::DICTIONARY_COMPRESSED;
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
         } else {
           arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
         }
       }
       blocks.push_back(block);
     }
-    // generate our table and instantiate GC
     for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
-    compactor_.ProcessCompactionQueue(&txn_manager_);
-    gc_.PerformGarbageCollection();
-    gc_.PerformGarbageCollection();
-    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
-    uint64_t elapsed_ms;
+    uint64_t compaction_ms;
     {
-      common::ScopedTimer timer(&elapsed_ms);
+      common::ScopedTimer timer(&compaction_ms);
+      compactor_.ProcessCompactionQueue(&txn_manager_);
+    }
+    gc_.PerformGarbageCollection();
+    gc_.PerformGarbageCollection();
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    uint64_t gather_ms;
+    {
+      common::ScopedTimer timer(&gather_ms);
       compactor_.ProcessCompactionQueue(&txn_manager_);
     }
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
-    state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+    state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
   }
   state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
 }
+
+
+// NOLINTNEXTLINE
+//BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(benchmark::State &state) {
+//  // NOLINTNEXTLINE
+//  for (auto _ : state) {
+//    std::vector<storage::RawBlock *> blocks;
+//    for (uint32_t i = 0; i < num_blocks_; i++) {
+//      storage::RawBlock *block = block_store_.Get();
+//      block->data_table_ = &table_;
+//      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
+//      auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
+//      for (storage::col_id_t col_id : layout_.AllColumns()) {
+//        if (layout_.IsVarlen(col_id)) {
+//          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::DICTIONARY_COMPRESSED;
+//        } else {
+//          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+//        }
+//      }
+//      blocks.push_back(block);
+//    }
+//    // generate our table and instantiate GC
+//    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+//    compactor_.ProcessCompactionQueue(&txn_manager_);
+//    gc_.PerformGarbageCollection();
+//    gc_.PerformGarbageCollection();
+//    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+//    uint64_t elapsed_ms;
+//    {
+//      common::ScopedTimer timer(&elapsed_ms);
+//      compactor_.ProcessCompactionQueue(&txn_manager_);
+//    }
+//    for (storage::RawBlock *block : blocks) block_store_.Release(block);
+//    state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
+//  }
+//  state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
+//}
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(2);
 
@@ -224,10 +492,40 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)(ben
 //    ->UseManualTime()
 //    ->MinTime(2);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, GatherThroughput)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput001)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2);
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput005)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput01)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput02)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput04)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput06)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput08)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
 //    ->Unit(benchmark::kMillisecond)
