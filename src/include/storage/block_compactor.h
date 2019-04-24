@@ -66,6 +66,8 @@ class BlockCompactor {
 
   void EmptyQueue() { compaction_queue_.clear(); }
 
+  uint32_t tuples_moved_ = 0;
+
  private:
   bool EliminateGaps(CompactionGroup *cg);
 

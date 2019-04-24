@@ -14,16 +14,6 @@ namespace terrier {
 class BlockCompactorBenchmark : public benchmark::Fixture {
  public:
 
-  std::vector<storage::RawBlock *> GenerateRandomBlocks() {
-    std::vector<storage::RawBlock *> result;
-    for (uint32_t i = 0; i < num_blocks_; i++) {
-      storage::RawBlock *block = block_store_.Get();
-      StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty_, &generator_);
-      result.push_back(block);
-    }
-    return result;
-  }
-
  protected:
   storage::BlockStore block_store_{5000, 5000};
   std::default_random_engine generator_;
@@ -184,6 +174,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput0)(benchmark::State &state
 BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput001)(benchmark::State &state) {
   // NOLINTNEXTLINE
   for (auto _ : state) {
+    compactor_.tuples_moved_ = 0;
     std::vector<storage::RawBlock *> blocks;
     for (uint32_t i = 0; i < num_blocks_; i++) {
       storage::RawBlock *block = block_store_.Get();
@@ -298,6 +289,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput01)(benchmark::State &stat
 BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput02)(benchmark::State &state) {
   // NOLINTNEXTLINE
   for (auto _ : state) {
+    compactor_.tuples_moved_ = 0;
     std::vector<storage::RawBlock *> blocks;
     for (uint32_t i = 0; i < num_blocks_; i++) {
       storage::RawBlock *block = block_store_.Get();
@@ -330,6 +322,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput02)(benchmark::State &stat
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
     state.SetIterationTime(static_cast<double>(gather_ms + compaction_ms) / 1000.0);
   }
+  printf("tuples moved: %u\n", compactor_.tuples_moved_);
   state.SetItemsProcessed(static_cast<int64_t>(num_blocks_ * state.iterations()));
 }
 // NOLINTNEXTLINE
@@ -491,45 +484,46 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput08)(benchmark::State &stat
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
 //    ->MinTime(2);
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput0)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput001)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput005)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput01)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput0)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput001)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput005)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput01)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput02)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(10);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput04)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput06)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput08)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput04)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput06)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput08)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(10);
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
 //    ->Unit(benchmark::kMillisecond)
