@@ -310,50 +310,85 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput08)(benchmark::State &stat
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(2);
 
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, CompactionThroughput)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput0)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction0)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(1);
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction001)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction005)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction01)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction02)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction02)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction04)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction06)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction08)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput001)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(1);
+    ->MinTime(2)->Repetitions(10);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput005)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(1);
+    ->MinTime(2)->Repetitions(10);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput01)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(1);
+    ->MinTime(2)->Repetitions(10);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput02)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(1);
+    ->MinTime(2)->Repetitions(10);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput04)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(1);
+    ->MinTime(2)->Repetitions(10);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput06)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(1);
+    ->MinTime(2)->Repetitions(10);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput08)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(1);
+    ->MinTime(2)->Repetitions(10);
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
 //    ->Unit(benchmark::kMillisecond)
