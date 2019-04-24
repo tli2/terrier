@@ -49,6 +49,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
         throw std::runtime_error("unexpected control flow");
     }
   }
+  if (cg == nullptr) return;
   if (EliminateGaps(cg)) {
     // Has to mark block as cooling before transaction commit, so we have a guarantee that
     // any older transactions
