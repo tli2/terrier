@@ -17,38 +17,39 @@ void NoOp(void * /* unused */) {}
 #define GROUP_SIZE 500
 void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn_manager) {
   std::forward_list<RawBlock *> to_process = std::move(compaction_queue_);
-  CompactionGroup *cg = nullptr;
-  uint32_t current_group_size = 0;
+//  CompactionGroup *cg = nullptr;
+//  uint32_t current_group_size = 0;
   for (auto &block : to_process) {
     BlockAccessController &controller = block->controller_;
     switch (controller.CurrentBlockState()) {
       case BlockState::HOT: {
-        if (cg == nullptr) {
-          cg = new CompactionGroup(txn_manager->BeginTransaction(), block->data_table_);
-          current_group_size = 0;
+//        if (cg == nullptr) {
+//          cg = new CompactionGroup(txn_manager->BeginTransaction(), block->data_table_);
+//          current_group_size = 0;
         }
-        if (block->data_table_ != cg->table_) throw std::runtime_error("need to remove hack");
+        CompactionGroup cg(txn_manager->BeginTransaction(), block->data_table_);
+        if (block->data_table_ != cg.table_) throw std::runtime_error("need to remove hack");
         // TODO(Tianyu): This is probably fine for now, but we will want to not only compact within a block
         // but also across blocks to eventually free up slots
-        cg->blocks_to_compact_.emplace(block, std::vector<uint32_t>());
-        current_group_size++;
-        if (current_group_size == GROUP_SIZE) {
-          if (EliminateGaps(cg)) {
+        cg.blocks_to_compact_.emplace(block, std::vector<uint32_t>());
+//        current_group_size++;
+//        if (current_group_size == GROUP_SIZE) {
+          if (EliminateGaps(&cg)) {
             // Has to mark block as cooling before transaction commit, so we have a guarantee that
             // any older transactions
-            for (auto &entry : cg->blocks_to_compact_) {
+            for (auto &entry : cg.blocks_to_compact_) {
               RawBlock *block1 = entry.first;
               BlockAccessController &controller1 = block1->controller_;
               controller1.GetBlockState()->store(BlockState::COOLING);
             }
-            txn_manager->Commit(cg->txn_, NoOp, nullptr);
+            txn_manager->Commit(cg.txn_, NoOp, nullptr);
           } else {
-            txn_manager->Abort(cg->txn_);
+            txn_manager->Abort(cg.txn_);
           }
-          cg = nullptr;
-        }
+//          cg = nullptr;
+//        }
         break;
-      }
+//      }
       case BlockState::COOLING: {
         if (!CheckForVersionsAndGaps(block->data_table_->accessor_, block)) {
 //          printf("Gathering of block %p failed\n", entry.first);
@@ -182,7 +183,7 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   // the case.
   bool ret = cg->table_->Delete(cg->txn_, from);
   if (!ret) return false;
-  /*
+
   if (cg->table_ == DirtyGlobals::tpcc_db->history_table_->table_.data_table) {
     // No Indexes
 //    throw std::runtime_error("no compaction should happen on the history table");
@@ -247,7 +248,7 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
     return true;
   } else {
     throw std::runtime_error("unexpected table being compacted");
-  }*/
+  }
   tuples_moved_++;
   return true;
 }
