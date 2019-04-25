@@ -21,6 +21,7 @@
 #include "storage/block_compactor.h"
 #include "transaction/transaction_manager.h"
 #include "storage/dirty_globals.h"
+#include "storage/arrow_util.h"
 
 #include "network/rdma/server.h"
 
@@ -65,9 +66,8 @@ class TpccLoader {
   storage::BlockCompactor compactor_;
   storage::AccessObserver access_observer_{&compactor_};
 
-  const bool only_count_new_order_ = false;
   const int8_t num_threads_ = 6;
-  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
+  const uint32_t num_precomputed_txns_per_worker_ = 100000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
@@ -75,7 +75,7 @@ class TpccLoader {
 
   common::WorkerPool thread_pool_{static_cast<uint32_t>(num_threads_), {}};
 
-  void ServerLoop() {
+  void ServerLoop(tpcc::Database *tpcc_db) {
     struct sockaddr_in sin;
     std::memset(&sin, 0, sizeof(sin));
     sin.sin_family = AF_INET;
@@ -100,7 +100,15 @@ class TpccLoader {
       if (new_conn_fd == -1)
         throw std::runtime_error("Failed to accept");
       // TODO(Tianyu): Do the thing
-      do_rdma(new_conn_fd);
+      storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
+      std::list<storage::RawBlock *> blocks = order_line->blocks_;
+      // const storage::TupleAccessStrategy &accessor = order_line->accessor_;
+      // for (storage::RawBlock *block : blocks) {
+      //   if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN) continue;
+      //   std::shared_ptr<arrow::Table> table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
+      //   // TODO(Tianyu): Do things!
+      // }
+      do_rdma(new_conn_fd, blocks);
     }
   }
 
@@ -159,9 +167,6 @@ class TpccLoader {
       }
       precomputed_args.emplace_back(txns);
     }
-
-    // NOLINTNEXTLINE
-    // build the TPCC database
 
     auto *const tpcc_db = tpcc_builder.Build();
     storage::DirtyGlobals::tpcc_db = tpcc_db;
@@ -270,7 +275,7 @@ class TpccLoader {
 //        aborted += arg.aborted;
 //    printf("number of transactions aborted: %u\n", aborted);
 
-    ServerLoop();
+    ServerLoop(tpcc_db);
     // Clean up the buffers from any non-inlined VarlenEntrys in the precomputed args
     for (const auto &worker_id : precomputed_args) {
       for (const auto &args : worker_id) {

@@ -34,22 +34,18 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
         cg.blocks_to_compact_.emplace(block, std::vector<uint32_t>());
 //        current_group_size++;
 //        if (current_group_size == GROUP_SIZE) {
-          if (EliminateGaps(&cg)) {
-            // Has to mark block as cooling before transaction commit, so we have a guarantee that
-            // any older transactions
-            for (auto &entry : cg.blocks_to_compact_) {
-              RawBlock *block1 = entry.first;
-              BlockAccessController &controller1 = block1->controller_;
-              controller1.GetBlockState()->store(BlockState::COOLING);
-              if (cg.txn_->IsReadOnly()) {
-                cg.txn_->compacted_ = block;
-                cg.txn_->table_ = block->data_table_;
-              }
-            }
-            txn_manager->Commit(cg.txn_, NoOp, nullptr);
-          } else {
-            txn_manager->Abort(cg.txn_);
+        if (EliminateGaps(&cg)) {
+          // Has to mark block as cooling before transaction commit, so we have a guarantee that
+          // any older transactions
+          controller.GetBlockState()->store(BlockState::COOLING);
+          if (cg.txn_->IsReadOnly()) {
+            cg.txn_->compacted_ = block;
+            cg.txn_->table_ = block->data_table_;
           }
+          txn_manager->Commit(cg.txn_, NoOp, nullptr);
+        } else {
+          txn_manager->Abort(cg.txn_);
+        }
 //          cg = nullptr;
 //        }
         break;
@@ -70,8 +66,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
       case BlockState::FROZEN:
         // okay
         break;
-      default:
-        throw std::runtime_error("unexpected control flow");
+      default:throw std::runtime_error("unexpected control flow");
     }
   }
 }
@@ -212,7 +207,8 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
     DirtyGlobals::tpcc_db->order_index_->Insert(*order_key, to);
 
     // insert in Order secondary index
-    const auto order_secondary_key_pr_initializer = DirtyGlobals::tpcc_db->order_secondary_index_->GetProjectedRowInitializer();
+    const auto order_secondary_key_pr_initializer =
+        DirtyGlobals::tpcc_db->order_secondary_index_->GetProjectedRowInitializer();
     TERRIER_ASSERT(order_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
     auto *const order_secondary_key =
         order_secondary_key_pr_initializer.InitializeRow(buf_);
@@ -325,8 +321,7 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
     ArrowColumnInfo &col_info = metadata.GetColumnInfo(layout, col_id);
     auto *values = reinterpret_cast<VarlenEntry *>(accessor.ColumnStart(block, col_id));
     switch (col_info.Type()) {
-      case ArrowColumnType::GATHERED_VARLEN:
-        CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
+      case ArrowColumnType::GATHERED_VARLEN:CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
         break;
       case ArrowColumnType::DICTIONARY_COMPRESSED:
         BuildDictionary(txn,
@@ -336,8 +331,7 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
                         &col_info,
                         values);
         break;
-      default:
-        throw std::runtime_error("unexpected control flow");
+      default:throw std::runtime_error("unexpected control flow");
     }
   }
 }
