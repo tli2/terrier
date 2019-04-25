@@ -47,6 +47,7 @@ int post_receive (struct resources *res);
 
 void resources_init (struct resources *res);
 int resources_create (struct resources *res, struct config_t &config);
+int resources_clone (struct resources *res, struct resources *res_old);
 int resources_destroy (struct resources *res);
 
 int connect_qp (struct resources *res, struct config_t &config);

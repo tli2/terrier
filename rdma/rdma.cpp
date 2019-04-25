@@ -446,7 +446,6 @@ resources_create (struct resources *res, struct config_t &config)
     struct ibv_device **dev_list = NULL;
     struct ibv_qp_init_attr qp_init_attr;
     struct ibv_device *ib_dev = NULL;
-    size_t size;
     int i;
     int mr_flags = 0;
     int cq_size = 0;
@@ -521,7 +520,7 @@ resources_create (struct resources *res, struct config_t &config)
         goto resources_create_exit;
     }
     /* each side will send only one WR, so Completion Queue with 1 entry is enough */
-    cq_size = 1;
+    cq_size = 10;
     res->cq = ibv_create_cq (res->ib_ctx, cq_size, NULL, NULL, 0);
     if (!res->cq)
     {
@@ -530,11 +529,10 @@ resources_create (struct resources *res, struct config_t &config)
         goto resources_create_exit;
     }
     /* prepare the buf */
-    size = res->size;
     /* register the memory buffer */
     mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
         IBV_ACCESS_REMOTE_WRITE;
-    res->mr = ibv_reg_mr (res->pd, res->buf, size, mr_flags);
+    res->mr = ibv_reg_mr (res->pd, res->buf, res->size, mr_flags);
     if (!res->mr)
     {
         fprintf (stderr, "ibv_reg_mr failed with mr_flags=0x%x\n", mr_flags);
@@ -609,6 +607,50 @@ resources_create_exit:
         }
     }
     return rc;
+}
+
+int
+resources_clone (struct resources *res, struct resources *res_old) {
+    struct ibv_qp_init_attr qp_init_attr;
+
+    // copy over everything except for buf and size
+    char *buf = res->buf;
+    int size = res->size;
+    memcpy(res, res_old, sizeof(struct resources));
+    res->buf = buf;
+    res->size = size;
+
+    // create new mr and qp for new resource
+    int mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
+        IBV_ACCESS_REMOTE_WRITE;
+    res->mr = ibv_reg_mr (res->pd, res->buf, res->size, mr_flags);
+    if (!res->mr)
+    {
+        fprintf (stderr, "ibv_reg_mr failed with mr_flags=0x%x\n", mr_flags);
+        return 1;
+    }
+    fprintf (stdout,
+            "MR was registered with addr=%p, lkey=0x%x, rkey=0x%x, flags=0x%x\n",
+            res->buf, res->mr->lkey, res->mr->rkey, mr_flags);
+    /* create the Queue Pair */
+    memset (&qp_init_attr, 0, sizeof (qp_init_attr));
+    qp_init_attr.qp_type = IBV_QPT_RC;
+    qp_init_attr.sq_sig_all = 1;
+    qp_init_attr.send_cq = res->cq;
+    qp_init_attr.recv_cq = res->cq;
+    qp_init_attr.cap.max_send_wr = 1;
+    qp_init_attr.cap.max_recv_wr = 1;
+    qp_init_attr.cap.max_send_sge = 1;
+    qp_init_attr.cap.max_recv_sge = 1;
+    res->qp = ibv_create_qp (res->pd, &qp_init_attr);
+    if (!res->qp)
+    {
+        fprintf (stderr, "failed to create QP\n");
+        ibv_dereg_mr (res->mr);
+        return 1;
+    }
+    fprintf (stdout, "QP was created, QP number=0x%x\n", res->qp->qp_num);
+    return 0;
 }
 
 /******************************************************************************
@@ -750,7 +792,7 @@ modify_qp_to_rts (struct ibv_qp *qp)
  * 0 on success, error code on failure
  *
  * Description
- * Connect the QP. Transition the server side to RTR, sender side to RTS
+ * Connect the QP. Transition the reciever side to RTR, sender side to RTS
  ******************************************************************************/
 int
 connect_qp (struct resources *res, struct config_t &config)
