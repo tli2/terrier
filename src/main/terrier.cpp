@@ -21,6 +21,7 @@
 #include "storage/block_compactor.h"
 #include "transaction/transaction_manager.h"
 #include "storage/dirty_globals.h"
+#include "storage/arrow_util.h"
 
 namespace terrier {
 class TpccLoader {
@@ -72,7 +73,7 @@ class TpccLoader {
 
   common::WorkerPool thread_pool_{static_cast<uint32_t>(num_threads_), {}};
 
-  void ServerLoop() {
+  void ServerLoop(tpcc::Database *tpcc_db) {
     struct sockaddr_in sin;
     std::memset(&sin, 0, sizeof(sin));
     sin.sin_family = AF_INET;
@@ -96,7 +97,14 @@ class TpccLoader {
       int new_conn_fd = accept(listen_fd, reinterpret_cast<struct sockaddr *>(&addr), &addrlen);
       if (new_conn_fd == -1)
         throw std::runtime_error("Failed to accept");
-      // TODO(Tianyu): Do the thing
+      storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
+      std::list<storage::RawBlock *> blocks = order_line->blocks_;
+      const storage::TupleAccessStrategy &accessor = order_line->accessor_;
+      for (storage::RawBlock *block : blocks) {
+        if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN) continue;
+        std::shared_ptr<arrow::Table> table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
+        // TODO(Tianyu): Do things!
+      }
     }
   }
 
@@ -263,7 +271,7 @@ class TpccLoader {
 //        aborted += arg.aborted;
 //    printf("number of transactions aborted: %u\n", aborted);
 
-    ServerLoop();
+    ServerLoop(tpcc_db);
     // Clean up the buffers from any non-inlined VarlenEntrys in the precomputed args
     for (const auto &worker_id : precomputed_args) {
       for (const auto &args : worker_id) {
