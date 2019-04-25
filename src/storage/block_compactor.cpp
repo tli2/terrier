@@ -26,7 +26,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
 //        if (cg == nullptr) {
 //          cg = new CompactionGroup(txn_manager->BeginTransaction(), block->data_table_);
 //          current_group_size = 0;
-        }
+//        }
         CompactionGroup cg(txn_manager->BeginTransaction(), block->data_table_);
         if (block->data_table_ != cg.table_) throw std::runtime_error("need to remove hack");
         // TODO(Tianyu): This is probably fine for now, but we will want to not only compact within a block
@@ -49,7 +49,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
 //          cg = nullptr;
 //        }
         break;
-//      }
+      }
       case BlockState::COOLING: {
         if (!CheckForVersionsAndGaps(block->data_table_->accessor_, block)) {
 //          printf("Gathering of block %p failed\n", entry.first);
