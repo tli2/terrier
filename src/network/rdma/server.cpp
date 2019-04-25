@@ -15,27 +15,10 @@ struct config_t config = {
 
 struct size_pair sizes = {-1, -1};
 
-int main(int argc, char *argv[]) {
-  if (argc != 1) {
-    fprintf(stderr,
-            "Usage (server): run with no arguments\n");
-    return 1;
-  }
-
-  // wait for client connection
+int do_rdma(int sockfd) {
   struct resources res;
   resources_init(&res);
-
-  fprintf(stdout, "waiting on port %d for TCP connection\n",
-          config.tcp_port);
-  res.sock = sock_connect (NULL, config.tcp_port);
-  if (res.sock < 0) {
-    fprintf(stderr,
-            "failed to establish TCP connection to server %s, port %d\n",
-            config.server_name, config.tcp_port);
-    return 1;
-  }
-  fprintf (stdout, "TCP connection was established\n");
+  res.sock = sockfd;
 
   // get table data from client to server
   int rc = sock_read_data(res.sock, sizeof(table_name), table_name);
@@ -116,3 +99,26 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
+
+
+// int main(int argc, char *argv[]) {
+//   if (argc != 1) {
+//     fprintf(stderr,
+//             "Usage (server): run with no arguments\n");
+//     return 1;
+//   }
+
+//   // wait for client connection
+//   fprintf(stdout, "waiting on port %d for TCP connection\n",
+//           config.tcp_port);
+//   int sockfd = sock_connect (NULL, config.tcp_port);
+//   if (sockfd < 0) {
+//     fprintf(stderr,
+//             "failed to establish TCP connection to server %s, port %d\n",
+//             config.server_name, config.tcp_port);
+//     return 1;
+//   }
+//   fprintf (stdout, "TCP connection was established\n");
+
+//   return do_rdma(sockfd)
+// }

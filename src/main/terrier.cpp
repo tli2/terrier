@@ -22,6 +22,8 @@
 #include "transaction/transaction_manager.h"
 #include "storage/dirty_globals.h"
 
+#include "network/rdma/server.h"
+
 namespace terrier {
 class TpccLoader {
  public:
@@ -98,6 +100,7 @@ class TpccLoader {
       if (new_conn_fd == -1)
         throw std::runtime_error("Failed to accept");
       // TODO(Tianyu): Do the thing
+      do_rdma(new_conn_fd);
     }
   }
 
