@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
   // sync resources between client and server
   res.buf = data;
   res.size = sizes.data_size;
-  std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+  // std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
   /* create resources before using them */
   if (resources_create (&res, config))
   {
@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-  fprintf(stdout, "Client side RDMA duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+  // fprintf(stdout, "Client side RDMA duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   
   // wait for server to tell us it's done
   /* Sync so server will know that client is done mucking with its memory */
