@@ -63,7 +63,6 @@ int main(int argc, char *argv[]) {
   // sync resources between client and server
   res.buf = data;
   res.size = sizes.data_size;
-  // std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
   /* create resources before using them */
   if (resources_create (&res, config))
   {
@@ -71,12 +70,11 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   /* connect the QPs */
+  std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
   if (connect_qp (&res, config)) {
     fprintf (stderr, "failed to connect QPs\n");
     return 1;
   }
-  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-  // fprintf(stdout, "Client side RDMA duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   
   // wait for server to tell us it's done
   /* Sync so server will know that client is done mucking with its memory */
@@ -86,6 +84,8 @@ int main(int argc, char *argv[]) {
     fprintf (stderr, "sync error after RDMA ops\n");
     return 1;
   }
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  fprintf(stdout, "Client side TOTAL duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   fprintf (stderr, "final sync done\n");
 
   // report what we got

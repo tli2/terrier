@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
   fprintf (stdout, "Now initiating RDMA write\n");
   std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
   for (int i = 0; i < num_blocks; i++) {
-    fprintf (stdout, "Sending address 0x%x to 0x%x\n", res.buf, res.remote_props.addr);
+    // fprintf (stdout, "Sending address 0x%x to 0x%x\n", res.buf, res.remote_props.addr);
     if (post_send (&res, IBV_WR_RDMA_WRITE))
     {
         fprintf (stderr, "failed to post SR\n");

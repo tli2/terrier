@@ -2,7 +2,7 @@
 
 #define FAKEDB_METADATA_SIZE 128
 #define FAKEDB_BLOCK_SIZE 10485760
-#define NUM_BLOCKS 10
+#define NUM_BLOCKS 100
 
 char fakedb_md[FAKEDB_METADATA_SIZE];
 
