@@ -1,0 +1,9 @@
+!_TAG_FILE_SORTED	2	/0=unsorted, 1=sorted, 2=foldcase/
+BENCHMARK_DEFINE_F	/Users/Tianyu/Desktop/PoopDish/benchmark/storage/block_compactor_benchmark.cpp	/^BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::State &state) {$/;"	f	language:C++	namespace:terrier
+BENCHMARK_DEFINE_F	/Users/Tianyu/Desktop/PoopDish/benchmark/storage/block_compactor_benchmark.cpp	/^BENCHMARK_DEFINE_F(BlockCompactorBenchmark, GatherThroughput)(benchmark::State &state) {$/;"	f	language:C++	namespace:terrier
+BENCHMARK_DEFINE_F	/Users/Tianyu/Desktop/PoopDish/benchmark/storage/block_compactor_benchmark.cpp	/^BENCHMARK_DEFINE_F(BlockCompactorBenchmark, NoTxn)(benchmark::State &state) {$/;"	f	language:C++	namespace:terrier
+BENCHMARK_DEFINE_F	/Users/Tianyu/Desktop/PoopDish/benchmark/storage/block_compactor_benchmark.cpp	/^BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Strawman)(benchmark::State &state) {$/;"	f	language:C++	namespace:terrier
+BlockCompactorBenchmark	/Users/Tianyu/Desktop/PoopDish/benchmark/storage/block_compactor_benchmark.cpp	/^class BlockCompactorBenchmark : public benchmark::Fixture {$/;"	c	language:C++	namespace:terrier	file:
+compactor_	/Users/Tianyu/Desktop/PoopDish/benchmark/storage/block_compactor_benchmark.cpp	/^  storage::BlockCompactor compactor_;$/;"	m	language:C++	class:terrier::BlockCompactorBenchmark	file:
+generator_	/Users/Tianyu/Desktop/PoopDish/benchmark/storage/block_compactor_benchmark.cpp	/^  std::default_random_engine generator_;$/;"	m	language:C++	class:terrier::BlockCompactorBenchmark	file:
+terrier	/Users/Tianyu/Desktop/PoopDish/benchmark/storage/block_compactor_benchmark.cpp	/^namespace terrier {$/;"	n	language:C++	file:

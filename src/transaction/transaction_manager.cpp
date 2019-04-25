@@ -30,9 +30,8 @@ void TransactionManager::LogCommit(TransactionContext *const txn, const timestam
     // Here we will manually add a commit record and flush the buffer to ensure the logger
     // sees this record.
     byte *const commit_record = txn->redo_buffer_.NewEntry(storage::CommitRecord::Size());
-    const bool is_read_only = txn->undo_buffer_.Empty();
     storage::CommitRecord::Initialize(commit_record, txn->StartTime(), commit_time, callback, callback_arg,
-                                      is_read_only, txn);
+                                      txn->IsReadOnly(), txn);
     // Signal to the log manager that we are ready to be logged out
   } else {
     // Otherwise, logging is disabled. We should pretend to have flushed the record so the rest of the system proceeds
@@ -84,8 +83,8 @@ timestamp_t TransactionManager::UpdatingCommitCriticalSection(TransactionContext
 
 timestamp_t TransactionManager::Commit(TransactionContext *const txn, transaction::callback_fn callback,
                                        void *callback_arg) {
-  const timestamp_t result = txn->undo_buffer_.Empty() ? ReadOnlyCommitCriticalSection(txn, callback, callback_arg)
-                                                       : UpdatingCommitCriticalSection(txn, callback, callback_arg);
+  const timestamp_t result = txn->IsReadOnly() ? ReadOnlyCommitCriticalSection(txn, callback, callback_arg)
+                                               : UpdatingCommitCriticalSection(txn, callback, callback_arg);
   {
     // In a critical section, remove this transaction from the table of running transactions
     common::SpinLatch::ScopedSpinLatch guard(&curr_running_txns_latch_);
@@ -203,10 +202,20 @@ void TransactionManager::Rollback(TransactionContext *txn, const storage::UndoRe
     default:
       throw std::runtime_error("unexpected delta record type");
   }
-  // Remove this delta record from the version chain, effectively releasing the lock. At this point, the tuple
-  // has been restored to its original form. No CAS needed since we still hold the write lock at time of the atomic
-  // write.
-  table->AtomicallyWriteVersionPtr(slot, accessor, version_ptr->Next());
+
+  // Because the garbage collector can be concurrently truncating the version chain, it is important we check
+  // that the value we write is not changing.
+  storage::UndoRecord *next;
+  do {
+    next = version_ptr->Next();
+    // Remove this delta record from the version chain, effectively releasing the lock. At this point, the tuple
+    // has been restored to its original form. No CAS needed since we still hold the write lock at time of the atomic
+    // write.
+    table->AtomicallyWriteVersionPtr(slot, accessor, next);
+    // It is still safe at this point if the garbage collector changes the next record from under us, because
+    // as long as the abort function does not return, GC cannot deallocate these stale records. We just need
+    // to make sure we get them before returning.
+  } while (next != version_ptr->Next());
 }
 
 void TransactionManager::DeallocateColumnUpdateIfVarlen(TransactionContext *txn, storage::UndoRecord *undo,
@@ -231,7 +240,6 @@ void TransactionManager::DeallocateInsertedTupleIfVarlen(TransactionContext *txn
     if (layout.IsVarlen(col_id)) {
       auto *varlen = reinterpret_cast<storage::VarlenEntry *>(accessor.AccessWithNullCheck(undo->Slot(), col_id));
       if (varlen != nullptr) {
-        TERRIER_ASSERT(varlen->NeedReclaim() || varlen->IsInlined(), "Fresh updates cannot be compacted or compressed");
         if (varlen->NeedReclaim()) txn->loose_ptrs_.push_back(varlen->Content());
       }
     }

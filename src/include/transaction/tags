@@ -1,0 +1,49 @@
+!_TAG_FILE_SORTED	2	/0=unsorted, 1=sorted, 2=foldcase/
+Abort	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  void Abort(TransactionContext *txn);$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+BeginTransaction	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  TransactionContext *BeginTransaction();$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+buffer_pool_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  storage::RecordBufferSegmentPool *buffer_pool_;$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+Commit	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  timestamp_t Commit(TransactionContext *txn, transaction::callback_fn callback, void *callback_arg);$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+commit_latch_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  common::SharedLatch commit_latch_;$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+CompletedTransactionsForGC	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  TransactionQueue CompletedTransactionsForGC();$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+completed_txns_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  TransactionQueue completed_txns_;$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+curr_running_txns_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  std::unordered_set<timestamp_t> curr_running_txns_;$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+curr_running_txns_latch_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  mutable common::SpinLatch curr_running_txns_latch_;$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+DeallocateColumnUpdateIfVarlen	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  void DeallocateColumnUpdateIfVarlen(TransactionContext *txn, storage::UndoRecord *undo,$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+DeallocateInsertedTupleIfVarlen	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  void DeallocateInsertedTupleIfVarlen(TransactionContext *txn, storage::UndoRecord *undo,$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+GCEnabled	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  bool GCEnabled() const { return gc_enabled_; }$/;"	f	language:C++	class:terrier::transaction::TransactionManager
+GCLastUpdateOnAbort	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  void GCLastUpdateOnAbort(TransactionContext *txn);$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+gc_enabled_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  bool gc_enabled_ = false;$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+GetTimestamp	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  timestamp_t GetTimestamp() { return time_++; }$/;"	f	language:C++	class:terrier::transaction::TransactionManager
+IsReadOnly	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  bool IsReadOnly() const { return undo_buffer_.Empty() && loose_ptrs_.empty(); }$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+LogCommit	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  void LogCommit(TransactionContext *txn, timestamp_t commit_time, transaction::callback_fn callback,$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+log_manager_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  storage::LogManager *const log_manager_;$/;"	m	language:C++	class:terrier::transaction::TransactionManager::storage
+log_processed_	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  bool log_processed_ = false;$/;"	m	language:C++	class:terrier::terrier::transaction::TransactionContext
+loose_ptrs_	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  std::vector<const byte *> loose_ptrs_;$/;"	m	language:C++	class:terrier::terrier::transaction::TransactionContext
+OldestTransactionStartTime	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  timestamp_t OldestTransactionStartTime() const;$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+pad1_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  byte pad1_[64];$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+pad2_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  byte pad2_[64];$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+pad3_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  byte pad3_[64];$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+pad4_	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  byte pad4_[64];$/;"	m	language:C++	class:terrier::transaction::TransactionManager
+ReadOnlyCommitCriticalSection	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  timestamp_t ReadOnlyCommitCriticalSection(TransactionContext *txn, transaction::callback_fn callback,$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+redo_buffer_	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  storage::RedoBuffer redo_buffer_;$/;"	m	language:C++	class:terrier::terrier::transaction::TransactionContext
+Rollback	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  void Rollback(TransactionContext *txn, const storage::UndoRecord &record) const;$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+StageDelete	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  void StageDelete(storage::DataTable *const table, const storage::TupleSlot slot) {$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+StageWrite	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  storage::RedoRecord *StageWrite(storage::DataTable *const table, const storage::TupleSlot slot,$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+StartTime	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  timestamp_t StartTime() const { return start_time_; }$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+start_time_	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  const timestamp_t start_time_;$/;"	m	language:C++	class:terrier::terrier::transaction::TransactionContext
+storage	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^namespace terrier::storage {$/;"	n	language:C++	class:terrier
+transaction	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^namespace terrier::transaction {$/;"	n	language:C++	class:terrier::terrier
+transaction	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^namespace terrier::transaction {$/;"	n	language:C++	class:terrier
+TransactionContext	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  TransactionContext(const timestamp_t start, const timestamp_t txn_id,$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+TransactionContext	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^class TransactionContext {$/;"	c	language:C++	namespace:terrier::terrier::transaction
+TransactionManager	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  TransactionManager(storage::RecordBufferSegmentPool *const buffer_pool, const bool gc_enabled,$/;"	f	language:C++	class:terrier::transaction::TransactionManager
+TransactionManager	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^class TransactionManager {$/;"	c	language:C++	namespace:terrier::transaction
+TxnId	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  const std::atomic<timestamp_t> &TxnId() const { return txn_id_; }$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+TxnId	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  std::atomic<timestamp_t> &TxnId() { return txn_id_; }$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+txn_id_	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  std::atomic<timestamp_t> txn_id_;$/;"	m	language:C++	class:terrier::terrier::transaction::TransactionContext
+UndoRecordForDelete	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  storage::UndoRecord *UndoRecordForDelete(storage::DataTable *const table, const storage::TupleSlot slot) {$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+UndoRecordForInsert	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  storage::UndoRecord *UndoRecordForInsert(storage::DataTable *const table, const storage::TupleSlot slot) {$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+UndoRecordForUpdate	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  storage::UndoRecord *UndoRecordForUpdate(storage::DataTable *const table, const storage::TupleSlot slot,$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext
+undo_buffer_	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  storage::UndoBuffer undo_buffer_;$/;"	m	language:C++	class:terrier::terrier::transaction::TransactionContext
+UpdatingCommitCriticalSection	/home/tli2/terrier/src/include/transaction/transaction_manager.h	/^  timestamp_t UpdatingCommitCriticalSection(TransactionContext *txn, transaction::callback_fn callback,$/;"	p	language:C++	class:terrier::transaction::TransactionManager
+~TransactionContext	/home/tli2/terrier/src/include/transaction/transaction_context.h	/^  ~TransactionContext() {$/;"	f	language:C++	class:terrier::terrier::transaction::TransactionContext

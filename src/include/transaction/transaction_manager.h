@@ -80,14 +80,11 @@ class TransactionManager {
   // TODO(Tianyu): Timestamp generation needs to be more efficient (batches)
   // TODO(Tianyu): We don't handle timestamp wrap-arounds. I doubt this would be an issue though.
   std::atomic<timestamp_t> time_{timestamp_t(0)};
-
   // TODO(Tianyu): This is the famed HyPer Latch. We will need to re-evaluate performance later.
   common::SharedLatch commit_latch_;
-
   // TODO(Matt): consider a different data structure if this becomes a measured bottleneck
   std::unordered_set<timestamp_t> curr_running_txns_;
   mutable common::SpinLatch curr_running_txns_latch_;
-
   bool gc_enabled_ = false;
   TransactionQueue completed_txns_;
   storage::LogManager *const log_manager_;

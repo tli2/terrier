@@ -12,6 +12,7 @@ void LogManager::Process() {
       buffer = flush_queue_.front();
       flush_queue_.pop();
     }
+//    LogRecord &record = *reinterpret_cast<LogRecord *>(buffer->last_record_);
     for (LogRecord &record : IterableBufferSegment<LogRecord>(buffer)) {
       if (record.RecordType() == LogRecordType::COMMIT) {
         auto *commit_record = record.GetUnderlyingRecordBodyAs<CommitRecord>();
@@ -25,10 +26,10 @@ void LogManager::Process() {
         // logging (there is nothing to log after all)
         if (!commit_record->IsReadOnly()) commit_record->Txn()->log_processed_ = true;
       } else {
-        // Any record that is not a commit record is always serialized.`
         SerializeRecord(record);
       }
     }
+    out_.WriteUnsynced(buffer->bytes_, buffer->size_);
     buffer_pool_->Release(buffer);
   }
   Flush();
@@ -59,8 +60,7 @@ void LogManager::SerializeRecord(const terrier::storage::LogRecord &record) {
       WriteValue(record_body->GetTupleSlot());
       break;
     }
-    case LogRecordType::COMMIT:
-      WriteValue(record.GetUnderlyingRecordBodyAs<CommitRecord>()->CommitTime());
+    case LogRecordType::COMMIT:WriteValue(record.GetUnderlyingRecordBodyAs<CommitRecord>()->CommitTime());
   }
 }
 

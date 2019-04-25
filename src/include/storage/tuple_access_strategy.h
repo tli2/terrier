@@ -9,6 +9,9 @@
 #include "storage/storage_util.h"
 
 namespace terrier::storage {
+
+class DataTable;
+
 /**
  * Code for accessing data within a block. This code is eventually compiled and
  * should be stateless, so no fields other than const BlockLayout.
@@ -18,7 +21,7 @@ class TupleAccessStrategy {
   /*
    * A mini block stores individual columns. Mini block layout:
    * ----------------------------------------------------
-   * | null-bitmap (pad up to size of attr) | val1 | val2 | ... |
+   * | null-bitmap (pad up to 8 bytes) | val1 | val2 | ... |
    * ----------------------------------------------------
    * Warning, 0 means null
    */
@@ -40,14 +43,14 @@ class TupleAccessStrategy {
 
   /*
    * Block Header layout:
-   * ----------------------------------------------------------------------------------------------
-   * | layout_version (32) | insert_head (32) | control_block (64) |     ArrowBlockMetadata       |
-   * ----------------------------------------------------------------------------------------------
-   * | attr_offsets[num_col] (32) | bitmap for slots (64-bit aligned) |   data (64-bit aligned)   |
-   * ----------------------------------------------------------------------------------------------
+   * -----------------------------------------------------------------------------------------------------------------
+   * | data_table *(64) | padding (16) | layout_version (16) | insert_head (32) |        control_block (64)          |
+   * -----------------------------------------------------------------------------------------------------------------
+   * | ArrowBlockMetadata | attr_offsets[num_col] (32) | bitmap for slots (64-bit aligned) | data (64-bit aligned)   |
+   * -----------------------------------------------------------------------------------------------------------------
    *
    * Note that we will never need to span a tuple across multiple pages if we enforce
-   * block size to be 1 MB and columns to be less than 32767 (max int16_t)
+   * block size to be 1 MB and columns to be less than MAX_COL
    */
   struct Block {
     MEM_REINTERPRETATION_ONLY(Block)
@@ -57,31 +60,28 @@ class TupleAccessStrategy {
     ArrowBlockMetadata &GetArrowBlockMetadata() { return *reinterpret_cast<ArrowBlockMetadata *>(block_.content_); }
 
     // return reference to attr_offsets. Use as an array.
-    uint32_t *AttrOffets(const BlockLayout &layout) {
+    uint32_t *AttrOffsets(const BlockLayout &layout) {
       return reinterpret_cast<uint32_t *>(block_.content_ + ArrowBlockMetadata::Size(layout.NumColumns()));
     }
 
     // return reference to the bitmap for slots. Use as a member
     common::RawConcurrentBitmap *SlotAllocationBitmap(const BlockLayout &layout) {
       return reinterpret_cast<common::RawConcurrentBitmap *>(
-          StorageUtil::AlignedPtr(sizeof(uint64_t), AttrOffets(layout) + layout.NumColumns()));
+          StorageUtil::AlignedPtr(sizeof(uint64_t), AttrOffsets(layout) + layout.NumColumns()));
     }
 
     // return the miniblock for the column at the given offset.
     MiniBlock *Column(const BlockLayout &layout, const col_id_t col_id) {
-      byte *head = reinterpret_cast<byte *>(this) + AttrOffets(layout)[!col_id];
+      byte *head = reinterpret_cast<byte *>(this) + AttrOffsets(layout)[!col_id];
       return reinterpret_cast<MiniBlock *>(head);
     }
 
     // return reference to num_slots. Use as a member.
     uint32_t &NumSlots() { return *reinterpret_cast<uint32_t *>(block_.content_); }
 
-    // return reference to attr_offsets. Use as an array.
-    uint32_t *AttrOffsets() { return &NumSlots() + 1; }
-
     // return reference to num_attrs. Use as a member.
     uint16_t &NumAttrs(const BlockLayout &layout) {
-      return *reinterpret_cast<uint16_t *>(AttrOffsets() + layout.NumColumns());
+      return *reinterpret_cast<uint16_t *>(AttrOffsets(layout) + layout.NumColumns());
     }
 
     RawBlock block_;
@@ -100,11 +100,28 @@ class TupleAccessStrategy {
    * a column). The raw block needs to be 0-initialized (by default when given out
    * from a block store), otherwise it will cause undefined behavior.
    *
+   * @param data_table pointer to the DataTable to reference from this block
+   * @param raw pointer to the raw block to initialize
+   * @param layout_version the layout version of this block
+   */
+  void InitializeRawBlockForDataTable(storage::DataTable *data_table, RawBlock *raw,
+                                      layout_version_t layout_version) const;
+
+  /**
+   * Initializes a new block to conform to the layout given. This will write the
+   * headers and divide up the blocks into mini blocks(each mini block contains
+   * a column). The raw block needs to be 0-initialized (by default when given out
+   * from a block store), otherwise it will cause undefined behavior.
+   *
    * @param raw pointer to the raw block to initialize
    * @param layout_version the layout version of this block
    */
   void InitializeRawBlock(RawBlock *raw, layout_version_t layout_version) const;
 
+  /**
+   * @param block block to access
+   * @return the ArrowBlockMetadata object of the requested block
+   */
   ArrowBlockMetadata &GetArrowBlockMetadata(RawBlock *block) const {
     return reinterpret_cast<Block *>(block)->GetArrowBlockMetadata();
   }
@@ -222,6 +239,10 @@ class TupleAccessStrategy {
    * @return true if the allocation succeeded, false if no space could be found.
    */
   bool Allocate(RawBlock *block, TupleSlot *slot) const;
+
+  common::RawConcurrentBitmap *AllocationBitmap(RawBlock *block) const {
+    return reinterpret_cast<Block *>(block)->SlotAllocationBitmap(layout_);
+  }
 
   /**
    * Deallocates a slot.

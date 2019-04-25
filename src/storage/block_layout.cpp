@@ -16,7 +16,7 @@ BlockLayout::BlockLayout(std::vector<uint8_t> attr_sizes)
   for (uint8_t size UNUSED_ATTRIBUTE : attr_sizes_)
     TERRIER_ASSERT(size == VARLEN_COLUMN || (size >= 0 && size <= INT8_MAX), "Invalid size of a column");
   TERRIER_ASSERT(!attr_sizes_.empty() && static_cast<uint16_t>(attr_sizes_.size()) <= common::Constants::MAX_COL,
-                 "number of columns must be between 1 and 32767");
+                 "number of columns must be between 1 and MAX_COL");
   TERRIER_ASSERT(num_slots_ != 0, "number of slots cannot be 0!");
   // sort the attributes when laying out memory to minimize impact of padding
   // skip the reserved columns because we still want those first and shouldn't mess up 8-byte alignment
@@ -33,10 +33,10 @@ uint32_t BlockLayout::ComputeTupleSize() const {
 }
 
 uint32_t BlockLayout::ComputeStaticHeaderSize() const {
-  auto unpadded_size = static_cast<uint32_t>(sizeof(uint32_t) * 2  // layout_version, insert_head
-                                             + sizeof(BlockAccessController) +
-                                             ArrowBlockMetadata::Size(NumColumns())  // access controller and metadata
-                                             + NumColumns() * sizeof(uint32_t));     // attr_offsets
+  auto unpadded_size = static_cast<uint32_t>(
+      sizeof(uintptr_t) + sizeof(layout_version_t) + sizeof(uint32_t)           // layout_version, insert_head
+      + sizeof(BlockAccessController) + ArrowBlockMetadata::Size(NumColumns())  // access controller and metadata
+      + NumColumns() * sizeof(uint32_t));                                       // attr_offsets
   return StorageUtil::PadUpToSize(sizeof(uint64_t), unpadded_size);
 }
 

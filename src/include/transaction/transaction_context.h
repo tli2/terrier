@@ -1,5 +1,5 @@
 #pragma once
-#include <set>
+#include <vector>
 #include "common/object_pool.h"
 #include "common/strong_typedef.h"
 #include "storage/data_table.h"
@@ -89,11 +89,6 @@ class TransactionContext {
     return storage::UndoRecord::InitializeDelete(result, txn_id_.load(), slot, table);
   }
 
-  storage::UndoRecord *UndoRecordAsLock(storage::DataTable *const table, const storage::TupleSlot slot) {
-    byte *result = undo_buffer_.NewEntry(sizeof(storage::UndoRecord));
-    return storage::UndoRecord::InitializeLock(result, txn_id_.load(), slot, table);
-  }
-
   /**
    * Expose a record that can hold a change, described by the initializer given, that will be logged out to disk.
    * The change can either be copied into this space, or written in the space and then used to change the DataTable.
@@ -122,6 +117,8 @@ class TransactionContext {
     storage::DeleteRecord::Initialize(redo_buffer_.NewEntry(size), start_time_, table, slot);
   }
 
+  bool IsReadOnly() const { return undo_buffer_.Empty() && loose_ptrs_.empty(); }
+
  private:
   friend class storage::GarbageCollector;
   friend class TransactionManager;
@@ -129,6 +126,8 @@ class TransactionContext {
   friend class storage::BlockCompactor;
   const timestamp_t start_time_;
   std::atomic<timestamp_t> txn_id_;
+  storage::RawBlock *compacted_ = nullptr;
+  storage::DataTable *table_ = nullptr;
   storage::UndoBuffer undo_buffer_;
   storage::RedoBuffer redo_buffer_;
   // TODO(Tianyu): Maybe not so much of a good idea to do this. Make explicit queue in GC?

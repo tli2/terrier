@@ -1,0 +1,44 @@
+!_TAG_FILE_SORTED	2	/0=unsorted, 1=sorted, 2=foldcase/
+AtomicallyReadVersionPtr	/home/tli2/terrier/src/storage/data_table.cpp	/^UndoRecord *DataTable::AtomicallyReadVersionPtr(const TupleSlot slot, const TupleAccessStrategy &accessor) const {$/;"	f	language:C++	class:terrier::storage::DataTable
+AtomicallyWriteVersionPtr	/home/tli2/terrier/src/storage/data_table.cpp	/^void DataTable::AtomicallyWriteVersionPtr(const TupleSlot slot, const TupleAccessStrategy &accessor,$/;"	f	language:C++	class:terrier::storage::DataTable
+BuildDictionary	/home/tli2/terrier/src/storage/block_compactor.cpp	/^void BlockCompactor::BuildDictionary(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata,$/;"	f	language:C++	class:terrier::storage::BlockCompactor
+CheckForVersionsAndGaps	/home/tli2/terrier/src/storage/block_compactor.cpp	/^bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor, RawBlock *block) {$/;"	f	language:C++	class:terrier::storage::BlockCompactor
+CompareAndSwapVersionPtr	/home/tli2/terrier/src/storage/data_table.cpp	/^bool DataTable::CompareAndSwapVersionPtr(const TupleSlot slot, const TupleAccessStrategy &accessor,$/;"	f	language:C++	class:terrier::storage::DataTable
+CopyToArrowVarlen	/home/tli2/terrier/src/storage/block_compactor.cpp	/^void BlockCompactor::CopyToArrowVarlen(transaction::TransactionContext *txn, ArrowBlockMetadata *metadata,$/;"	f	language:C++	class:terrier::storage::BlockCompactor
+DataTable	/home/tli2/terrier/src/storage/data_table.cpp	/^DataTable::DataTable(BlockStore *const store, const BlockLayout &layout, const layout_version_t layout_version)$/;"	f	language:C++	class:terrier::storage::DataTable
+DeallocateVarlensOnShutdown	/home/tli2/terrier/src/storage/data_table.cpp	/^void DataTable::DeallocateVarlensOnShutdown(RawBlock *block) {$/;"	f	language:C++	class:terrier::storage::DataTable
+Delete	/home/tli2/terrier/src/storage/data_table.cpp	/^bool DataTable::Delete(transaction::TransactionContext *const txn, const TupleSlot slot) {$/;"	f	language:C++	class:terrier::storage::DataTable
+EliminateGaps	/home/tli2/terrier/src/storage/block_compactor.cpp	/^bool BlockCompactor::EliminateGaps(CompactionGroup *cg) {$/;"	f	language:C++	class:terrier::storage::BlockCompactor
+end	/home/tli2/terrier/src/storage/data_table.cpp	/^DataTable::SlotIterator DataTable::end() const {$/;"	f	language:C++	class:terrier::storage::DataTable
+GatherVarlens	/home/tli2/terrier/src/storage/block_compactor.cpp	/^void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBlock *block, DataTable *table) {$/;"	f	language:C++	class:terrier::storage::BlockCompactor
+HasConflict	/home/tli2/terrier/src/storage/data_table.cpp	/^bool DataTable::HasConflict(UndoRecord *const version_ptr, const transaction::TransactionContext *const txn) const {$/;"	f	language:C++	class:terrier::storage::DataTable
+history	/home/tli2/terrier/src/storage/block_compactor.cpp	/^  storage::DataTable *history;$/;"	m	language:C++	namespace:terrier	file:
+Insert	/home/tli2/terrier/src/storage/data_table.cpp	/^TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const ProjectedRow &redo) {$/;"	f	language:C++	class:terrier::storage::DataTable
+InsertInto	/home/tli2/terrier/src/storage/data_table.cpp	/^void DataTable::InsertInto(transaction::TransactionContext *txn, const ProjectedRow &redo, TupleSlot dest) {$/;"	f	language:C++	class:terrier::storage::DataTable
+MAX_THREADS	/home/tli2/terrier/src/storage/data_table.cpp	10;"	d	language:C++	file:
+MoveTuple	/home/tli2/terrier/src/storage/block_compactor.cpp	/^bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to) {$/;"	f	language:C++	class:terrier::storage::BlockCompactor
+NewBlock	/home/tli2/terrier/src/storage/data_table.cpp	/^void DataTable::NewBlock(RawBlock *expected_val) {$/;"	f	language:C++	class:terrier::storage::DataTable
+NoOp	/home/tli2/terrier/src/storage/block_compactor.cpp	/^void NoOp(void * \/* unused *\/) {}$/;"	f	language:C++	namespace:terrier::storage::__anon1
+ObserveGCInvocation	/home/tli2/terrier/src/storage/access_observer.cpp	/^void AccessObserver::ObserveGCInvocation() {$/;"	f	language:C++	class:terrier::storage::AccessObserver
+ObserveWrite	/home/tli2/terrier/src/storage/access_observer.cpp	/^void AccessObserver::ObserveWrite(DataTable *table, TupleSlot slot) {$/;"	f	language:C++	class:terrier::storage::AccessObserver
+operator ++	/home/tli2/terrier/src/storage/data_table.cpp	/^DataTable::SlotIterator &DataTable::SlotIterator::operator++() {$/;"	f	language:C++	class:terrier::storage::DataTable::SlotIterator
+PerformGarbageCollection	/home/tli2/terrier/src/storage/garbage_collector.cpp	/^std::pair<uint32_t, uint32_t> GarbageCollector::PerformGarbageCollection() {$/;"	f	language:C++	class:terrier::storage::GarbageCollector
+ProcessCompactionQueue	/home/tli2/terrier/src/storage/block_compactor.cpp	/^void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn_manager) {$/;"	f	language:C++	class:terrier::storage::BlockCompactor
+ProcessDeallocateQueue	/home/tli2/terrier/src/storage/garbage_collector.cpp	/^uint32_t GarbageCollector::ProcessDeallocateQueue() {$/;"	f	language:C++	class:terrier::storage::GarbageCollector
+ProcessUnlinkQueue	/home/tli2/terrier/src/storage/garbage_collector.cpp	/^uint32_t GarbageCollector::ProcessUnlinkQueue() {$/;"	f	language:C++	class:terrier::storage::GarbageCollector
+ReclaimBufferIfVarlen	/home/tli2/terrier/src/storage/garbage_collector.cpp	/^void GarbageCollector::ReclaimBufferIfVarlen(transaction::TransactionContext *const txn,$/;"	f	language:C++	class:terrier::storage::GarbageCollector
+ReclaimSlotIfDeleted	/home/tli2/terrier/src/storage/garbage_collector.cpp	/^void GarbageCollector::ReclaimSlotIfDeleted(UndoRecord *const undo_record) const {$/;"	f	language:C++	class:terrier::storage::GarbageCollector
+Scan	/home/tli2/terrier/src/storage/data_table.cpp	/^void DataTable::Scan(transaction::TransactionContext *const txn, SlotIterator *const start_pos,$/;"	f	language:C++	class:terrier::storage::DataTable
+Select	/home/tli2/terrier/src/storage/data_table.cpp	/^bool DataTable::Select(terrier::transaction::TransactionContext *txn, terrier::storage::TupleSlot slot,$/;"	f	language:C++	class:terrier::storage::DataTable
+SelectIntoBuffer	/home/tli2/terrier/src/storage/data_table.cpp	/^bool DataTable::SelectIntoBuffer(transaction::TransactionContext *const txn, const TupleSlot slot,$/;"	f	language:C++	class:terrier::storage::DataTable
+SelectIntoBuffer	/home/tli2/terrier/src/storage/data_table.cpp	/^template bool DataTable::SelectIntoBuffer<ProjectedColumns::RowView>(transaction::TransactionContext *txn,$/;"	p	language:C++	class:terrier::storage::DataTable	file:
+SelectIntoBuffer	/home/tli2/terrier/src/storage/data_table.cpp	/^template bool DataTable::SelectIntoBuffer<ProjectedRow>(transaction::TransactionContext *txn, const TupleSlot slot,$/;"	p	language:C++	class:terrier::storage::DataTable	file:
+storage	/home/tli2/terrier/src/storage/access_observer.cpp	/^namespace terrier::storage {$/;"	n	language:C++	class:terrier	file:
+storage	/home/tli2/terrier/src/storage/block_compactor.cpp	/^namespace terrier::storage {$/;"	n	language:C++	class:terrier	file:
+storage	/home/tli2/terrier/src/storage/data_table.cpp	/^namespace terrier::storage {$/;"	n	language:C++	class:terrier	file:
+storage	/home/tli2/terrier/src/storage/garbage_collector.cpp	/^namespace terrier::storage {$/;"	n	language:C++	class:terrier	file:
+terrier	/home/tli2/terrier/src/storage/block_compactor.cpp	/^namespace terrier{$/;"	n	language:C++	file:
+TruncateVersionChain	/home/tli2/terrier/src/storage/garbage_collector.cpp	/^void GarbageCollector::TruncateVersionChain(DataTable *const table, const TupleSlot slot,$/;"	f	language:C++	class:terrier::storage::GarbageCollector
+Update	/home/tli2/terrier/src/storage/data_table.cpp	/^bool DataTable::Update(transaction::TransactionContext *const txn, const TupleSlot slot, const ProjectedRow &redo) {$/;"	f	language:C++	class:terrier::storage::DataTable
+Visible	/home/tli2/terrier/src/storage/data_table.cpp	/^bool DataTable::Visible(const TupleSlot slot, const TupleAccessStrategy &accessor) const {$/;"	f	language:C++	class:terrier::storage::DataTable
+~DataTable	/home/tli2/terrier/src/storage/data_table.cpp	/^DataTable::~DataTable() {$/;"	f	language:C++	class:terrier::storage::DataTable

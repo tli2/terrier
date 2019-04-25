@@ -14,6 +14,13 @@ class TransactionManager;
 }  // namespace terrier::transaction
 
 namespace terrier::storage {
+
+namespace index {
+class Index;
+template <typename KeyType>
+class BwTreeIndex;
+}  // namespace index
+
 // clang-format off
 #define DataTableCounterMembers(f) \
   f(uint64_t, NumSelect) \
@@ -51,16 +58,7 @@ class DataTable {
      * pre-fix increment.
      * @return self-reference after the iterator is advanced
      */
-    SlotIterator &operator++() {
-      common::SpinLatch::ScopedSpinLatch guard(&table_->blocks_latch_);
-      if (current_slot_.GetOffset() == table_->accessor_.GetBlockLayout().NumSlots()) {
-        ++block_;
-        current_slot_ = {block_ == table_->blocks_.end() ? nullptr : *block_, 0};
-      } else {
-        current_slot_ = {*block_, current_slot_.GetOffset() + 1};
-      }
-      return *this;
-    }
+    SlotIterator &operator++();
 
     /**
      * post-fix increment.
@@ -98,6 +96,7 @@ class DataTable {
         : table_(table), block_(block) {
       current_slot_ = {block == table->blocks_.end() ? nullptr : *block, offset_in_block};
     }
+
     // TODO(Tianyu): Can potentially collapse this information into the RawBlock so we don't have to hold a pointer to
     // the table anymore. Right now we need the table to know how many slots there are in the block
     const DataTable *table_;
@@ -165,22 +164,13 @@ class DataTable {
   }
 
   /**
-   * @return one past the last tuple slot contained in the data table
+   * Returns one past the last tuple slot contained in the data table. Note that this is not an accurate number when
+   * concurrent accesses are happening, as inserts maybe in flight. However, the number given is always transactionally
+   * correct, as any inserts that might have happened is not going to be visible to the calling transaction.
+   *
+   * @return one past the last tuple slot contained in the data table.
    */
-  SlotIterator end() const {
-    common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
-    return {this, blocks_.end(), 0};
-  }
-
-  /**
-   * @warning NOT the number of tuples currently in the data table. Such a value is not well-defined unless referring
-   * to a transactional snapshot.
-   * @return number of slots allocated for this data table.
-   */
-  uint64_t NumSlots() const {
-    common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
-    return blocks_.size() * accessor_.GetBlockLayout().NumSlots();
-  }
+  SlotIterator end() const;
 
   /**
    * Update the tuple according to the redo buffer given, and update the version chain to link to an
@@ -223,13 +213,47 @@ class DataTable {
    */
   DataTableCounter *GetDataTableCounter() { return &data_table_counter_; }
 
- private:
+  void InspectTable() {
+    std::unordered_map<BlockState, uint32_t> counts;
+    uint32_t total_count = 0, tuple_count = 0;
+    for (RawBlock *block : blocks_) {
+      auto *bitmap = accessor_.AllocationBitmap(block);
+      for (uint32_t i = 0; i < accessor_.GetBlockLayout().NumSlots(); i++)
+        if (bitmap->Test(i)) tuple_count++;
+      total_count++;
+      counts[block->controller_.CurrentBlockState()]++;
+    }
+    printf("Total number of tuples %u\n", total_count);
+    printf("Total number of blocks %u\n", total_count);
+    for (auto &entry : counts) {
+      switch (entry.first) {
+        case BlockState::HOT:
+          printf("number of hot blocks %u\n", entry.second);
+          break;
+        case BlockState::COOLING:
+          printf("number of cooling blocks %u\n", entry.second);
+          break;
+        case BlockState::FREEZING:
+          printf("number of freezing blocks %u\n", entry.second);
+          break;
+        case BlockState::FROZEN:
+          printf("number of frozen blocks %u\n", entry.second);
+          break;
+      }
+    }
+  }
+
+// private:
   // The GarbageCollector needs to modify VersionPtrs when pruning version chains
   friend class GarbageCollector;
   // The TransactionManager needs to modify VersionPtrs when rolling back aborts
   friend class transaction::TransactionManager;
-  friend class AccessObserver;
   friend class BlockCompactor;
+  friend class AccessObserver;
+  // The Index wrapper needs access to VisibleToTxn
+  friend class index::Index;
+  template <typename KeyType>
+  friend class index::BwTreeIndex;
 
   BlockStore *const block_store_;
   const layout_version_t layout_version_;
@@ -247,7 +271,8 @@ class DataTable {
   mutable common::SpinLatch blocks_latch_;
   // to avoid having to grab a latch every time we insert. Failures are very, very infrequent since these
   // only happen when blocks are full, thus we can afford to be optimistic
-  std::atomic<RawBlock *> insertion_head_ = nullptr;
+  std::vector<RawBlock *> insertion_heads_;
+//  std::atomic<RawBlock *> insertion_head_ = nullptr;
   mutable DataTableCounter data_table_counter_;
 
   // A templatized version for select, so that we can use the same code for both row and column access.
@@ -264,7 +289,9 @@ class DataTable {
   void AtomicallyWriteVersionPtr(TupleSlot slot, const TupleAccessStrategy &accessor, UndoRecord *desired);
 
   // Checks for Snapshot Isolation conflicts, used by Update
-  bool HasConflict(UndoRecord *version_ptr, const transaction::TransactionContext *txn) const;
+  bool HasConflict(const transaction::TransactionContext &txn, UndoRecord *version_ptr) const;
+
+  bool HasConflict(const transaction::TransactionContext &txn, TupleSlot slot) const;
 
   // Performs a visibility check on the designated TupleSlot. Note that this does not traverse a version chain, so this
   // information alone is not enough to determine visibility of a tuple to a transaction. This should be used along with
@@ -272,8 +299,6 @@ class DataTable {
   // The criteria for visibility of a slot are presence (slot is occupied) and not deleted
   // (logical delete bitmap is non-NULL).
   bool Visible(TupleSlot slot, const TupleAccessStrategy &accessor) const;
-
-  bool Lock(transaction::TransactionContext *txn, TupleSlot slot);
 
   // Compares and swaps the version pointer to be the undo record, only if its value is equal to the expected one.
   bool CompareAndSwapVersionPtr(TupleSlot slot, const TupleAccessStrategy &accessor, UndoRecord *expected,
@@ -283,5 +308,15 @@ class DataTable {
   void NewBlock(RawBlock *expected_val);
 
   void DeallocateVarlensOnShutdown(RawBlock *block);
+
+  /**
+   * Determine if a Tuple is visible (present and not deleted) to the given transaction. It's effectively Select's logic
+   * (follow a version chain if present) without the materialization. If the logic of Select changes, this should change
+   * with it and vice versa.
+   * @param txn the calling transaction
+   * @param slot the slot of the tuple to check visibility on
+   * @return true if tuple is visible to this txn, false otherwise
+   */
+  bool IsVisible(const transaction::TransactionContext &txn, TupleSlot slot) const;
 };
 }  // namespace terrier::storage
