@@ -2,7 +2,6 @@
 #include <vector>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
-#include "benchmark/benchmark.h"
 #include "common/macros.h"
 #include "common/scoped_timer.h"
 #include "common/worker_pool.h"
@@ -26,7 +25,7 @@
 namespace terrier {
 #define LOG_FILE_NAME "./tpcc.log"
 
-class TPCCBenchmark {
+class TpccLoader {
  public:
   void StartGC(transaction::TransactionManager *const txn_manager) {
 
@@ -319,4 +318,10 @@ class TPCCBenchmark {
     }
   }
 };
+
+int main() {
+  TpccLoader b;
+  b.Run();
+  return 0;
+}
 }
