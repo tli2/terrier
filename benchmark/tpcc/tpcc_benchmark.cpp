@@ -76,8 +76,8 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::AccessObserver access_observer_{&compactor_};
 
   const bool only_count_new_order_ = false;
-  const int8_t num_threads_ = 3;
-  const uint32_t num_precomputed_txns_per_worker_ = 100000;
+  const int8_t num_threads_ = 6;
+  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
@@ -243,24 +243,25 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     }
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
     // cleanup
-    EndCompactor();
-    EndGC();
-    printf("history table:\n");
-    tpcc_db->history_table_->table_.data_table->InspectTable();
-    printf("item table:\n");
-    tpcc_db->item_table_->table_.data_table->InspectTable();
-    printf("order table:\n");
-    tpcc_db->order_table_->table_.data_table->InspectTable();
+//    EndCompactor();
+//    EndGC();
+//    printf("history table:\n");
+//    tpcc_db->history_table_->table_.data_table->InspectTable();
+//    printf("item table:\n");
+//    tpcc_db->item_table_->table_.data_table->InspectTable();
+//    printf("order table:\n");
+//    tpcc_db->order_table_->table_.data_table->InspectTable();
     printf("order_line table:\n");
     tpcc_db->order_line_table_->table_.data_table->InspectTable();
+    printf("order_line table size:%u tuples\n",tpcc_db->order_line_table_->table_.data_table.)
     printf("\n\n\n");
-    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
-    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
-    uint32_t aborted = 0;
-    for (auto &entry : precomputed_args)
-      for (auto &arg : entry)
-        aborted += arg.aborted;
-    printf("number of transactions aborted: %u\n", aborted);
+//    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
+//    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
+//    uint32_t aborted = 0;
+//    for (auto &entry : precomputed_args)
+//      for (auto &arg : entry)
+//        aborted += arg.aborted;
+//    printf("number of transactions aborted: %u\n", aborted);
     delete tpcc_db;
     delete log_manager_;
   }

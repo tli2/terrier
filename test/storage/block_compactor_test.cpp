@@ -33,7 +33,7 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
       uint32_t &count = num_tuples[block];
       auto *bitmap = accessor.AllocationBitmap(block);
       for (uint32_t offset = 0; offset < layout.NumSlots(); offset++) {
-        if (!bitmap->Test(offset)) {
+        if (bitmap->Test(offset)) {
           count++;
           total_num_tuples++;
         }
@@ -41,10 +41,11 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
     }
 
     std::sort(blocks.begin(), blocks.end(), [&](storage::RawBlock *a, storage::RawBlock *b) {
+      TERRIER_ASSERT(num_tuples.find(a) != num_tuples.end() && num_tuples.find(b) != num_tuples.end(), "WTF");
       auto a_filled = num_tuples[a];
       auto b_filled = num_tuples[b];
       // We know these finds will not return end() because we constructed the vector from the map
-      return a_filled >= b_filled;
+      return a_filled > b_filled;
     });
 
     uint32_t f_size = total_num_tuples / layout.NumSlots();
@@ -54,10 +55,8 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
       uint32_t num_movements = 0;
       auto *bitmap = accessor.AllocationBitmap(p);
       for (uint32_t offset = 0; offset < p_size; offset++) {
-        if (!bitmap->Test(offset)) {
+        if (!bitmap->Test(offset))
           num_movements++;
-          total_num_tuples++;
-        }
       }
       uint32_t num_f = 0;
       for (storage::RawBlock *f : blocks) {
@@ -69,6 +68,24 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
       if (num_movements < min_movement) min_movement = num_movements;
     }
     return min_movement;
+  }
+
+  uint32_t NumEmpty(const std::vector<storage::RawBlock *> &blocks) {
+    uint32_t result = 0;
+    const storage::TupleAccessStrategy &accessor = table_.accessor_;
+    const storage::BlockLayout &layout = accessor.GetBlockLayout();
+    for (storage::RawBlock *block : blocks) {
+      bool empty = true;
+      auto *bitmap = accessor.AllocationBitmap(block);
+      for (uint32_t offset = 0; offset < layout.NumSlots(); offset++) {
+        if (bitmap->Test(offset)) {
+          empty = false;
+          break;
+        }
+      }
+      if (empty) result++;
+    }
+    return result;
   }
 
   void RunFull(double percent_empty,
@@ -91,24 +108,29 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
       blocks.push_back(block);
     }
     printf("blocks generated\n");
-    uint32_t optimal_move = CalculateOptimal(blocks);
+//    uint32_t optimal_move = CalculateOptimal(blocks);
     for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
     compactor_.ProcessCompactionQueue(&txn_manager_);
     gc_.PerformGarbageCollection();
     gc_.PerformGarbageCollection();
+
+
     for (storage::RawBlock *block : blocks) block_store_.Release(block);
 
-    printf("With %f percent empty, %u tuples in total, optimal %u tuples move, actually moved %u\n",
+    printf("With %f percent empty,"
+           "%u tuples in total,"
+           "actually moved %u,"
+           "%u blocks can be freed\n",
            percent_empty,
            num_tuples,
-           optimal_move,
-           compactor_.tuples_moved_);
+           compactor_.tuples_moved_,
+           NumEmpty(blocks));
   }
 };
 
 // NOLINTNEXTLINE
 TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
-  RunFull(0);
+//  RunFull(0);
   RunFull(0.01);
   RunFull(0.05);
   RunFull(0.1);

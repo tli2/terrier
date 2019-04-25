@@ -215,11 +215,15 @@ class DataTable {
 
   void InspectTable() {
     std::unordered_map<BlockState, uint32_t> counts;
-    uint32_t total_count = 0;
+    uint32_t total_count = 0, tuple_count = 0;
     for (RawBlock *block : blocks_) {
+      auto *bitmap = accessor_.AllocationBitmap(block);
+      for (uint32_t i = 0; i < accessor_.GetBlockLayout().NumSlots(); i++)
+        if (bitmap->Test(i)) tuple_count++;
       total_count++;
       counts[block->controller_.CurrentBlockState()]++;
     }
+    printf("Total number of tuples %u\n", total_count);
     printf("Total number of blocks %u\n", total_count);
     for (auto &entry : counts) {
       switch (entry.first) {
