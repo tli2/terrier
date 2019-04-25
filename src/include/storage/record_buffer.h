@@ -38,6 +38,7 @@ class RecordBufferSegment {
     TERRIER_ASSERT(HasBytesLeft(size), "buffer segment allocation out of bounds");
     auto *result = bytes_ + size_;
     size_ += size;
+    last_record_ = result;
     return result;
   }
 
@@ -51,7 +52,7 @@ class RecordBufferSegment {
     return this;
   }
 
- private:
+// private:
   template <class RecordType>
   friend class IterableBufferSegment;
 
@@ -59,6 +60,7 @@ class RecordBufferSegment {
 
   byte bytes_[common::Constants::BUFFER_SEGMENT_SIZE];
   uint32_t size_ = 0;
+  byte *last_record_ = nullptr;
 };
 
 /**

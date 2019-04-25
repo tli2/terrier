@@ -1,7 +1,6 @@
 #include <vector>
 #include "benchmark/benchmark.h"
 #include "common/scoped_timer.h"
-#include "storage/access_observer.h"
 #include "storage/garbage_collector.h"
 #include "util/transaction_benchmark_util.h"
 
@@ -25,12 +24,12 @@ class LargeTransactionBenchmark : public benchmark::Fixture {
   }
 
   const std::vector<uint8_t> attr_sizes = {8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
-  const uint32_t initial_table_size = 1000000;
+  const uint32_t initial_table_size = 1000;
   const uint32_t num_txns = 100000;
   storage::BlockStore block_store_{1000, 1000};
   storage::RecordBufferSegmentPool buffer_pool_{1000000, 1000000};
   std::default_random_engine generator_;
-  const uint32_t num_concurrent_txns_ = 3;
+  const uint32_t num_concurrent_txns_ = 4;
 
  private:
   std::thread gc_thread_;
@@ -168,25 +167,28 @@ BENCHMARK_DEFINE_F(LargeTransactionBenchmark, SingleStatementSelect)(benchmark::
   state.SetItemsProcessed(state.iterations() * num_txns - abort_count);
 }
 
-BENCHMARK_REGISTER_F(LargeTransactionBenchmark, TPCCish)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(3);
+//BENCHMARK_REGISTER_F(LargeTransactionBenchmark, TPCCish)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(3);
 
-// BENCHMARK_REGISTER_F(LargeTransactionBenchmark, HighAbortRate)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(10);
-
-BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementInsert)
+BENCHMARK_REGISTER_F(LargeTransactionBenchmark, HighAbortRate)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(3);
+    ->MinTime(10);
+
+
+// BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementInsert)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(3);
+
 
 BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementUpdate)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(3);
+    ->MinTime(10);
 
-BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementSelect)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(3);
+// BENCHMARK_REGISTER_F(LargeTransactionBenchmark, SingleStatementSelect)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(3);
+
 }  // namespace terrier

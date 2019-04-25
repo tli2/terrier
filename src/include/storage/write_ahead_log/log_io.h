@@ -120,7 +120,7 @@ class BufferedLogWriter {
     if (fsync(out_) == -1) throw std::runtime_error("fsync failed with errno " + std::to_string(errno));
   }
 
- private:
+// private:
   int out_;  // fd of the output files
   char buffer_[BUFFER_SIZE];
   uint32_t buffer_size_ = 0;

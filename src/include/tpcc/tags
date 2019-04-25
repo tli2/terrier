@@ -1,0 +1,44 @@
+!_TAG_FILE_SORTED	2	/0=unsorted, 1=sorted, 2=foldcase/
+customer_select_pr_initializer	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const storage::ProjectedRowInitializer customer_select_pr_initializer;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+customer_select_pr_map	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const storage::ProjectionMap customer_select_pr_map;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_balance_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t c_balance_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_balance_select_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_balance_select_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_d_id_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_d_id_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_d_id_name_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_d_id_name_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_first_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t c_first_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_first_pr_initializer	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const storage::ProjectedRowInitializer c_first_pr_initializer;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_first_select_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_first_select_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_id_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_id_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_id_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t c_id_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_id_select_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_id_select_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_last_name_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_last_name_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_last_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t c_last_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_last_select_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_last_select_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_middle_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t c_middle_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_middle_select_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_middle_select_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_w_id_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_w_id_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+c_w_id_name_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t c_w_id_name_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+Execute	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  bool Execute(transaction::TransactionManager *const txn_manager, Random *const generator, Database *const db,$/;"	f	language:C++	class:terrier::tpcc::OrderStatus
+ol_amount_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t ol_amount_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+ol_delivery_d_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t ol_delivery_d_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+ol_d_id_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t ol_d_id_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+ol_i_id_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t ol_i_id_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+ol_number_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t ol_number_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+ol_o_id_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t ol_o_id_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+ol_quantity_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t ol_quantity_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+ol_supply_w_id_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t ol_supply_w_id_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+ol_w_id_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t ol_w_id_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+OrderStatus	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  explicit OrderStatus(const Database *const db)$/;"	f	language:C++	class:terrier::tpcc::OrderStatus
+OrderStatus	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^class OrderStatus {$/;"	c	language:C++	namespace:terrier::tpcc
+order_line_select_pr_initializer	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const storage::ProjectedRowInitializer order_line_select_pr_initializer;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+order_select_pr_initializer	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const storage::ProjectedRowInitializer order_select_pr_initializer;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+order_select_pr_map	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const storage::ProjectionMap order_select_pr_map;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+o_carrier_id_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t o_carrier_id_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+o_c_id_secondary_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t o_c_id_secondary_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+o_d_id_secondary_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t o_d_id_secondary_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+o_entry_d_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t o_entry_d_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+o_id_oid	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const catalog::col_oid_t o_id_oid;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+o_id_secondary_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t o_id_secondary_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+o_id_select_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t o_id_select_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+o_w_id_secondary_key_pr_offset	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^  const uint8_t o_w_id_secondary_key_pr_offset;$/;"	m	language:C++	class:terrier::tpcc::OrderStatus
+tpcc	/home/tli2/terrier/benchmark/include/tpcc/order_status.h	/^namespace terrier::tpcc {$/;"	n	language:C++	class:terrier

@@ -1,0 +1,5 @@
+!_TAG_FILE_SORTED	2	/0=unsorted, 1=sorted, 2=foldcase/
+BlockCompactorTest	/home/tli2/terrier/test/storage/block_compactor_test.cpp	/^struct BlockCompactorTest : public ::terrier::TerrierTest {$/;"	s	language:C++	namespace:terrier	file:
+generator_	/home/tli2/terrier/test/storage/block_compactor_test.cpp	/^  std::default_random_engine generator_;$/;"	m	language:C++	struct:terrier::BlockCompactorTest	file:
+terrier	/home/tli2/terrier/test/storage/block_compactor_test.cpp	/^namespace terrier {$/;"	n	language:C++	file:
+TEST_F	/home/tli2/terrier/test/storage/block_compactor_test.cpp	/^TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {$/;"	f	language:C++	namespace:terrier

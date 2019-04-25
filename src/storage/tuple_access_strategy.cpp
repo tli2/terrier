@@ -19,6 +19,16 @@ TupleAccessStrategy::TupleAccessStrategy(BlockLayout layout)
     acc_offset += StorageUtil::PadUpToSize(sizeof(uint64_t), column_size);
     TERRIER_ASSERT(acc_offset <= common::Constants::BLOCK_SIZE, "Offsets cannot be out of block bounds");
   }
+
+}
+
+void TupleAccessStrategy::InitializeRawBlockForDataTable(storage::DataTable *const data_table, RawBlock *const raw,
+                                                         const layout_version_t layout_version) const {
+  TERRIER_ASSERT(data_table != nullptr,
+                 "This should probably only be called from the DataTable with 'this' as an argument.");
+  // Intentional unsafe cast
+  raw->data_table_ = data_table;
+  InitializeRawBlock(raw, layout_version);
 }
 
 void TupleAccessStrategy::InitializeRawBlock(RawBlock *const raw, const layout_version_t layout_version) const {
@@ -27,16 +37,21 @@ void TupleAccessStrategy::InitializeRawBlock(RawBlock *const raw, const layout_v
   raw->insert_head_ = 0;
   raw->controller_.Initialize();
   auto *result = reinterpret_cast<TupleAccessStrategy::Block *>(raw);
-  for (uint16_t i = 0; i < layout_.NumColumns(); i++) result->AttrOffsets()[i] = column_offsets_[i];
   result->GetArrowBlockMetadata().Initialize(GetBlockLayout().NumColumns());
-
-  for (uint16_t i = 0; i < layout_.NumColumns(); i++) result->AttrOffets(layout_)[i] = column_offsets_[i];
+  auto &arrow_metadata = GetArrowBlockMetadata(raw);
+  for (uint16_t i = 0; i < layout_.NumColumns(); i++) {
+    col_id_t id(i);
+    if (layout_.IsVarlen(id))
+      arrow_metadata.GetColumnInfo(layout_, id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
+    else
+      arrow_metadata.GetColumnInfo(layout_, id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+  }
+  for (uint16_t i = 0; i < layout_.NumColumns(); i++) result->AttrOffsets(layout_)[i] = column_offsets_[i];
 
   result->SlotAllocationBitmap(layout_)->UnsafeClear(layout_.NumSlots());
   result->Column(layout_, VERSION_POINTER_COLUMN_ID)->NullBitmap()->UnsafeClear(layout_.NumSlots());
   // TODO(Tianyu): This can be a slight drag on insert performance. With the exception of some test cases where GC is
   // not enabled, we should be able to do this step in the GC and still be good.
-
   // Also need to clean up any potential dangling version pointers (in cases where GC is off, or when a table is deleted
   // and individual tuples in it are not)
   std::memset(ColumnStart(raw, VERSION_POINTER_COLUMN_ID), 0, sizeof(void *) * layout_.NumSlots());

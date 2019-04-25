@@ -1,15 +1,16 @@
 #pragma once
 
-#include <common/hash_util.h>
 #include <algorithm>
 #include <functional>
 #include <ostream>
+#include <string_view>  // NOLINT
 #include <unordered_map>
 #include <utility>
 #include <vector>
 #include "catalog/catalog_defs.h"
 #include "common/constants.h"
 #include "common/container/bitmap.h"
+#include "common/hash_util.h"
 #include "common/macros.h"
 #include "common/object_pool.h"
 #include "common/strong_typedef.h"
@@ -24,8 +25,10 @@ namespace terrier::storage {
 #define VERSION_POINTER_COLUMN_ID ::terrier::storage::col_id_t(0)
 #define NUM_RESERVED_COLUMNS 1u
 
-STRONG_TYPEDEF(col_id_t, uint16_t);
-STRONG_TYPEDEF(layout_version_t, uint32_t);
+STRONG_TYPEDEF(col_id_t, uint16_t)
+STRONG_TYPEDEF(layout_version_t, uint32_t)
+
+class DataTable;
 
 /**
  * A block is a chunk of memory used for storage. It does not have any meaning
@@ -35,6 +38,11 @@ STRONG_TYPEDEF(layout_version_t, uint32_t);
  * @warning If you change the layout please also change the way header sizes are computed in block layout!
  */
 struct alignas(common::Constants::BLOCK_SIZE) RawBlock {
+  /**
+   * Data Table for this RawBlock. This is used by indexes and GC to get back to the DataTable given only a TupleSlot
+   */
+  DataTable *data_table_;
+
   /**
    * Layout version.
    */
@@ -46,17 +54,21 @@ struct alignas(common::Constants::BLOCK_SIZE) RawBlock {
    */
   std::atomic<uint32_t> insert_head_;
   /**
-   * Access controller of this block
+   * Access controller of this block that coordinates access among Arrow readers, transactional workers
+   * and the transformation thread. In practice this can be used almost like a lock.
    */
   BlockAccessController controller_;
 
   /**
    * Contents of the raw block.
    */
-  byte content_[common::Constants::BLOCK_SIZE - 2 * sizeof(uint32_t) - sizeof(BlockAccessController)];
+  byte content_[common::Constants::BLOCK_SIZE - sizeof(uintptr_t) - sizeof(layout_version_t) - sizeof(uint32_t) -
+                sizeof(BlockAccessController)];
   // A Block needs to always be aligned to 1 MB, so we can get free bytes to
   // store offsets within a block in ine 8-byte word.
 };
+
+static_assert(sizeof(RawBlock) == common::Constants::BLOCK_SIZE, "Incorrect block size calculation");
 
 /**
  * A TupleSlot represents a physical location of a tuple in memory.
@@ -157,25 +169,26 @@ class BlockAllocator {
  * malloc.
  */
 using BlockStore = common::ObjectPool<RawBlock, BlockAllocator>;
-
+/**
+ * Used by SqlTable to map between col_oids in Schema and col_ids in BlockLayout
+ */
 using ColumnMap = std::unordered_map<catalog::col_oid_t, col_id_t>;
+/**
+ * Used by execution and storage layers to map between col_oids and offsets within a ProjectedRow
+ */
 using ProjectionMap = std::unordered_map<catalog::col_oid_t, uint16_t>;
 
 /**
  * Denote whether a record modifies the logical delete column, used when DataTable inspects deltas
  * TODO(Matt): could be used by the GC for recycling
  */
-enum class DeltaRecordType : uint8_t { UPDATE = 0, INSERT, DELETE, LOCK };
+enum class DeltaRecordType : uint8_t { UPDATE = 0, INSERT, DELETE };
 
 /**
  * Types of LogRecords
  */
 enum class LogRecordType : uint8_t { REDO = 1, DELETE, COMMIT };
 
-// TODO(Tianyu): This is pretty wasteful. While in theory 4 bytes of size suffices, we pad it to 8 bytes for
-// performance and ease of implementation with the rest of the system. (It is always assumed that one SQL level column
-// is mapped to one data table column). In the long run though, we might want to investigate solutions where the varlen
-// pointer and the size columns are stored in separate columns, so the size column can be 4 bytes.
 /**
  * A varlen entry is always a 32-bit size field and the varlen content,
  * with exactly size many bytes (no extra nul in the end).
@@ -203,7 +216,7 @@ class VarlenEntry {
 
   /**
    * Constructs a new varlen entry, with the associated varlen value inlined within the struct itself. This is only
-   * possible when the inlined value is smaller than InlinedThreshold() as defined. The value is copied and the given
+   * possible when the inlined value is smaller than InlineThreshold() as defined. The value is copied and the given
    * pointer can be safely deallocated regardless of the state of the system.
    * @param content pointer to the varlen content
    * @param size length of the varlen content, in bytes (no C-style nul-terminator. Must be smaller than
@@ -245,7 +258,10 @@ class VarlenEntry {
    * Helper method to decide if the content needs to be GCed separately
    * @return whether the content can be deallocated by itself
    */
-  bool NeedReclaim() const { return size_ > static_cast<int32_t>(InlineThreshold()); }
+  bool NeedReclaim() const {
+    // force a signed comparison, if our sign bit is set size_ is negative so the test returns false
+    return size_ > static_cast<int32_t>(InlineThreshold());
+  }
 
   /**
    * @return pointer to the stored prefix of the varlen entry
@@ -257,8 +273,16 @@ class VarlenEntry {
    */
   const byte *Content() const { return IsInlined() ? prefix_ : content_; }
 
+  /**
+   * @return zero-copy view of the VarlenEntry as an immutable string that allows use with convenient STL functions
+   * @warning It is the programmer's responsibility to ensure that std::string_view does not outlive the VarlenEntry
+   */
+  std::string_view StringView() const {
+    return std::string_view(reinterpret_cast<const char *const>(Content()), Size());
+  }
+
  private:
-  int32_t size_;                   // sign bit is used to denote whether the buffer can be reclaimed by itself
+  int32_t size_;                   // buffer reclaimable => sign bit is 0 or size <= InlineThreshold
   byte prefix_[sizeof(uint32_t)];  // Explicit padding so that we can use these bits for inlined values or prefix
   const byte *content_;            // pointer to content of the varlen entry if not inlined
 };
@@ -286,6 +310,10 @@ struct VarlenContentDeepEqual {
  * Hasher that hashes the entry using the underlying varlen value
  */
 struct VarlenContentHasher {
+  /**
+   * @param obj object to hash
+   * @return hash code of object
+   */
   size_t operator()(const VarlenEntry &obj) const { return common::HashUtil::HashBytes(obj.Content(), obj.Size()); }
 };
 
@@ -309,6 +337,7 @@ struct VarlenContentCompare {
     return res < 0;
   }
 };
+
 }  // namespace terrier::storage
 
 namespace std {

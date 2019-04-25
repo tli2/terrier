@@ -3,12 +3,15 @@
 #include <cstdio>
 #include <cstring>
 #include <random>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 #include "catalog/schema.h"
 #include "common/strong_typedef.h"
 #include "gtest/gtest.h"
+#include "storage/index/compact_ints_key.h"
+#include "storage/index/index_defs.h"
 #include "storage/storage_defs.h"
 #include "storage/storage_util.h"
 #include "storage/tuple_access_strategy.h"
@@ -31,7 +34,7 @@ struct StorageTestUtil {
    * @param lower lower bound
    * @param upper upper bound
    */
-  template <typename A, typename B, typename C>
+  template<typename A, typename B, typename C>
   static void CheckInBounds(A *const val, B *const lower, C *const upper) {
     EXPECT_GE(TO_INT(val), TO_INT(lower));
     EXPECT_LT(TO_INT(val), TO_INT(upper));
@@ -46,12 +49,12 @@ struct StorageTestUtil {
    * @param lower lower bound
    * @param upper upper bound
    */
-  template <typename A, typename B, typename C>
+  template<typename A, typename B, typename C>
   static void CheckNotInBounds(A *const val, B *const lower, C *const upper) {
     EXPECT_TRUE(TO_INT(val) < TO_INT(lower) || TO_INT(val) >= TO_INT(upper));
   }
 
-  template <typename A>
+  template<typename A>
   static void CheckAlignment(A *const val, const uint32_t word_size) {
     EXPECT_EQ(0, TO_INT(val) % word_size);
   }
@@ -62,31 +65,31 @@ struct StorageTestUtil {
    * @param bytes bytes to advance
    * @return  pointer that is the specified amount of bytes ahead of the given
    */
-  template <typename A>
+  template<typename A>
   static A *IncrementByBytes(A *const ptr, const uint64_t bytes) {
     return reinterpret_cast<A *>(reinterpret_cast<byte *>(ptr) + bytes);
   }
 
   // Returns a random layout that is guaranteed to be valid.
-  template <typename Random>
+  template<typename Random>
   static storage::BlockLayout RandomLayoutNoVarlen(const uint16_t max_cols, Random *const generator) {
     return RandomLayout(max_cols, generator, false);
   }
 
-  template <typename Random>
+  template<typename Random>
   static storage::BlockLayout RandomLayoutWithVarlens(const uint16_t max_cols, Random *const generator) {
     return RandomLayout(max_cols, generator, true);
   }
 
   // Fill the given location with the specified amount of random bytes, using the
   // given generator as a source of randomness.
-  template <typename Random>
+  template<typename Random>
   static void FillWithRandomBytes(const uint32_t num_bytes, byte *const out, Random *const generator) {
     std::uniform_int_distribution<uint8_t> dist(0, UINT8_MAX);
     for (uint32_t i = 0; i < num_bytes; i++) out[i] = static_cast<byte>(dist(*generator));
   }
 
-  template <typename Random>
+  template<typename Random>
   static void PopulateRandomRow(storage::ProjectedRow *const row, const storage::BlockLayout &layout,
                                 const double null_bias, Random *const generator) {
     std::bernoulli_distribution coin(1 - null_bias);
@@ -131,7 +134,7 @@ struct StorageTestUtil {
     return col_ids;
   }
 
-  template <typename Random>
+  template<typename Random>
   static std::vector<storage::col_id_t> ProjectionListRandomColumns(const storage::BlockLayout &layout,
                                                                     Random *const generator) {
     // randomly select a number of columns for this delta to contain. Must be at least 1, but shouldn't be num_cols
@@ -153,7 +156,7 @@ struct StorageTestUtil {
     return col_ids;
   }
 
-  template <class Random>
+  template<class Random>
   static std::unordered_map<storage::TupleSlot, storage::ProjectedRow *> PopulateBlockRandomly(
       const storage::BlockLayout &layout, storage::RawBlock *block, double empty_ratio, Random *const generator) {
     std::unordered_map<storage::TupleSlot, storage::ProjectedRow *> result;
@@ -161,7 +164,9 @@ struct StorageTestUtil {
     // TODO(Tianyu): Do we ever want to tune this for tests?
     const double null_ratio = 0.1;
     storage::TupleAccessStrategy accessor(layout);  // Have to construct one since we don't have access to data table
-    storage::ProjectedRowInitializer initializer(layout, StorageTestUtil::ProjectionListAllColumns(layout));
+    accessor.InitializeRawBlock(block, storage::layout_version_t(0));
+    auto initializer = storage::ProjectedRowInitializer::CreateProjectedRowInitializer(
+        layout, StorageTestUtil::ProjectionListAllColumns(layout));
     for (uint32_t i = 0; i < layout.NumSlots(); i++) {
       storage::TupleSlot slot;
       bool ret UNUSED_ATTRIBUTE = accessor.Allocate(block, &slot);
@@ -185,7 +190,42 @@ struct StorageTestUtil {
     return result;
   }
 
-  template <class Random>
+  template<class Random>
+  static uint32_t PopulateBlockRandomlyNoBookkeeping(const storage::BlockLayout &layout, storage::RawBlock *block,
+                                                 double empty_ratio, Random *const generator) {
+    uint32_t result = 0;
+    std::bernoulli_distribution coin(empty_ratio);
+    // TODO(Tianyu): Do we ever want to tune this for tests?
+    const double null_ratio = 0.1;
+    storage::TupleAccessStrategy accessor(layout);  // Have to construct one since we don't have access to data table
+    accessor.InitializeRawBlock(block, storage::layout_version_t(0));
+    storage::ProjectedRowInitializer initializer =
+        storage::ProjectedRowInitializer::CreateProjectedRowInitializer(layout,
+                                                                        StorageTestUtil::ProjectionListAllColumns(layout));
+    auto *redo_buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
+    storage::ProjectedRow *redo = initializer.InitializeRow(redo_buffer);
+    for (uint32_t i = 0; i < layout.NumSlots(); i++) {
+      storage::TupleSlot slot;
+      bool ret UNUSED_ATTRIBUTE = accessor.Allocate(block, &slot);
+      TERRIER_ASSERT(ret && slot == storage::TupleSlot(block, i),
+                     "slot allocation should happen sequentially and succeed");
+      if (coin(*generator)) {
+        // slot will be marked empty
+        accessor.Deallocate(slot);
+        continue;
+      }
+      result++;
+      StorageTestUtil::PopulateRandomRow(redo, layout, null_ratio, generator);
+      // Copy without transactions to simulate a version-free block
+      accessor.SetNotNull(slot, VERSION_POINTER_COLUMN_ID);
+      for (uint16_t j = 0; j < redo->NumColumns(); j++)
+        storage::StorageUtil::CopyAttrFromProjection(accessor, slot, *redo, j);
+    }
+    TERRIER_ASSERT(block->insert_head_ == layout.NumSlots(), "The block should be considered full at this point");
+    return result;
+  }
+
+  template<class Random>
   static storage::ProjectedRowInitializer RandomInitializer(const storage::BlockLayout &layout, Random *generator) {
     return {layout, ProjectionListRandomColumns(layout, generator)};
   }
@@ -196,7 +236,7 @@ struct StorageTestUtil {
     return memcmp(one.Content(), other.Content(), one.Size()) == 0;
   }
 
-  template <class RowType1, class RowType2>
+  template<class RowType1, class RowType2>
   static bool ProjectionListEqualDeep(const storage::BlockLayout &layout, const RowType1 *const one,
                                       const RowType2 *const other) {
     if (one->NumColumns() != other->NumColumns()) return false;
@@ -220,7 +260,7 @@ struct StorageTestUtil {
       if (layout.IsVarlen(one_id)) {
         // Need to follow pointers and throw away metadata and padding for equality comparison
         auto &one_entry = *reinterpret_cast<const storage::VarlenEntry *>(one_content),
-             &other_entry = *reinterpret_cast<const storage::VarlenEntry *>(other_content);
+            &other_entry = *reinterpret_cast<const storage::VarlenEntry *>(other_content);
         if (one_entry.Size() != other_entry.Size()) return false;
         if (memcmp(one_entry.Content(), other_entry.Content(), one_entry.Size()) != 0) return false;
       } else if (memcmp(one_content, other_content, attr_size) != 0) {
@@ -231,7 +271,7 @@ struct StorageTestUtil {
     return true;
   }
 
-  template <class RowType1, class RowType2>
+  template<class RowType1, class RowType2>
   static bool ProjectionListEqualShallow(const storage::BlockLayout &layout, const RowType1 *const one,
                                          const RowType2 *const other) {
     if (one->NumColumns() != other->NumColumns()) return false;
@@ -256,29 +296,39 @@ struct StorageTestUtil {
     return true;
   }
 
-  template <class RowType>
-  static void PrintRow(const RowType &row, const storage::BlockLayout &layout) {
-    printf("num_cols: %u\n", row.NumColumns());
+  template<class RowType>
+  static std::string PrintRow(const RowType &row, const storage::BlockLayout &layout) {
+    std::ostringstream os;
+    os << "num_cols: " << row.NumColumns() << std::endl;
     for (uint16_t i = 0; i < row.NumColumns(); i++) {
       storage::col_id_t col_id = row.ColumnIds()[i];
       const byte *attr = row.AccessWithNullCheck(i);
       if (attr == nullptr) {
-        printf("col_id: %u is NULL\n", !col_id);
+        os << "col_id: " << !col_id << " is NULL" << std::endl;
         continue;
       }
 
       if (layout.IsVarlen(col_id)) {
         auto *entry = reinterpret_cast<const storage::VarlenEntry *>(attr);
-        printf("col_id: %u is varlen, ptr %p, size %u, reclaimable %d, content ", !col_id, entry->Content(),
-               entry->Size(), entry->NeedReclaim());
-        for (uint8_t pos = 0; pos < entry->Size(); pos++) printf("%02x", static_cast<uint8_t>(entry->Content()[pos]));
-        printf("\n");
+        os << "col_id: " << !col_id;
+        os << " is varlen, ptr " << entry->Content();
+        os << ", size " << entry->Size();
+        os << ", reclaimable " << entry->NeedReclaim();
+        os << ", content ";
+        for (uint8_t pos = 0; pos < entry->Size(); pos++) {
+          os << std::setfill('0') << std::setw(2) << std::hex << static_cast<uint8_t>(entry->Content()[pos]);
+        }
+        os << std::endl;
       } else {
-        printf("col_id: %u is ", !col_id);
-        for (uint8_t pos = 0; pos < layout.AttrSize(col_id); pos++) printf("%02x", static_cast<uint8_t>(attr[pos]));
-        printf("\n");
+        os << "col_id: " << !col_id;
+        os << " is ";
+        for (uint8_t pos = 0; pos < layout.AttrSize(col_id); pos++) {
+          os << std::setfill('0') << std::setw(2) << std::hex << static_cast<uint8_t>(attr[pos]);
+        }
+        os << std::endl;
       }
     }
+    return os.str();
   }
 
   // Write the given tuple (projected row) into a block using the given access strategy,
@@ -312,8 +362,92 @@ struct StorageTestUtil {
     }
   }
 
- private:
+  /**
+   * Generates a random GenericKey-compatible schema with the given number of columns using the given types.
+   */
   template <typename Random>
+  static storage::index::IndexKeySchema RandomGenericKeySchema(const uint32_t num_cols,
+                                                               const std::vector<type::TypeId> &types,
+                                                               Random *generator) {
+    uint32_t max_varlen_size = 20;
+    TERRIER_ASSERT(num_cols > 0, "Must have at least one column in your key schema.");
+
+    std::vector<catalog::indexkeycol_oid_t> key_oids;
+    key_oids.reserve(num_cols);
+
+    for (uint32_t i = 0; i < num_cols; i++) {
+      key_oids.emplace_back(i);
+    }
+
+    std::shuffle(key_oids.begin(), key_oids.end(), *generator);
+
+    storage::index::IndexKeySchema key_schema;
+
+    for (uint32_t i = 0; i < num_cols; i++) {
+      auto key_oid = key_oids[i];
+      auto type = *RandomTestUtil::UniformRandomElement(types, generator);
+      auto is_nullable = static_cast<bool>(std::uniform_int_distribution(0, 1)(*generator));
+
+      switch (type) {
+        case type::TypeId::VARBINARY:
+        case type::TypeId::VARCHAR: {
+          auto varlen_size = std::uniform_int_distribution(0u, max_varlen_size)(*generator);
+          key_schema.emplace_back(key_oid, type, is_nullable, varlen_size);
+          break;
+        }
+        default:
+          key_schema.emplace_back(key_oid, type, is_nullable);
+          break;
+      }
+    }
+
+    return key_schema;
+  }
+
+  /**
+   * Generates a random CompactIntsKey-compatible schema.
+   */
+  template <typename Random>
+  static storage::index::IndexKeySchema RandomCompactIntsKeySchema(Random *generator) {
+    const uint16_t max_bytes = sizeof(uint64_t) * INTSKEY_MAX_SLOTS;
+    const auto key_size = std::uniform_int_distribution(static_cast<uint16_t>(1), max_bytes)(*generator);
+
+    const std::vector<type::TypeId> types{type::TypeId::TINYINT, type::TypeId::SMALLINT, type::TypeId::INTEGER,
+                                          type::TypeId::BIGINT};  // has to be sorted in ascending type size order
+
+    const uint16_t max_cols = max_bytes;  // could have up to max_bytes TINYINTs
+    std::vector<catalog::indexkeycol_oid_t> key_oids;
+    key_oids.reserve(max_cols);
+
+    for (auto i = 0; i < max_cols; i++) {
+      key_oids.emplace_back(i);
+    }
+
+    std::shuffle(key_oids.begin(), key_oids.end(), *generator);
+
+    storage::index::IndexKeySchema key_schema;
+
+    uint8_t col = 0;
+
+    for (uint16_t bytes_used = 0; bytes_used != key_size;) {
+      auto max_offset = static_cast<uint8_t>(types.size() - 1);
+      for (const auto &type : types) {
+        if (key_size - bytes_used < type::TypeUtil::GetTypeSize(type)) {
+          max_offset--;
+        }
+      }
+      const uint8_t type_offset = std::uniform_int_distribution(static_cast<uint8_t>(0), max_offset)(*generator);
+      const auto type = types[type_offset];
+
+      key_schema.emplace_back(key_oids[col++], type, false);
+      bytes_used = static_cast<uint16_t>(bytes_used + type::TypeUtil::GetTypeSize(type));
+    }
+
+    return key_schema;
+  }
+
+ private:
+  template<typename Random>
   static storage::BlockLayout RandomLayout(const uint16_t max_cols, Random *const generator, bool allow_varlen) {
     TERRIER_ASSERT(max_cols > NUM_RESERVED_COLUMNS, "There should be at least 2 cols (reserved for version).");
     // We probably won't allow tables with fewer than 2 columns
