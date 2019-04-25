@@ -65,7 +65,7 @@ class TpccLoader {
 
   const bool only_count_new_order_ = false;
   const int8_t num_threads_ = 6;
-  const uint32_t num_precomputed_txns_per_worker_ = 1000;
+  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
