@@ -23,8 +23,6 @@
 #include "storage/dirty_globals.h"
 
 namespace terrier {
-#define LOG_FILE_NAME "./tpcc.log"
-
 class TpccLoader {
  public:
   void StartGC(transaction::TransactionManager *const txn_manager) {
@@ -67,7 +65,7 @@ class TpccLoader {
 
   const bool only_count_new_order_ = false;
   const int8_t num_threads_ = 6;
-  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
+  const uint32_t num_precomputed_txns_per_worker_ = 1000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
@@ -284,17 +282,6 @@ class TpccLoader {
   }
 
  private:
-  std::thread log_thread_;
-  volatile bool logging_ = false;
-  const std::chrono::milliseconds log_period_milli_{10};
-
-  void LogThreadLoop() {
-    while (logging_) {
-      std::this_thread::sleep_for(log_period_milli_);
-      log_manager_->Process();
-    }
-  }
-
   std::thread gc_thread_;
   storage::GarbageCollector *gc_ = nullptr;
   volatile bool run_gc_ = false;
@@ -321,6 +308,9 @@ class TpccLoader {
 }
 
 int main() {
+  terrier::storage::init_index_logger();
+  terrier::storage::init_storage_logger();
+  terrier::transaction::init_transaction_logger();
   terrier::TpccLoader b;
   b.Run();
   return 0;
