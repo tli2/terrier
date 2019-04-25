@@ -10,105 +10,112 @@
 
 namespace terrier {
 struct BlockCompactorTest : public ::terrier::TerrierTest {
+  storage::BlockStore block_store_{5000, 5000};
   std::default_random_engine generator_;
-  storage::BlockStore block_store_{1, 1};
+  storage::RecordBufferSegmentPool buffer_pool_{100000, 100000};
+  storage::BlockLayout layout_{{8, 8, VARLEN_COLUMN}};
+  storage::TupleAccessStrategy accessor_{layout_};
+
+  storage::DataTable table_{&block_store_, layout_, storage::layout_version_t(0)};
+  transaction::TransactionManager txn_manager_{&buffer_pool_, true, LOGGING_DISABLED};
+  storage::GarbageCollector gc_{&txn_manager_};
+  storage::BlockCompactor compactor_;
+
+  uint32_t num_blocks_ = 500;
+  double percent_empty_ = 0.01;
+
+  uint32_t CalculateOptimal(std::vector<storage::RawBlock *> blocks) {
+    std::unordered_map<storage::RawBlock *, uint32_t> num_tuples;
+    uint32_t total_num_tuples = 0;
+    const storage::TupleAccessStrategy &accessor = table_.accessor_;
+    const storage::BlockLayout &layout = accessor.GetBlockLayout();
+    for (storage::RawBlock *block : blocks) {
+      uint32_t &count = num_tuples[block];
+      auto *bitmap = accessor.AllocationBitmap(block);
+      for (uint32_t offset = 0; offset < layout.NumSlots(); offset++) {
+        if (!bitmap->Test(offset)) {
+          count++;
+          total_num_tuples++;
+        }
+      }
+    }
+
+    std::sort(blocks.begin(), blocks.end(), [&](storage::RawBlock *a, storage::RawBlock *b) {
+      auto a_filled = num_tuples[a];
+      auto b_filled = num_tuples[b];
+      // We know these finds will not return end() because we constructed the vector from the map
+      return a_filled >= b_filled;
+    });
+
+    uint32_t f_size = total_num_tuples / layout.NumSlots();
+    uint32_t p_size = total_num_tuples % layout.NumSlots();
+    uint32_t min_movement = UINT32_MAX;
+    for (storage::RawBlock *p : blocks) {
+      uint32_t num_movements = 0;
+      auto *bitmap = accessor.AllocationBitmap(p);
+      for (uint32_t offset = 0; offset < p_size; offset++) {
+        if (!bitmap->Test(offset)) {
+          num_movements++;
+          total_num_tuples++;
+        }
+      }
+      uint32_t num_f = 0;
+      for (storage::RawBlock *f : blocks) {
+        if (f == p) continue;
+        num_f++;
+        num_movements += layout.NumSlots() - num_tuples[f];
+        if (num_f == f_size) break;
+      }
+      if (num_movements < min_movement) min_movement = num_movements;
+    }
+    return min_movement;
+  }
+
+  void RunFull(double percent_empty,
+               storage::ArrowColumnType type = storage::ArrowColumnType::GATHERED_VARLEN) {
+    uint32_t num_tuples = 0;
+    // NOLINTNEXTLINE
+    compactor_.tuples_moved_ = 0;
+    std::vector<storage::RawBlock *> blocks;
+    for (uint32_t i = 0; i < num_blocks_; i++) {
+      storage::RawBlock *block = block_store_.Get();
+      block->data_table_ = &table_;
+      num_tuples += StorageTestUtil::PopulateBlockRandomlyNoBookkeeping(layout_, block, percent_empty, &generator_);
+      auto &arrow_metadata = accessor_.GetArrowBlockMetadata(block);
+      for (storage::col_id_t col_id : layout_.AllColumns()) {
+        if (layout_.IsVarlen(col_id))
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = type;
+        else
+          arrow_metadata.GetColumnInfo(layout_, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
+      }
+      blocks.push_back(block);
+    }
+    printf("blocks generated\n");
+    uint32_t optimal_move = CalculateOptimal(blocks);
+    for (storage::RawBlock *block : blocks) compactor_.PutInQueue(block);
+    compactor_.ProcessCompactionQueue(&txn_manager_);
+    gc_.PerformGarbageCollection();
+    gc_.PerformGarbageCollection();
+    for (storage::RawBlock *block : blocks) block_store_.Release(block);
+
+    printf("With %f percent empty, %u tuples in total, optimal %u tuples move, actually moved %u\n",
+           percent_empty,
+           num_tuples,
+           optimal_move,
+           compactor_.tuples_moved_);
+  }
 };
 
 // NOLINTNEXTLINE
 TEST_F(BlockCompactorTest, SingleBlockCompactionTest) {
-  // Initialize a block
-  storage::BlockLayout layout = StorageTestUtil::RandomLayoutWithVarlens(100, &generator_);
-  storage::TupleAccessStrategy accessor(layout);
-  storage::RawBlock *block = block_store_.Get();
-
-
-  accessor.InitializeRawBlock(block, storage::layout_version_t(0));
-
-  // Technically, the block above is not "in" the table, but since we don't sequential scan that does not matter
-  storage::DataTable table(&block_store_, layout, storage::layout_version_t(0));
-  block->data_table_ = &table;
-  storage::RecordBufferSegmentPool buffer_pool{10000, 10000};
-  // Enable GC to cleanup transactions started by the block compactor
-  transaction::TransactionManager txn_manager(&buffer_pool, true, LOGGING_DISABLED);
-  storage::GarbageCollector gc(&txn_manager);
-
-  // Populate the block and set the column types
-  auto tuples = StorageTestUtil::PopulateBlockRandomly(layout, block, 0.1, &generator_);
-  auto &arrow_metadata = accessor.GetArrowBlockMetadata(block);
-  for (storage::col_id_t col_id : layout.AllColumns()) {
-    if (layout.IsVarlen(col_id)) {
-      arrow_metadata.GetColumnInfo(layout, col_id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
-    } else {
-      arrow_metadata.GetColumnInfo(layout, col_id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
-    }
-  }
-
-  // Compact the block
-  storage::BlockCompactor compactor;
-  compactor.PutInQueue(block);
-  compactor.ProcessCompactionQueue(&txn_manager);  // should always succeed with no other threads
-
-  EXPECT_EQ(storage::BlockState::COOLING, block->controller_.CurrentBlockState());
-  // Verify the content of the block
-  // This transaction is guaranteed to start after the compacting one commits
-  storage::ProjectedRowInitializer initializer = storage::ProjectedRowInitializer::CreateProjectedRowInitializer(layout, StorageTestUtil::ProjectionListAllColumns(layout));
-  byte *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
-  auto *read_row = initializer.InitializeRow(buffer);
-  std::vector<storage::ProjectedRow *> moved_rows;
-  transaction::TransactionContext *txn = txn_manager.BeginTransaction();
-  auto num_tuples = tuples.size();
-  // For non moved rows
-  for (uint32_t i = 0; i < layout.NumSlots(); i++) {
-    storage::TupleSlot slot(block, i);
-    bool visible = table.Select(txn, slot, read_row);
-    EXPECT_TRUE(visible ^ (i >= num_tuples));
-  }
-  txn_manager.Commit(txn, [](void *) -> void {}, nullptr);
-  gc.PerformGarbageCollection();
-
-  compactor.PutInQueue(block);
-  compactor.ProcessCompactionQueue(&txn_manager);
-
-  txn = txn_manager.BeginTransaction();
-  for (uint32_t i = 0; i < layout.NumSlots(); i++) {
-    storage::TupleSlot slot(block, i);
-    bool visible = table.Select(txn, slot, read_row);
-    if (i >= num_tuples) {
-      EXPECT_FALSE(visible);  // Should be deleted after compaction
-    } else {
-      EXPECT_TRUE(visible);  // Should be filled after compaction
-      auto it = tuples.find(slot);
-      if (it != tuples.end()) {
-        // Here we can assume that the row is not moved. Check that everything is still equal. Has to be deep
-        // equality because varlens are moved.
-        EXPECT_TRUE(StorageTestUtil::ProjectionListEqualDeep(layout, it->second, read_row));
-        for (storage::col_id_t col_id : layout.Varlens()) {
-          // We know this equality to hold because the select looks at all the columns
-          auto *entry = reinterpret_cast<storage::VarlenEntry *>(read_row->AccessWithNullCheck(static_cast<uint16_t>(!col_id - 1)));
-          if (entry == nullptr) continue;
-          // The varlen pointers should now point to within the Arrow data structure
-          EXPECT_FALSE(entry->NeedReclaim());
-        }
-        delete[] reinterpret_cast<byte *>(tuples[slot]);
-        tuples.erase(slot);
-      } else {
-        // Need to copy and do quadratic comparison later.
-        byte *copied_buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
-        std::memcpy(copied_buffer, read_row, initializer.ProjectedRowSize());
-        moved_rows.push_back(reinterpret_cast<storage::ProjectedRow *>(copied_buffer));
-      }
-    }
-  }
-  txn_manager.Commit(txn, [](void *) -> void {}, nullptr);  // Commit: will be cleaned up by GC
-
-  // TODO(Tianyu): Also has to check that thte generated Arrow information is correct
-  gc.PerformGarbageCollection();
-  gc.PerformGarbageCollection();
-  delete[] buffer;
-  // TODO(Tianyu): Figure out delete
-  // Deallocate arrow buffers
-//  for (const auto &col_id : layout.AllColumns()) delete &arrow_metadata.Deallocate(layout, col_id);
-  block_store_.Release(block);
+  RunFull(0);
+  RunFull(0.01);
+  RunFull(0.05);
+  RunFull(0.1);
+  RunFull(0.2);
+  RunFull(0.4);
+  RunFull(0.6);
+  RunFull(0.8);
 }
 
 // NOLINTNEXTLINE
