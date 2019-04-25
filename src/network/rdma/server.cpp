@@ -4,6 +4,9 @@
 #include "data_format.h"
 #include "fake_db.h"
 #include "rdma.h"
+#include "server.h"
+
+#define ONE_MEGABYTE 1048576
 
 struct config_t config = {
     NULL,                         /* device_name */
@@ -15,7 +18,7 @@ struct config_t config = {
 
 struct size_pair sizes = {-1, -1};
 
-int do_rdma(int sockfd) {
+int do_rdma(int sockfd, std::list<terrier::storage::RawBlock *> blocks) {
   struct resources res;
   resources_init(&res);
   res.sock = sockfd;
@@ -29,13 +32,11 @@ int do_rdma(int sockfd) {
   fprintf(stdout, "received table name: %s\n", table_name);
 
   // send metadata and data size from server to client
-  char *metadata;
-  blocklist data;
-  int metadata_size;
-  int num_blocks;
-  process_query(table_name, &metadata, &metadata_size, &data, &num_blocks);
+  char metadata[] = "FAKE METADATA";
+  int metadata_size = 8;
+  int num_blocks = blocks.size();
   sizes.metadata_size = metadata_size;
-  sizes.data_size = FAKEDB_BLOCK_SIZE * num_blocks;
+  sizes.data_size = ONE_MEGABYTE * num_blocks;
   sock_write_data(res.sock, sizeof(sizes), (char *)&sizes);
   fprintf(stderr, "sizes sent to client\n");
 
@@ -43,9 +44,9 @@ int do_rdma(int sockfd) {
   fprintf(stderr, "metadata sent to client\n");
 
   // sync resources between client and server
-  res.buf = data[0];
-  res.size = FAKEDB_BLOCK_SIZE;
   /* create resources before using them */
+  res.buf = metadata; // use metadata for now
+  res.size = metadata_size;
   if (resources_create (&res, config)) {
     fprintf (stderr, "failed to create resources\n");
     return 1;
@@ -59,8 +60,15 @@ int do_rdma(int sockfd) {
   // initiate rdma write
   fprintf (stdout, "Now initiating RDMA write\n");
   std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-  for (int i = 0; i < num_blocks; i++) {
-    // fprintf (stdout, "Sending address 0x%x to 0x%x\n", res.buf, res.remote_props.addr);
+  for (terrier::storage::RawBlock *block : blocks) {
+
+    if (block->controller_.CurrentBlockState() != terrier::storage::BlockState::FROZEN) continue;
+    int mr_flags = IBV_ACCESS_LOCAL_WRITE;
+    res.buf = reinterpret_cast<char *>(block);
+    res.mr = ibv_reg_mr (res.pd, res.buf, ONE_MEGABYTE, mr_flags);
+    res.remote_props.addr += ONE_MEGABYTE;
+
+    fprintf (stdout, "Sending address 0x%x to 0x%x\n", block, res.remote_props.addr);
     if (post_send (&res, IBV_WR_RDMA_WRITE))
     {
         fprintf (stderr, "failed to post SR\n");
@@ -70,14 +78,6 @@ int do_rdma(int sockfd) {
     {
         fprintf (stderr, "poll completion failed\n");
         return 1;
-    }
-
-    // clone resource for next iteration
-    if (i + 1 < num_blocks) {
-      int mr_flags = IBV_ACCESS_LOCAL_WRITE;
-      res.buf = data[i];
-      res.mr = ibv_reg_mr (res.pd, res.buf, FAKEDB_BLOCK_SIZE, mr_flags);
-      res.remote_props.addr += FAKEDB_BLOCK_SIZE;
     }
   }
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
