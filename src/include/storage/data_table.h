@@ -223,7 +223,7 @@ class DataTable {
       total_count++;
       counts[block->controller_.CurrentBlockState()]++;
     }
-    printf("Total number of tuples %u\n", total_count);
+    printf("Total number of tuples %u\n", tuple_count);
     printf("Total number of blocks %u\n", total_count);
     for (auto &entry : counts) {
       switch (entry.first) {

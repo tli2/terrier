@@ -243,8 +243,9 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     }
     state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
     // cleanup
-//    EndCompactor();
-//    EndGC();
+    std::this_thread::sleep_for(std::chrono::seconds(1));  // Let GC clean up
+    EndCompactor();
+    EndGC();
 //    printf("history table:\n");
 //    tpcc_db->history_table_->table_.data_table->InspectTable();
 //    printf("item table:\n");
@@ -289,5 +290,5 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
   }
 }
 
-BENCHMARK_REGISTER_F(TPCCBenchmark, Basic)->Unit(benchmark::kMillisecond)->UseManualTime()->Repetitions(10);
+BENCHMARK_REGISTER_F(TPCCBenchmark, Basic)->Unit(benchmark::kMillisecond)->UseManualTime();
 }  // namespace terrier
