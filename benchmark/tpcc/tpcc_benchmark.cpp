@@ -24,7 +24,7 @@
 namespace terrier {
 #define LOG_FILE_NAME "./tpcc.log"
 
-class TpccLoader : public benchmark::Fixture {
+class TPCCBenchmark : public benchmark::Fixture {
  public:
   void StartLogging() {
     logging_ = true;
@@ -125,7 +125,7 @@ class TpccLoader : public benchmark::Fixture {
 };
 
 // NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(TpccLoader, Basic)(benchmark::State &state) {
+BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
   // one TPCC worker = one TPCC terminal = one thread
   std::vector<tpcc::Worker> workers;
   workers.reserve(num_threads_);
