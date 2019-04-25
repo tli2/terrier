@@ -253,7 +253,6 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
 //    tpcc_db->order_table_->table_.data_table->InspectTable();
     printf("order_line table:\n");
     tpcc_db->order_line_table_->table_.data_table->InspectTable();
-    printf("order_line table size:%u tuples\n",tpcc_db->order_line_table_->table_.data_table.)
     printf("\n\n\n");
 //    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
 //    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
