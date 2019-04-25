@@ -318,10 +318,10 @@ class TpccLoader {
     }
   }
 };
+}
 
 int main() {
   terrier::TpccLoader b;
   b.Run();
   return 0;
-}
 }
