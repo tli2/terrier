@@ -63,9 +63,8 @@ class TpccLoader {
   storage::BlockCompactor compactor_;
   storage::AccessObserver access_observer_{&compactor_};
 
-  const bool only_count_new_order_ = false;
   const int8_t num_threads_ = 6;
-  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
+  const uint32_t num_precomputed_txns_per_worker_ = 100000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
@@ -156,9 +155,6 @@ class TpccLoader {
       }
       precomputed_args.emplace_back(txns);
     }
-
-    // NOLINTNEXTLINE
-    // build the TPCC database
 
     auto *const tpcc_db = tpcc_builder.Build();
     storage::DirtyGlobals::tpcc_db = tpcc_db;
