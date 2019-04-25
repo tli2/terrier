@@ -320,7 +320,7 @@ class TpccLoader {
 };
 
 int main() {
-  TpccLoader b;
+  terrier::TpccLoader b;
   b.Run();
   return 0;
 }
