@@ -41,6 +41,10 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
               RawBlock *block1 = entry.first;
               BlockAccessController &controller1 = block1->controller_;
               controller1.GetBlockState()->store(BlockState::COOLING);
+              if (cg.txn_->IsReadOnly()) {
+                cg.txn_->compacted_ = block;
+                cg.txn_->table_ = block->data_table_;
+              }
             }
             txn_manager->Commit(cg.txn_, NoOp, nullptr);
           } else {
