@@ -26,9 +26,10 @@
 // #include "storage/data_table.h"
 // #include "arrow/table.h"
 // #include "arrow/type.h"
+#include <cstdint>
 
 #include "network/rdma/data_format.h"
-#include "network/rdma/fake_db.h"
+// #include "network/rdma/fake_db.h"
 #include "network/rdma/rdma.h"
 
 #define ONE_MEGABYTE 1048576
