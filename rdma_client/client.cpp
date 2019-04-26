@@ -41,7 +41,8 @@ int main(int argc, char *argv[]) {
   fprintf (stdout, "TCP connection was established\n");
 
   // send table data from client to server
-  sprintf(table_name, argv[2]);
+  memset(table_name, 0, sizeof(table_name));
+  strncpy(table_name, argv[2], sizeof(table_name));
   int wc = sock_write_data(res.sock, sizeof(table_name), table_name);
   if (wc < 0) {
     fprintf(stderr, "failed to send data to server\n");
