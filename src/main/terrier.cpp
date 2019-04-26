@@ -23,7 +23,7 @@
 #include "storage/dirty_globals.h"
 #include "storage/arrow_util.h"
 
-#include "network/rdma/server.h"
+//#include "network/rdma/server.h"
 
 namespace terrier {
 class TpccLoader {
@@ -67,11 +67,13 @@ class TpccLoader {
   storage::AccessObserver access_observer_{&compactor_};
 
   const int8_t num_threads_ = 6;
-  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
+  const uint32_t num_precomputed_txns_per_worker_ = 10000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
   const uint32_t w_stock_level = 4;
+
+  std::bernoulli_distribution treat_as_hot{0.1};
 
   common::WorkerPool thread_pool_{static_cast<uint32_t>(num_threads_), {}};
 
@@ -101,18 +103,18 @@ class TpccLoader {
         throw std::runtime_error("Failed to accept");
       storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
       std::list<storage::RawBlock *> blocks = order_line->blocks_;
-      //  const storage::TupleAccessStrategy &accessor = order_line->accessor_;
-      //  for (storage::RawBlock *block : blocks) {
-      //    std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
-      //    if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN) {
-      //      continue;
-      //      table = MaterializeHotBlock(tpcc_db, block);
-      //    } else {
-      //      table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
-      //    }
-      // //   // TODO(Tianyu): Do things!
-      //  }
-      do_rdma(new_conn_fd, blocks);
+        const storage::TupleAccessStrategy &accessor = order_line->accessor_;
+        for (storage::RawBlock *block : blocks) {
+          std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
+          if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
+            table = MaterializeHotBlock(tpcc_db, block);
+          } else {
+            
+            table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
+          }
+          // TODO(Tianyu): Do things!
+        }
+//      do_rdma(new_conn_fd, blocks);
     }
   }
 
@@ -299,7 +301,7 @@ class TpccLoader {
   const std::chrono::milliseconds gc_period_{1};
   transaction::TransactionManager txn_manager{&buffer_pool_, true, LOGGING_DISABLED};
   bool first_call = true;
-  byte buf[4096];
+  uint64_t buf[1024];
 
   void GCThreadLoop() {
     while (run_gc_) {
@@ -392,8 +394,9 @@ class TpccLoader {
                                                              arrow::field("ol_i_id", arrow::uint32()),
                                                              arrow::field("ol_supply_w_id", arrow::uint8()),
                                                              arrow::field("ol_delivery_d", arrow::uint64()),
-                                                             arrow::field("ol_quantity", arrow::float64()),
-                                                             arrow::field("ol_amount", arrow::utf8())};
+                                                             arrow::field("ol_quantity", arrow::uint8()),
+                                                             arrow::field("ol_amount", arrow::float64()),
+                                                             arrow::field("ol_dist_info", arrow::utf8())};
 
     std::vector<std::shared_ptr<arrow::Array>> table_vector{o_id, o_d_id, o_w_id, ol_number,
                                                             ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info};

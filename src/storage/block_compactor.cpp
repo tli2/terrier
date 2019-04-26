@@ -23,17 +23,14 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
     BlockAccessController &controller = block->controller_;
     switch (controller.CurrentBlockState()) {
       case BlockState::HOT: {
-//        if (cg == nullptr) {
-//          cg = new CompactionGroup(txn_manager->BeginTransaction(), block->data_table_);
-//          current_group_size = 0;
-//        }
-        CompactionGroup cg(txn_manager->BeginTransaction(), block->data_table_);
-        if (block->data_table_ != cg.table_) throw std::runtime_error("need to remove hack");
         // TODO(Tianyu): This is probably fine for now, but we will want to not only compact within a block
         // but also across blocks to eventually free up slots
+        CompactionGroup cg(txn_manager->BeginTransaction(), block->data_table_);
         cg.blocks_to_compact_.emplace(block, std::vector<uint32_t>());
-//        current_group_size++;
-//        if (current_group_size == GROUP_SIZE) {
+
+        // Block can still be inserted into. Hands off.
+        if (block->insert_head_ != block->data_table_->accessor_.GetBlockLayout().NumSlots()) continue;
+
         if (EliminateGaps(&cg)) {
           // Has to mark block as cooling before transaction commit, so we have a guarantee that
           // any older transactions
@@ -42,12 +39,12 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
             cg.txn_->compacted_ = block;
             cg.txn_->table_ = block->data_table_;
           }
+//          printf("compaction of block %p successful\n", entry.first);
           txn_manager->Commit(cg.txn_, NoOp, nullptr);
         } else {
+//          printf("compaction of block %p failed!!!\n", entry.first);
           txn_manager->Abort(cg.txn_);
         }
-//          cg = nullptr;
-//        }
         break;
       }
       case BlockState::COOLING: {
