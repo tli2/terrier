@@ -1,9 +1,28 @@
-#include <chrono>
-#include <iostream>
-
+#include <random>
+#include <vector>
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
+#include "common/macros.h"
+#include "common/scoped_timer.h"
+#include "common/worker_pool.h"
+#include "storage/garbage_collector.h"
+#include "storage/garbage_collector.h"
+#include "storage/storage_defs.h"
+#include "tpcc/builder.h"
+#include "tpcc/database.h"
+#include "tpcc/delivery.h"
+#include "tpcc/loader.h"
+#include "tpcc/new_order.h"
+#include "tpcc/order_status.h"
+#include "tpcc/payment.h"
+#include "tpcc/stock_level.h"
+#include "tpcc/worker.h"
+#include "tpcc/workload.h"
+#include "storage/block_compactor.h"
+#include "transaction/transaction_manager.h"
+#include "storage/dirty_globals.h"
 #include "storage/arrow_util.h"
 #include "storage/tuple_access_strategy.h"
-#include "storage/storage_defs.h"
 #include "storage/data_table.h"
 #include "arrow/table.h"
 #include "arrow/type.h"
@@ -13,6 +32,7 @@
 #include "rdma.h"
 
 #define ONE_MEGABYTE 1048576
+namespace terrier {
 
 struct config_t config = {
     NULL,                         /* device_name */
@@ -23,6 +43,8 @@ struct config_t config = {
 };
 
 struct size_pair sizes = {0, 0};
+
+std::bernoulli_distribution treat_as_hot{0.1};
 
 int do_send(struct resources *res, char *buf, size_t buf_size, uint64_t remote_addr) {
   int mr_flags = IBV_ACCESS_LOCAL_WRITE;
@@ -44,8 +66,8 @@ int do_send(struct resources *res, char *buf, size_t buf_size, uint64_t remote_a
   return 0;
 }
 
-int do_rdma(int sockfd, terrier::storage::DataTable *datatable) {
-  std::list<terrier::storage::RawBlock *> blocks = datatable->blocks_;
+int do_rdma(int sockfd, storage::DataTable *datatable) {
+  std::list<storage::RawBlock *> blocks = datatable->blocks_;
   struct resources res;
   resources_init(&res);
   res.sock = sockfd;
@@ -87,16 +109,16 @@ int do_rdma(int sockfd, terrier::storage::DataTable *datatable) {
   // initiate rdma write
   uint64_t remote_addr_start = res.remote_props.addr;
   uint64_t remote_curr_addr = remote_addr_start;
-  const terrier::storage::TupleAccessStrategy &accessor = datatable->accessor_;
+  const storage::TupleAccessStrategy &accessor = datatable->accessor_;
   fprintf (stdout, "Now initiating RDMA write\n");
   std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-  for (terrier::storage::RawBlock *block : blocks) {
+  for (storage::RawBlock *block : blocks) {
     std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
-    if (block->controller_.CurrentBlockState() != terrier::storage::BlockState::FROZEN) {
+    if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
       // table = MaterializeHotBlock(tpcc_db, block);
       continue;
     } else {
-      table = terrier::storage::ArrowUtil::AssembleToArrowTable(accessor, block);
+      table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
     }
 
     int num_cols = table->num_columns();
@@ -142,6 +164,7 @@ int do_rdma(int sockfd, terrier::storage::DataTable *datatable) {
   resources_destroy (&res);
 
   return 0;
+}
 }
 
 // int main(int argc, char *argv[]) {
