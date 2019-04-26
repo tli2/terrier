@@ -213,9 +213,9 @@ class TpccLoader {
       fprintf (stderr, "final sync done\n");
 
       // cleanup
-      resources_destroy (&res);
+      // resources_destroy (&res);
 
-      return;
+      // return;
 
     }
   }
