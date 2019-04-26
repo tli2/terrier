@@ -1,3 +1,4 @@
+#pragma once
 #include <infiniband/verbs.h>
 #include <sys/types.h>
 

@@ -89,8 +89,6 @@ class TpccLoader {
 
   struct size_pair sizes = {0, 0};
 
-  std::bernoulli_distribution treat_as_hot{0.1};
-
   common::WorkerPool thread_pool_{static_cast<uint32_t>(num_threads_), {}};
 
   void ServerLoop(tpcc::Database *tpcc_db) {
@@ -118,18 +116,20 @@ class TpccLoader {
       if (new_conn_fd == -1)
         throw std::runtime_error("Failed to accept");
       storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
-      std::list<storage::RawBlock *> blocks = datatable->blocks_;
+      std::list<storage::RawBlock *> blocks = order_line->blocks_;
 
       // RDMA stuff
       struct resources res;
       resources_init(&res);
-      res.sock = sockfd;
+      res.sock = new_conn_fd;
 
       // get table data from client to server
+      char table_name[16];
+      memset(table_name, 0, 16);
       int rc = sock_read_data(res.sock, sizeof(table_name), table_name);
       if (rc < 0) {
         fprintf(stderr, "failed to receive data from client\n");
-        return 1;
+        return;
       }
       fprintf(stdout, "received table name: %s\n", table_name);
 
@@ -151,18 +151,18 @@ class TpccLoader {
       res.size = metadata_size;
       if (resources_create (&res, config)) {
         fprintf (stderr, "failed to create resources\n");
-        return 1;
+        return;
       }
       /* connect the QPs */
       if (connect_qp (&res, config)) {
         fprintf (stderr, "failed to connect QPs\n");
-        return 1;
+        return;
       }
 
       // initiate rdma write
       uint64_t remote_addr_start = res.remote_props.addr;
       uint64_t remote_curr_addr = remote_addr_start;
-      const storage::TupleAccessStrategy &accessor = datatable->accessor_;
+      const storage::TupleAccessStrategy &accessor = order_line->accessor_;
       fprintf (stdout, "Now initiating RDMA write\n");
       std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
       for (storage::RawBlock *block : blocks) {
@@ -193,7 +193,7 @@ class TpccLoader {
             uint8_t *data = (uint8_t *)buffer->data();
             
 
-            if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return 1;
+            if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
             remote_curr_addr += buf_size;
           }
         }
@@ -209,14 +209,14 @@ class TpccLoader {
       if (sock_sync_data (res.sock, 1, &temp_char, &temp_char))    /* just send a dummy char back and forth */
       {
         fprintf (stderr, "sync error after RDMA ops\n");
-        return 1;
+        return;
       }
       fprintf (stderr, "final sync done\n");
 
       // cleanup
       resources_destroy (&res);
 
-      return 0;
+      return;
 
     }
   }

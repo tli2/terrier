@@ -1,50 +1,47 @@
-#include <random>
-#include <vector>
-#include <arpa/inet.h>
-#include <netinet/tcp.h>
-#include "common/macros.h"
-#include "common/scoped_timer.h"
-#include "common/worker_pool.h"
-#include "storage/garbage_collector.h"
-#include "storage/garbage_collector.h"
-#include "storage/storage_defs.h"
-#include "tpcc/builder.h"
-#include "tpcc/database.h"
-#include "tpcc/delivery.h"
-#include "tpcc/loader.h"
-#include "tpcc/new_order.h"
-#include "tpcc/order_status.h"
-#include "tpcc/payment.h"
-#include "tpcc/stock_level.h"
-#include "tpcc/worker.h"
-#include "tpcc/workload.h"
-#include "storage/block_compactor.h"
-#include "transaction/transaction_manager.h"
-#include "storage/dirty_globals.h"
-#include "storage/arrow_util.h"
-#include "storage/tuple_access_strategy.h"
-#include "storage/data_table.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
+// #include <random>
+// #include <vector>
+// #include <arpa/inet.h>
+// #include <netinet/tcp.h>
+// #include "common/macros.h"
+// #include "common/scoped_timer.h"
+// #include "common/worker_pool.h"
+// #include "storage/garbage_collector.h"
+// #include "storage/garbage_collector.h"
+// #include "storage/storage_defs.h"
+// #include "tpcc/builder.h"
+// #include "tpcc/database.h"
+// #include "tpcc/delivery.h"
+// #include "tpcc/loader.h"
+// #include "tpcc/new_order.h"
+// #include "tpcc/order_status.h"
+// #include "tpcc/payment.h"
+// #include "tpcc/stock_level.h"
+// #include "tpcc/worker.h"
+// #include "tpcc/workload.h"
+// #include "storage/block_compactor.h"
+// #include "transaction/transaction_manager.h"
+// #include "storage/dirty_globals.h"
+// #include "storage/arrow_util.h"
+// #include "storage/tuple_access_strategy.h"
+// #include "storage/data_table.h"
+// #include "arrow/table.h"
+// #include "arrow/type.h"
 
-#include "data_format.h"
-#include "fake_db.h"
-#include "rdma.h"
+#include "network/rdma/data_format.h"
+#include "network/rdma/fake_db.h"
+#include "network/rdma/rdma.h"
 
 #define ONE_MEGABYTE 1048576
-namespace terrier {
 
-struct config_t config = {
-    NULL,                         /* device_name */
-    NULL,                         /* server_name */
-    19875,                        /* tcp_port */
-    1,                            /* ib_port */
-    1                             /* gid_idx */
-};
+// struct config_t config = {
+//     NULL,                         /* device_name */
+//     NULL,                         /* server_name */
+//     19875,                        /* tcp_port */
+//     1,                            /* ib_port */
+//     1                             /* gid_idx */
+// };
 
-struct size_pair sizes = {0, 0};
-
-std::bernoulli_distribution treat_as_hot{0.1};
+// struct size_pair sizes = {0, 0};
 
 int do_send(struct resources *res, char *buf, size_t buf_size, uint64_t remote_addr) {
   int mr_flags = IBV_ACCESS_LOCAL_WRITE;
@@ -114,7 +111,7 @@ int do_rdma(int sockfd, storage::DataTable *datatable) {
   std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
   for (storage::RawBlock *block : blocks) {
     std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
-    if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
+    if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN) {
       // table = MaterializeHotBlock(tpcc_db, block);
       continue;
     } else {
@@ -165,7 +162,7 @@ int do_rdma(int sockfd, storage::DataTable *datatable) {
 
   return 0;
 }
-}
+
 
 // int main(int argc, char *argv[]) {
 //   if (argc != 1) {

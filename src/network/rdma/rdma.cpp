@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "rdma.h"
+#include "network/rdma/rdma.h"
 
 /* poll CQ timeout in millisec (2 seconds) */
 #define MAX_POLL_CQ_TIMEOUT 2000

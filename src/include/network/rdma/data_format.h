@@ -1,6 +1,5 @@
+#pragma once
 #include <cstdint>
-
-char table_name[16];
 
 struct size_pair {
   size_t data_size;      // size of final data (table)

@@ -1,3 +1,4 @@
+#pragma once
 #include <string.h>
 
 #define FAKEDB_METADATA_SIZE 128
