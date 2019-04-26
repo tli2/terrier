@@ -80,7 +80,7 @@ class ArrowUtil {
     auto varlen_values_buffer =
         std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(varlen_col.values_), varlen_col.values_length_);
     auto varlen_values_array_data =
-        arrow::ArrayData::Make(arrow::uint8(), metadata.NumRecords(), {NULLPTR, varlen_values_buffer}, 0);
+        arrow::ArrayData::Make(arrow::uint8(), metadata.NumRecords(), {varlen_offset, varlen_values_buffer}, 0);
     table_vector->push_back(arrow::MakeArray(varlen_values_array_data));
   }
 };
