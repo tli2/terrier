@@ -23,7 +23,7 @@
 #include "storage/dirty_globals.h"
 #include "storage/arrow_util.h"
 
-//#include "network/rdma/server.h"
+#include "network/rdma/server.h"
 
 namespace terrier {
 class TpccLoader {

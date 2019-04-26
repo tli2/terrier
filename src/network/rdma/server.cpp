@@ -3,12 +3,14 @@
 
 #include "storage/arrow_util.h"
 #include "storage/tuple_access_strategy.h"
+#include "storage/storage_defs.h"
+#include "storage/data_table.h"
 #include "arrow/table.h"
+#include "arrow/type.h"
 
 #include "data_format.h"
 #include "fake_db.h"
 #include "rdma.h"
-#include "server.h"
 
 #define ONE_MEGABYTE 1048576
 
@@ -43,7 +45,7 @@ int do_send(struct resources *res, char *buf, size_t buf_size, uint64_t remote_a
 }
 
 int do_rdma(int sockfd, terrier::storage::DataTable *datatable) {
-  std::list<storage::RawBlock *> blocks = datatable->blocks_;
+  std::list<terrier::storage::RawBlock *> blocks = datatable->blocks_;
   struct resources res;
   resources_init(&res);
   res.sock = sockfd;
@@ -91,8 +93,8 @@ int do_rdma(int sockfd, terrier::storage::DataTable *datatable) {
   for (terrier::storage::RawBlock *block : blocks) {
     std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
     if (block->controller_.CurrentBlockState() != terrier::storage::BlockState::FROZEN) {
-      continue;
       // table = MaterializeHotBlock(tpcc_db, block);
+      continue;
     } else {
       table = terrier::storage::ArrowUtil::AssembleToArrowTable(accessor, block);
     }
@@ -100,16 +102,23 @@ int do_rdma(int sockfd, terrier::storage::DataTable *datatable) {
     int num_cols = table->num_columns();
     fprintf (stdout, "num columns: %d\n", num_cols);
     for (int ci = 0; ci < num_cols; ci++) {
+      printf ("index: %d\n", ci);
       auto col = table->column(ci);
-      fprintf (stdout, "--- column name: %s\n", col->name());
+      std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
+      // if (col->field()->type()->id() == arrow::Type::type::STRING) continue;
+      // fprintf (stdout, "--- column name: %s\n", col->field()->name());
       auto array_data = col->data()->chunk(0)->data();
-      int64_t length = array_data->length;
+      int64_t length = array_data->buffers.size();
+      std::cout << "  array_data length: " << length << std::endl;
       for (int64_t bi = 0; bi < length; bi++) {
-        auto buffer = array_data->buffers(bi);
+        auto buffer = array_data->buffers[bi];
         int64_t buf_size = buffer->size();
-        uint8_t *data = buffer->data();
+        std::cout << "  size: " << buf_size << std::endl;
+        if (buf_size == 0) break;
+        uint8_t *data = (uint8_t *)buffer->data();
+        
 
-        if (0 != do_send(reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return 1;
+        if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return 1;
         remote_curr_addr += buf_size;
       }
     }
