@@ -59,10 +59,8 @@ class BlockLayout {
   /**
    * @return all the columns in the layout
    */
-  std::vector<col_id_t> AllColumns() const {
-    std::vector<col_id_t> result;
-    for (uint16_t i = NUM_RESERVED_COLUMNS; i < attr_sizes_.size(); i++) result.emplace_back(i);
-    return result;
+  const std::vector<col_id_t> &AllColumns() const {
+    return all_cols_;
   }
 
   /**
@@ -83,7 +81,7 @@ class BlockLayout {
  private:
   std::vector<uint8_t> attr_sizes_;
   // keeps track of all the varlens to make iteration through all varlen columns faster
-  std::vector<col_id_t> varlens_;
+  std::vector<col_id_t> varlens_, all_cols_;
   // These fields below should be declared const but then that deletes the assignment operator for BlockLayout. With
   // const-only accessors we should be safe from making changes to a BlockLayout that would break stuff.
 

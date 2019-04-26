@@ -12,8 +12,6 @@
 
 namespace terrier {
 class BlockCompactorBenchmark : public benchmark::Fixture {
- public:
-
  protected:
   storage::BlockStore block_store_{5000, 5000};
   std::default_random_engine generator_;

@@ -21,8 +21,10 @@ BlockLayout::BlockLayout(std::vector<uint8_t> attr_sizes)
   // sort the attributes when laying out memory to minimize impact of padding
   // skip the reserved columns because we still want those first and shouldn't mess up 8-byte alignment
   std::sort(attr_sizes_.begin() + NUM_RESERVED_COLUMNS, attr_sizes_.end(), std::greater<>());
-  for (uint32_t i = 0; i < attr_sizes_.size(); i++)
+  for (uint32_t i = NUM_RESERVED_COLUMNS; i < attr_sizes_.size(); i++) {
+    all_cols_.emplace_back(i);
     if (attr_sizes_[i] == VARLEN_COLUMN) varlens_.emplace_back(i);
+  }
 }
 
 uint32_t BlockLayout::ComputeTupleSize() const {
