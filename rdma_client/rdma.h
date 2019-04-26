@@ -33,7 +33,7 @@ struct resources
     struct ibv_mr *mr;            /* MR handle for buf */
     char *buf;                    /* memory buffer pointer, used for RDMA and send
                                      ops */
-    int size;                     /* size of buf in bytes */
+    uint64_t size;                /* size of buf in bytes */
     int sock;                     /* TCP socket file descriptor */
 };
 

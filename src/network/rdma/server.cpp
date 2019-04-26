@@ -69,7 +69,7 @@ int do_rdma(int sockfd, std::list<terrier::storage::RawBlock *> blocks) {
     res.mr = ibv_reg_mr (res.pd, res.buf, ONE_MEGABYTE, mr_flags);
     res.remote_props.addr += ONE_MEGABYTE;
 
-    fprintf (stdout, "Sending address 0x%x to 0x%x\n", block, res.remote_props.addr);
+    // fprintf (stdout, "Sending address 0x%x to 0x%x\n", block, res.remote_props.addr);
     if (post_send (&res, IBV_WR_RDMA_WRITE))
     {
         fprintf (stderr, "failed to post SR\n");

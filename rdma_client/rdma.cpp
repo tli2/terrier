@@ -609,50 +609,6 @@ resources_create_exit:
     return rc;
 }
 
-int
-resources_clone (struct resources *res, struct resources *res_old) {
-    struct ibv_qp_init_attr qp_init_attr;
-
-    // copy over everything except for buf and size
-    char *buf = res->buf;
-    int size = res->size;
-    memcpy(res, res_old, sizeof(struct resources));
-    res->buf = buf;
-    res->size = size;
-
-    // create new mr and qp for new resource
-    int mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
-        IBV_ACCESS_REMOTE_WRITE;
-    res->mr = ibv_reg_mr (res->pd, res->buf, res->size, mr_flags);
-    if (!res->mr)
-    {
-        fprintf (stderr, "ibv_reg_mr failed with mr_flags=0x%x\n", mr_flags);
-        return 1;
-    }
-    fprintf (stdout,
-            "MR was registered with addr=%p, lkey=0x%x, rkey=0x%x, flags=0x%x\n",
-            res->buf, res->mr->lkey, res->mr->rkey, mr_flags);
-    /* create the Queue Pair */
-    memset (&qp_init_attr, 0, sizeof (qp_init_attr));
-    qp_init_attr.qp_type = IBV_QPT_RC;
-    qp_init_attr.sq_sig_all = 1;
-    qp_init_attr.send_cq = res->cq;
-    qp_init_attr.recv_cq = res->cq;
-    qp_init_attr.cap.max_send_wr = 1;
-    qp_init_attr.cap.max_recv_wr = 1;
-    qp_init_attr.cap.max_send_sge = 1;
-    qp_init_attr.cap.max_recv_sge = 1;
-    res->qp = ibv_create_qp (res->pd, &qp_init_attr);
-    if (!res->qp)
-    {
-        fprintf (stderr, "failed to create QP\n");
-        ibv_dereg_mr (res->mr);
-        return 1;
-    }
-    fprintf (stdout, "QP was created, QP number=0x%x\n", res->qp->qp_num);
-    return 0;
-}
-
 /******************************************************************************
  * Function: modify_qp_to_init
  *
