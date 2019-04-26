@@ -16,7 +16,7 @@ struct config_t config = {
     1                             /* gid_idx */
 };
 
-struct size_pair sizes = {-1, -1};
+struct size_pair sizes = {0, 0};
 
 int do_rdma(int sockfd, std::list<terrier::storage::RawBlock *> blocks) {
   struct resources res;
