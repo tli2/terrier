@@ -1,6 +1,8 @@
 #include <chrono>
 #include <iostream>
 
+#include "arrow/table.h"
+
 #include "data_format.h"
 #include "fake_db.h"
 #include "rdma.h"
@@ -58,33 +60,41 @@ int do_rdma(int sockfd, std::list<terrier::storage::RawBlock *> blocks) {
   }
 
   // initiate rdma write
+  uint64_t remote_addr_start = res.remote_props.addr;
+  uint64_t remote_curr_addr = remote_addr_start;
+  const storage::TupleAccessStrategy &accessor = order_line->accessor_;
   fprintf (stdout, "Now initiating RDMA write\n");
   std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-  int send_count = 0;
   for (terrier::storage::RawBlock *block : blocks) {
-    if (block->controller_.CurrentBlockState() != terrier::storage::BlockState::FROZEN) continue;
-    send_count++;
-    int mr_flags = IBV_ACCESS_LOCAL_WRITE;
-    res.buf = reinterpret_cast<char *>(block);
-    res.mr = ibv_reg_mr (res.pd, res.buf, ONE_MEGABYTE, mr_flags);
-    res.remote_props.addr += ONE_MEGABYTE;
-
-    // fprintf (stdout, "Sending address 0x%x to 0x%x\n", block, res.remote_props.addr);
-    if (post_send (&res, IBV_WR_RDMA_WRITE))
-    {
-        fprintf (stderr, "failed to post SR\n");
-        return 1;
+    std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
+    if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN) {
+      continue;
+      table = MaterializeHotBlock(tpcc_db, block);
+    } else {
+      table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
     }
-    if (poll_completion (&res))
-    {
-        fprintf (stderr, "poll completion failed\n");
-        return 1;
+
+    int num_cols = table.num_columns();
+    fprintf (stdout, "num columns: %d\n", num_cols);
+    for (int ci = 0; ci < num_cols; ci++) {
+      auto col = table.column(ci);
+      fprintf (stdout, "--- column name: %s\n", col->name());
+      auto array_data = col->data()->chunk(0)->data();
+      int64_t length = array_data->length;
+      for (int64_t bi = 0; bi < length; bi++) {
+        auto buffer = array_data->buffers(bi);
+        int64_t buf_size = buffer->size();
+        const uint8_t *data = buffer->data();
+
+        if (0 != do_send(reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return 1;
+        remote_curr_addr += buf_size;
+      }
     }
   }
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
   fprintf (stdout, "Server side RDMA duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   fprintf (stdout, "RDMA Write completed\n");
-  fprintf (stdout, "Num blocks written: %d\n", send_count);
+  fprintf (stdout, "Num blocks written: %zd\n", remote_curr_addr - remote_addr_start);
 
   // tell client we're done
   /* Sync so server will know that client is done mucking with its memory */
@@ -99,6 +109,26 @@ int do_rdma(int sockfd, std::list<terrier::storage::RawBlock *> blocks) {
   // cleanup
   resources_destroy (&res);
 
+  return 0;
+}
+
+int do_send(struct resources *res, const char *buf, size_t buf_size, uint64_t remote_addr) {
+  int mr_flags = IBV_ACCESS_LOCAL_WRITE;
+  res->buf = buf;
+  res->mr = ibv_reg_mr (res->pd, res->buf, buf_size, mr_flags);
+  res->remote_props.addr = remote_addr;
+
+  // fprintf (stdout, "Sending address 0x%x to 0x%x\n", block, res.remote_props.addr);
+  if (post_send (res, IBV_WR_RDMA_WRITE))
+  {
+      fprintf (stderr, "failed to post SR\n");
+      return 1;
+  }
+  if (poll_completion (res))
+  {
+      fprintf (stderr, "poll completion failed\n");
+      return 1;
+  }
   return 0;
 }
 

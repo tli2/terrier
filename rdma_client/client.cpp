@@ -51,6 +51,8 @@ int main(int argc, char *argv[]) {
 
   // get metadata and data size from server to client
   sock_read_data(res.sock, sizeof(sizes), (char *)&sizes);
+  // ***** force overwrite data_size *****
+  sizes.data_size = 10737418240;
   fprintf(stdout, "Metadata size: %d, data size: %d\n", sizes.metadata_size, sizes.data_size);
   char *data = (char*)malloc(sizes.data_size);
   char *metadata = (char *)malloc(sizes.metadata_size);
