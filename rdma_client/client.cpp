@@ -17,10 +17,10 @@ struct config_t config = {
 struct size_pair sizes = {0, 0};
 
 int main(int argc, char *argv[]) {
-  if (argc != 2) {
+  if (argc != 3) {
     fprintf(stderr,
-            "Usage (client): %s <hostname>\n",
-            argv[1]);
+            "Usage (client): %s <hostname> <hot_ratio>\n",
+            argv[0]);
     return 1;
   }
 
@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
   fprintf (stdout, "TCP connection was established\n");
 
   // send table data from client to server
-  sprintf(table_name, "MyTable");
+  sprintf(table_name, argv[2]);
   int wc = sock_write_data(res.sock, sizeof(table_name), table_name);
   if (wc < 0) {
     fprintf(stderr, "failed to send data to server\n");

@@ -71,13 +71,11 @@ class TpccLoader {
   storage::AccessObserver access_observer_{&compactor_};
 
   const int8_t num_threads_ = 6;
-  const uint32_t num_precomputed_txns_per_worker_ = 10000;
+  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
   const uint32_t w_stock_level = 4;
-
-  std::bernoulli_distribution treat_as_hot{0.1};
 
   struct config_t config = {
       NULL,                         /* device_name */
@@ -123,7 +121,7 @@ class TpccLoader {
       resources_init(&res);
       res.sock = new_conn_fd;
 
-      // get table data from client to server
+      // get table name (which is now repurposed to hot_ratio) from client to server
       char table_name[16];
       memset(table_name, 0, 16);
       int rc = sock_read_data(res.sock, sizeof(table_name), table_name);
@@ -131,7 +129,9 @@ class TpccLoader {
         fprintf(stderr, "failed to receive data from client\n");
         return;
       }
-      fprintf(stdout, "received table name: %s\n", table_name);
+      fprintf(stdout, "received hot ratio: %s\n", table_name);
+      double hot_ratio = std::stod(std::string(table_name), nullptr);
+      std::bernoulli_distribution treat_as_hot{hot_ratio};
 
       // send metadata and data size from server to client
       char metadata[] = "FAKE METADATA";
@@ -168,27 +168,26 @@ class TpccLoader {
       for (storage::RawBlock *block : blocks) {
         std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
         if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
-          // table = MaterializeHotBlock(tpcc_db, block);
-          continue;
+          table = MaterializeHotBlock(tpcc_db, block);
         } else {
           table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
         }
 
         int num_cols = table->num_columns();
-        fprintf (stdout, "num columns: %d\n", num_cols);
+        // fprintf (stdout, "num columns: %d\n", num_cols);
         for (int ci = 0; ci < num_cols; ci++) {
-          printf ("index: %d\n", ci);
+          // printf ("index: %d\n", ci);
           auto col = table->column(ci);
-          std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
+          // std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
           // if (col->field()->type()->id() == arrow::Type::type::STRING) continue;
           // fprintf (stdout, "--- column name: %s\n", col->field()->name());
           auto array_data = col->data()->chunk(0)->data();
           int64_t length = array_data->buffers.size();
-          std::cout << "  array_data length: " << length << std::endl;
+          // std::cout << "  array_data length: " << length << std::endl;
           for (int64_t bi = 0; bi < length; bi++) {
             auto buffer = array_data->buffers[bi];
             int64_t buf_size = buffer->size();
-            std::cout << "  size: " << buf_size << std::endl;
+            // std::cout << "  size: " << buf_size << std::endl;
             if (buf_size == 0) break;
             uint8_t *data = (uint8_t *)buffer->data();
             
