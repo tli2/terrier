@@ -102,8 +102,7 @@ class TpccLoader {
       if (new_conn_fd == -1)
         throw std::runtime_error("Failed to accept");
       storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
-      std::list<storage::RawBlock *> blocks = order_line->blocks_;
-      do_rdma(new_conn_fd, blocks);
+      do_rdma(new_conn_fd, order_line);
     }
   }
 
