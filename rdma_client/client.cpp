@@ -9,12 +9,12 @@
 struct config_t config = {
     NULL,                         /* device_name */
     NULL,                         /* server_name */
-    19875,                        /* tcp_port */
+    15712,                        /* tcp_port */
     1,                            /* ib_port */
     1                             /* gid_idx */
 };
 
-struct size_pair sizes = {-1, -1};
+struct size_pair sizes = {0, 0};
 
 int main(int argc, char *argv[]) {
   if (argc != 2) {
