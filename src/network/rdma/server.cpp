@@ -60,9 +60,10 @@ int do_rdma(int sockfd, std::list<terrier::storage::RawBlock *> blocks) {
   // initiate rdma write
   fprintf (stdout, "Now initiating RDMA write\n");
   std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+  int send_count = 0;
   for (terrier::storage::RawBlock *block : blocks) {
-
     if (block->controller_.CurrentBlockState() != terrier::storage::BlockState::FROZEN) continue;
+    send_count++;
     int mr_flags = IBV_ACCESS_LOCAL_WRITE;
     res.buf = reinterpret_cast<char *>(block);
     res.mr = ibv_reg_mr (res.pd, res.buf, ONE_MEGABYTE, mr_flags);
@@ -81,8 +82,9 @@ int do_rdma(int sockfd, std::list<terrier::storage::RawBlock *> blocks) {
     }
   }
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-  fprintf(stdout, "Server side RDMA duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-  fprintf (stderr, "RDMA Write completed\n");
+  fprintf (stdout, "Server side RDMA duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+  fprintf (stdout, "RDMA Write completed\n");
+  fprintf (stdout, "Num blocks written: %d\n", send_count);
 
   // tell client we're done
   /* Sync so server will know that client is done mucking with its memory */

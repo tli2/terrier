@@ -101,17 +101,18 @@ class TpccLoader {
         throw std::runtime_error("Failed to accept");
       storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
       std::list<storage::RawBlock *> blocks = order_line->blocks_;
-       const storage::TupleAccessStrategy &accessor = order_line->accessor_;
-       for (storage::RawBlock *block : blocks) {
-         std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
-         if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN) {
-           table = MaterializeHotBlock(tpcc_db, block);
-         } else {
-           table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
-         }
-      //   // TODO(Tianyu): Do things!
-       }
-//      do_rdma(new_conn_fd, blocks);
+      //  const storage::TupleAccessStrategy &accessor = order_line->accessor_;
+      //  for (storage::RawBlock *block : blocks) {
+      //    std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
+      //    if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN) {
+      //      continue;
+      //      table = MaterializeHotBlock(tpcc_db, block);
+      //    } else {
+      //      table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
+      //    }
+      // //   // TODO(Tianyu): Do things!
+      //  }
+      do_rdma(new_conn_fd, blocks);
     }
   }
 
