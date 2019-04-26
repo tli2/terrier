@@ -33,8 +33,8 @@ int do_rdma(int sockfd, std::list<terrier::storage::RawBlock *> blocks) {
 
   // send metadata and data size from server to client
   char metadata[] = "FAKE METADATA";
-  int metadata_size = 8;
-  int num_blocks = blocks.size();
+  size_t metadata_size = 8;
+  size_t num_blocks = blocks.size();
   sizes.metadata_size = metadata_size;
   sizes.data_size = ONE_MEGABYTE * num_blocks;
   sock_write_data(res.sock, sizeof(sizes), (char *)&sizes);
