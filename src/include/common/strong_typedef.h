@@ -207,7 +207,7 @@ class StrongTypeAlias {
 
 /* Define all typedefs here */
 namespace terrier {
-using byte = std::byte;
+using byte = char;
 }
 
 namespace std {
