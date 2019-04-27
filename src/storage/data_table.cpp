@@ -32,7 +32,7 @@ DataTable::~DataTable() {
 
 bool DataTable::Select(terrier::transaction::TransactionContext *txn, terrier::storage::TupleSlot slot,
                        terrier::storage::ProjectedRow *out_buffer) const {
-  data_table_counter_.IncrementNumSelect(1);
+//  data_table_counter_.IncrementNumSelect(1);
   return SelectIntoBuffer(txn, slot, out_buffer);
 }
 
@@ -120,7 +120,7 @@ bool DataTable::Update(transaction::TransactionContext *const txn, const TupleSl
     // that's difficult with this implementation
     StorageUtil::CopyAttrFromProjection(accessor_, slot, redo, i);
   }
-  data_table_counter_.IncrementNumUpdate(1);
+//  data_table_counter_.IncrementNumUpdate(1);
 
   return true;
 }
@@ -144,7 +144,7 @@ TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const Pr
     NewBlock(block);
   }
   InsertInto(txn, redo, result);
-  data_table_counter_.IncrementNumInsert(1);
+//  data_table_counter_.IncrementNumInsert(1);
   return result;
 }
 
@@ -169,7 +169,7 @@ void DataTable::InsertInto(transaction::TransactionContext *txn, const Projected
 }
 
 bool DataTable::Delete(transaction::TransactionContext *const txn, const TupleSlot slot) {
-  data_table_counter_.IncrementNumDelete(1);
+//  data_table_counter_.IncrementNumDelete(1);
   // Create a redo
   // TODO(Tianyu): Is it better to be consistent with the StageWrite behavior where we have caller explicitly
   // call StageDelete before calling Delete?
@@ -313,7 +313,7 @@ void DataTable::NewBlock(RawBlock *expected_val) {
   insertion_heads_[id] = new_block;
 //  insertion_head_ = new_block;
   blocks_.push_back(new_block);
-  data_table_counter_.IncrementNumNewBlock(1);
+//  data_table_counter_.IncrementNumNewBlock(1);
 //  if (this == DirtyGlobals::history) printf("allocating new block\n");
 }
 

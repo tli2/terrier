@@ -207,11 +207,11 @@ class DataTable {
    */
   bool Delete(transaction::TransactionContext *txn, TupleSlot slot);
 
-  /**
-   * Return a pointer to the performance counter for the data table.
-   * @return pointer to the performance counter
-   */
-  DataTableCounter *GetDataTableCounter() { return &data_table_counter_; }
+//  /**
+//   * Return a pointer to the performance counter for the data table.
+//   * @return pointer to the performance counter
+//   */
+//  DataTableCounter *GetDataTableCounter() { return &data_table_counter_; }
 
   void InspectTable() {
     std::unordered_map<BlockState, uint32_t> counts;
@@ -273,7 +273,7 @@ class DataTable {
   // only happen when blocks are full, thus we can afford to be optimistic
   std::vector<RawBlock *> insertion_heads_;
 //  std::atomic<RawBlock *> insertion_head_ = nullptr;
-  mutable DataTableCounter data_table_counter_;
+//  mutable DataTableCounter data_table_counter_;
 
   // A templatized version for select, so that we can use the same code for both row and column access.
   // the method is explicitly instantiated for ProjectedRow and ProjectedColumns::RowView
