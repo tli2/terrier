@@ -327,10 +327,10 @@ class Payment {
         *reinterpret_cast<double *>(customer_select_tuple->AccessWithNullCheck(c_ytd_payment_select_pr_offset));
     const auto c_payment_cnt =
         *reinterpret_cast<int16_t *>(customer_select_tuple->AccessWithNullCheck(c_payment_cnt_select_pr_offset));
-    const auto c_credit = *reinterpret_cast<storage::VarlenEntry *>(
-        customer_select_tuple->AccessWithNullCheck(c_credit_select_pr_offset));
-    const auto c_data =
-        *reinterpret_cast<storage::VarlenEntry *>(customer_select_tuple->AccessWithNullCheck(c_data_select_pr_offset));
+//    const auto c_credit = *reinterpret_cast<storage::VarlenEntry *>(
+//        customer_select_tuple->AccessWithNullCheck(c_credit_select_pr_offset));
+//    const auto c_data =
+//        *reinterpret_cast<storage::VarlenEntry *>(customer_select_tuple->AccessWithNullCheck(c_data_select_pr_offset));
 
     // Update customer
     auto *customer_update_tuple = customer_update_pr_initializer.InitializeRow(worker->customer_tuple_buffer);
