@@ -26,13 +26,13 @@
 // #include "storage/data_table.h"
 // #include "arrow/table.h"
 // #include "arrow/type.h"
-#include <cstdint>
-
-#include "network/rdma/data_format.h"
+//#include <cstdint>
+//
+//#include "network/rdma/data_format.h"
 // #include "network/rdma/fake_db.h"
-#include "network/rdma/rdma.h"
-
-#define ONE_MEGABYTE 1048576
+//#include "network/rdma/rdma.h"
+//
+//#define ONE_MEGABYTE 1048576
 
 // struct config_t config = {
 //     NULL,                         /* device_name */
@@ -44,25 +44,25 @@
 
 // struct size_pair sizes = {0, 0};
 
-int do_send(struct resources *res, char *buf, size_t buf_size, uint64_t remote_addr) {
-  int mr_flags = IBV_ACCESS_LOCAL_WRITE;
-  res->buf = buf;
-  res->mr = ibv_reg_mr (res->pd, res->buf, buf_size, mr_flags);
-  res->remote_props.addr = remote_addr;
-
-  // fprintf (stdout, "Sending address 0x%x to 0x%x\n", block, res.remote_props.addr);
-  if (post_send (res, IBV_WR_RDMA_WRITE))
-  {
-      fprintf (stderr, "failed to post SR\n");
-      return 1;
-  }
-  if (poll_completion (res))
-  {
-      fprintf (stderr, "poll completion failed\n");
-      return 1;
-  }
-  return 0;
-}
+//int do_send(struct resources *res, char *buf, size_t buf_size, uint64_t remote_addr) {
+//  int mr_flags = IBV_ACCESS_LOCAL_WRITE;
+//  res->buf = buf;
+//  res->mr = ibv_reg_mr (res->pd, res->buf, buf_size, mr_flags);
+//  res->remote_props.addr = remote_addr;
+//
+//  // fprintf (stdout, "Sending address 0x%x to 0x%x\n", block, res.remote_props.addr);
+//  if (post_send (res, IBV_WR_RDMA_WRITE))
+//  {
+//      fprintf (stderr, "failed to post SR\n");
+//      return 1;
+//  }
+//  if (poll_completion (res))
+//  {
+//      fprintf (stderr, "poll completion failed\n");
+//      return 1;
+//  }
+//  return 0;
+//}
 
 // int do_rdma(int sockfd, storage::DataTable *datatable) {
 //   std::list<storage::RawBlock *> blocks = datatable->blocks_;

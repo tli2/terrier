@@ -43,3 +43,5 @@ ADD_TERRIER_LIB(terrier
 ###############################################
 add_executable(terrier main/terrier.cpp)
 target_link_libraries(terrier terrier_shared)
+#add_executable(client main/client.cpp)
+#target_link_libraries(client terrier_static)

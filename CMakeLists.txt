@@ -356,7 +356,7 @@ endif()
 set(TERRIER_LINK_LIBS
     ${TERRIER_LINK_LIBS}
     ${PTHREAD_LIBRARY}
-    ibverbs
+    # ibverbs
     pg_query)
 
 set(TERRIER_TEST_LINK_LIBS
