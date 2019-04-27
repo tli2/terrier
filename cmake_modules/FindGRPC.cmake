@@ -1,5 +1,5 @@
 find_library(GRPC_LIBRARIES
-        NAMES libgrpc.a
+        NAMES libgrpc
         HINTS /usr/local/lib
         )
 

@@ -1,13 +1,13 @@
 
 find_library(ARROW_LIBRARIES
-        NAMES libarrow.a
+        NAMES libarrow
         HINTS /usr/local/lib
         )
 
-find_library(ARROW_FLIGHT_LIBRARIES
-        NAMES libarrow_flight.a
-        HINTS /usr/local/lib
-        )
+#find_library(ARROW_FLIGHT_LIBRARIES
+#        NAMES libarrow_flight
+#        HINTS /usr/local/lib
+#        )
 
 find_path(ARROW_INCLUDE_DIR
         NAMES arrow/api.h
@@ -28,4 +28,4 @@ mark_as_advanced(
 )
 
 message(STATUS "Found arrow (include: ${ARROW_INCLUDE_DIRS}, library: ${ARROW_LIBRARIES})")
-message(STATUS "Found arrow flight (include: ${ARROW_INCLUDE_DIRS}, library: ${ARROW_FLIGHT_LIBRARIES})")
+#message(STATUS "Found arrow flight (include: ${ARROW_INCLUDE_DIRS}, library: ${ARROW_FLIGHT_LIBRARIES})")
