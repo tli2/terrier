@@ -229,7 +229,7 @@ struct hash<terrier::storage::index::GenericKey<KeySize>> {
 
     for (uint16_t i = 0; i < key_schema.size(); i++) {
       const auto offset = static_cast<uint16_t>(pr->ColumnIds()[i]);
-      const byte *const attr = pr->AccessWithNullCheck(offset);
+      const terrier::byte* attr = pr->AccessWithNullCheck(offset);
       if (attr == nullptr) {
         // attribute is NULL, just hash the nullptr to contribute something to the hash
         running_hash = terrier::common::HashUtil::CombineHashes(running_hash, terrier::common::HashUtil::Hash(attr));
@@ -267,8 +267,8 @@ struct equal_to<terrier::storage::index::GenericKey<KeySize>> {
       const auto offset = static_cast<uint16_t>(lhs_pr->ColumnIds()[i]);
       TERRIER_ASSERT(lhs_pr->ColumnIds()[i] == rhs_pr->ColumnIds()[i], "Comparison orders should be the same.");
 
-      const byte *const lhs_attr = lhs_pr->AccessWithNullCheck(offset);
-      const byte *const rhs_attr = rhs_pr->AccessWithNullCheck(offset);
+      const terrier::byte *const lhs_attr = lhs_pr->AccessWithNullCheck(offset);
+      const terrier::byte *const rhs_attr = rhs_pr->AccessWithNullCheck(offset);
 
       if (lhs_attr == nullptr) {
         if (rhs_attr == nullptr) {
@@ -321,8 +321,8 @@ struct less<terrier::storage::index::GenericKey<KeySize>> {
       const auto offset = static_cast<uint16_t>(lhs_pr->ColumnIds()[i]);
       TERRIER_ASSERT(lhs_pr->ColumnIds()[i] == rhs_pr->ColumnIds()[i], "Comparison orders should be the same.");
 
-      const byte *const lhs_attr = lhs_pr->AccessWithNullCheck(offset);
-      const byte *const rhs_attr = rhs_pr->AccessWithNullCheck(offset);
+      const terrier::byte *const lhs_attr = lhs_pr->AccessWithNullCheck(offset);
+      const terrier::byte *const rhs_attr = rhs_pr->AccessWithNullCheck(offset);
 
       if (lhs_attr == nullptr) {
         if (rhs_attr == nullptr) {
