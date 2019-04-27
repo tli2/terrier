@@ -344,32 +344,32 @@ class Payment {
     result = db->customer_table_->Update(txn, customer_slot, *customer_update_tuple);
     TERRIER_ASSERT(result, "Customer update failed. This assertion assumes 1:1 mapping between warehouse and workers.");
 
-    const auto c_credit_str = c_credit.StringView();
-    if (c_credit_str.compare("BC") == 0) {
-      auto *const c_data_update_tuple = c_data_pr_initializer.InitializeRow(worker->customer_tuple_buffer);
-      const auto c_data_str = c_data.StringView();
-      auto new_c_data = std::to_string(c_id);
-      new_c_data.append(std::to_string(args.c_d_id));
-      new_c_data.append(std::to_string(args.c_w_id));
-      new_c_data.append(std::to_string(args.d_id));
-      new_c_data.append(std::to_string(args.w_id));
-      new_c_data.append(std::to_string(args.h_amount));
-      new_c_data.append(c_data_str);
-      const auto new_c_data_length = std::min(new_c_data.length(), static_cast<std::size_t>(500));
-      auto *const varlen = common::AllocationUtil::AllocateAligned(new_c_data_length);
-      std::memcpy(varlen, new_c_data.data(), new_c_data_length);
-      const auto varlen_entry = storage::VarlenEntry::Create(varlen, static_cast<uint32_t>(new_c_data_length), true);
-
-      *reinterpret_cast<storage::VarlenEntry *>(c_data_update_tuple->AccessForceNotNull(0)) = varlen_entry;
-
-      result = db->customer_table_->Update(txn, customer_slot, *c_data_update_tuple);
-      TERRIER_ASSERT(result,
-                     "Customer update failed. This assertion assumes 1:1 mapping between warehouse and workers.");
-    }
+//    const auto c_credit_str = c_credit.StringView();
+//    if (c_credit_str.compare("BC") == 0) {
+//      auto *const c_data_update_tuple = c_data_pr_initializer.InitializeRow(worker->customer_tuple_buffer);
+//      const auto c_data_str = c_data.StringView();
+//      auto new_c_data = std::to_string(c_id);
+//      new_c_data.append(std::to_string(args.c_d_id));
+//      new_c_data.append(std::to_string(args.c_w_id));
+//      new_c_data.append(std::to_string(args.d_id));
+//      new_c_data.append(std::to_string(args.w_id));
+//      new_c_data.append(std::to_string(args.h_amount));
+//      new_c_data.append(c_data_str);
+//      const auto new_c_data_length = std::min(new_c_data.length(), static_cast<std::size_t>(500));
+//      auto *const varlen = common::AllocationUtil::AllocateAligned(new_c_data_length);
+//      std::memcpy(varlen, new_c_data.data(), new_c_data_length);
+//      const auto varlen_entry = storage::VarlenEntry::Create(varlen, static_cast<uint32_t>(new_c_data_length), true);
+//
+//      *reinterpret_cast<storage::VarlenEntry *>(c_data_update_tuple->AccessForceNotNull(0)) = varlen_entry;
+//
+//      result = db->customer_table_->Update(txn, customer_slot, *c_data_update_tuple);
+//      TERRIER_ASSERT(result,
+//                     "Customer update failed. This assertion assumes 1:1 mapping between warehouse and workers.");
+//    }
 
     auto h_data_str = std::string(reinterpret_cast<const char *const>(w_name.Content()), w_name.Size());
     h_data_str.append("    ");
-    h_data_str.append(d_name.StringView());
+    h_data_str.append(d_name.Content(), d_name.Size());
     const auto h_data_length = h_data_str.length();
     auto *const varlen = common::AllocationUtil::AllocateAligned(h_data_length);
     std::memcpy(varlen, h_data_str.data(), h_data_length);

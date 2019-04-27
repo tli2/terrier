@@ -513,13 +513,13 @@ class NewOrder {
 
       const double ol_amount = item.ol_quantity * i_price;
 
-      const auto i_data_str = i_data.StringView();
-      const auto s_data_str = s_data.StringView();
+//      const auto i_data_str = i_data.StringView();
+//      const auto s_data_str = s_data.StringView();
 
-      const std::string UNUSED_ATTRIBUTE brand_generic =
-          i_data_str.find("ORIGINAL", 0) != std::string::npos && s_data_str.find("ORIGINAL", 0 != std::string::npos)
-              ? "B"
-              : "G";
+      const std::string UNUSED_ATTRIBUTE brand_generic = "B"
+//          i_data_str.find("ORIGINAL", 0) != std::string::npos && s_data_str.find("ORIGINAL", 0 != std::string::npos)
+//              ? "B"
+//              : "G";
 
       // Insert new row in Order Line
       auto *const order_line_insert_tuple =
