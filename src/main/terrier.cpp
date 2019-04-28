@@ -1,7 +1,10 @@
 #include <random>
 #include <vector>
+#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
+#include <netinet/in.h>
+#include <chrono>
 #include "common/macros.h"
 #include "common/scoped_timer.h"
 #include "common/worker_pool.h"
@@ -22,10 +25,11 @@
 #include "transaction/transaction_manager.h"
 #include "storage/dirty_globals.h"
 #include "storage/arrow_util.h"
+#include "storage/write_ahead_log/log_io.h"
 
-#include "network/rdma/server.h"
-#include "network/rdma/data_format.h"
-#include "network/rdma/rdma.h"
+//#include "network/rdma/server.h"
+//#include "network/rdma/data_format.h"
+//#include "network/rdma/rdma.h"
 
 #define ONE_MEGABYTE 1048576
 
@@ -70,22 +74,12 @@ class TpccLoader {
   storage::BlockCompactor compactor_;
   storage::AccessObserver access_observer_{&compactor_};
 
-  const int8_t num_threads_ = 6;
-  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
+  const int8_t num_threads_ = 2;
+  const uint32_t num_precomputed_txns_per_worker_ = 10000;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
   const uint32_t w_stock_level = 4;
-
-  struct config_t config = {
-      NULL,                         /* device_name */
-      NULL,                         /* server_name */
-      19875,                        /* tcp_port */
-      1,                            /* ib_port */
-      1                             /* gid_idx */
-  };
-
-  struct size_pair sizes = {0, 0};
 
   common::WorkerPool thread_pool_{static_cast<uint32_t>(num_threads_), {}};
 
@@ -109,114 +103,33 @@ class TpccLoader {
     listen(listen_fd, 12);
     struct sockaddr_storage addr;
     socklen_t addrlen = sizeof(addr);
+    fprintf(stdout, "server listening on port 15712\n");
+
     while (true) {
       int new_conn_fd = accept(listen_fd, reinterpret_cast<struct sockaddr *>(&addr), &addrlen);
       if (new_conn_fd == -1)
         throw std::runtime_error("Failed to accept");
       storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
       std::list<storage::RawBlock *> blocks = order_line->blocks_;
-
-      // RDMA stuff
-      struct resources res;
-      resources_init(&res);
-      res.sock = new_conn_fd;
-
       // get table name (which is now repurposed to hot_ratio) from client to server
-      char table_name[16];
-      memset(table_name, 0, 16);
-      int rc = sock_read_data(res.sock, sizeof(table_name), table_name);
-      if (rc < 0) {
-        fprintf(stderr, "failed to receive data from client\n");
-        return;
-      }
-      fprintf(stdout, "received hot ratio: %s\n", table_name);
-      double hot_ratio = std::stod(std::string(table_name), nullptr);
+      double hot_ratio = 0;
+      storage::PosixIoWrappers::ReadFully(new_conn_fd, &hot_ratio, sizeof(double));
+      fprintf(stdout, "received hot ratio: %f\n", hot_ratio);
       std::bernoulli_distribution treat_as_hot{hot_ratio};
-
-      // send metadata and data size from server to client
-      char metadata[] = "FAKE METADATA";
-      size_t metadata_size = 8;
-      size_t num_blocks = blocks.size();
-      sizes.metadata_size = metadata_size;
-      sizes.data_size = ONE_MEGABYTE * num_blocks;
-      sock_write_data(res.sock, sizeof(sizes), (char *)&sizes);
-      fprintf(stderr, "sizes sent to client\n");
-
-      sock_write_data(res.sock, metadata_size, metadata);
-      fprintf(stderr, "metadata sent to client\n");
-
-      // sync resources between client and server
-      /* create resources before using them */
-      res.buf = metadata; // use metadata for now
-      res.size = metadata_size;
-      if (resources_create (&res, config)) {
-        fprintf (stderr, "failed to create resources\n");
-        return;
-      }
-      /* connect the QPs */
-      if (connect_qp (&res, config)) {
-        fprintf (stderr, "failed to connect QPs\n");
-        return;
-      }
-
-      // initiate rdma write
-      uint64_t remote_addr_start = res.remote_props.addr;
-      uint64_t remote_curr_addr = remote_addr_start;
-      const storage::TupleAccessStrategy &accessor = order_line->accessor_;
-      fprintf (stdout, "Now initiating RDMA write\n");
-      std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+      fprintf(stdout, "Initiating Write\n");
+      uint32_t blocks_written = 0;
       for (storage::RawBlock *block : blocks) {
-        std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
         if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
-          table = MaterializeHotBlock(tpcc_db, block);
+          WriteHotBlock(tpcc_db, block, new_conn_fd);
         } else {
-          table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
+          WriteColdBlock(tpcc_db, block, new_conn_fd);
         }
-
-        int num_cols = table->num_columns();
-        // fprintf (stdout, "num columns: %d\n", num_cols);
-        for (int ci = 0; ci < num_cols; ci++) {
-          // printf ("index: %d\n", ci);
-          auto col = table->column(ci);
-          // std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
-          // if (col->field()->type()->id() == arrow::Type::type::STRING) continue;
-          // fprintf (stdout, "--- column name: %s\n", col->field()->name());
-          auto array_data = col->data()->chunk(0)->data();
-          int64_t length = array_data->buffers.size();
-          // std::cout << "  array_data length: " << length << std::endl;
-          for (int64_t bi = 0; bi < length; bi++) {
-            auto buffer = array_data->buffers[bi];
-            int64_t buf_size = buffer->size();
-            // std::cout << "  size: " << buf_size << std::endl;
-            if (buf_size == 0) break;
-            uint8_t *data = (uint8_t *)buffer->data();
-            
-
-            if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
-            remote_curr_addr += buf_size;
-          }
-        }
+        blocks_written++;
+        if (blocks_written % 500 == 0) printf("%u blocks written\n", blocks_written);
       }
-      std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-      fprintf (stdout, "Server side RDMA duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-      fprintf (stdout, "RDMA Write completed\n");
-      fprintf (stdout, "Num blocks written: %zd\n", remote_curr_addr - remote_addr_start);
-
-      // tell client we're done
-      /* Sync so server will know that client is done mucking with its memory */
-      char temp_char = 'W';
-      if (sock_sync_data (res.sock, 1, &temp_char, &temp_char))    /* just send a dummy char back and forth */
-      {
-        fprintf (stderr, "sync error after RDMA ops\n");
-        return;
-      }
-      fprintf (stderr, "final sync done\n");
-
-      // cleanup
-      // resources_destroy (&res);
-
-      // return;
-
+      SendReady(new_conn_fd);
+      printf("data write completed\n");
+      close(new_conn_fd);
     }
   }
 
@@ -365,22 +278,9 @@ class TpccLoader {
     std::this_thread::sleep_for(std::chrono::seconds(5));  // Let GC clean up
     EndCompactor();
     EndGC();
-//    printf("history table:\n");
-//    tpcc_db->history_table_->table_.data_table->InspectTable();
-//    printf("item table:\n");
-//    tpcc_db->item_table_->table_.data_table->InspectTable();
-//    printf("order table:\n");
-//    tpcc_db->order_table_->table_.data_table->InspectTable();
     printf("order_line table:\n");
     tpcc_db->order_line_table_->table_.data_table->InspectTable();
     printf("\n\n\n");
-//    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
-//    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
-//    uint32_t aborted = 0;
-//    for (auto &entry : precomputed_args)
-//      for (auto &arg : entry)
-//        aborted += arg.aborted;
-//    printf("number of transactions aborted: %u\n", aborted);
 
     ServerLoop(tpcc_db);
     // Clean up the buffers from any non-inlined VarlenEntrys in the precomputed args
@@ -404,6 +304,8 @@ class TpccLoader {
   transaction::TransactionManager txn_manager{&buffer_pool_, true, LOGGING_DISABLED};
   bool first_call = true;
   uint64_t buf[1024];
+  char write_buf[1024 * 8];
+  uint32_t write_buf_head;
 
   void GCThreadLoop() {
     while (run_gc_) {
@@ -423,16 +325,65 @@ class TpccLoader {
     }
   }
 
-  template<class IntType, class T>
-  void Append(T *builder, storage::ProjectedRow *row, uint16_t i) {
-    auto *int_pointer = row->AccessWithNullCheck(i);
-    if (int_pointer == nullptr)
-      auto status UNUSED_ATTRIBUTE = builder->AppendNull();
-    else
-      auto status1 UNUSED_ATTRIBUTE = builder->Append(*reinterpret_cast<IntType *>(int_pointer));
+  void ResetWrite() {
+    std::memcpy(write_buf, "D", 1);
+    write_buf_head = 5; // type + len
   }
 
-  std::shared_ptr<arrow::Table> MaterializeHotBlock(tpcc::Database *tpcc_db, storage::RawBlock *block) {
+  void WriteAttribute(byte *entry, uint32_t size) {
+    std::memcpy(write_buf + write_buf_head, &size, sizeof(uint32_t));
+    write_buf_head += sizeof(uint32_t);
+    if (entry != nullptr)
+      std::memcpy(write_buf + write_buf_head, entry, size);
+    write_buf_head += size;
+  }
+
+  void WriteVarlenIntoRow(storage::VarlenEntry *varlen) {
+    if (varlen == nullptr) {
+      uint32_t size = 0;
+      std::memcpy(write_buf + write_buf_head, &size, sizeof(uint32_t));
+      write_buf_head += sizeof(uint32_t);
+      return;
+    }
+    uint32_t size = varlen->Size();
+    std::memcpy(write_buf + write_buf_head, &size, sizeof(uint32_t));
+    write_buf_head += sizeof(uint32_t);
+    std::memcpy(write_buf + write_buf_head, varlen->Content(), size);
+    write_buf_head += size;
+  }
+
+  void FlushRow(int fd) {
+    uint32_t size = write_buf_head - 5;
+    std::memcpy(write_buf + 1, &size, sizeof(uint32_t));
+    storage::PosixIoWrappers::WriteFully(fd, write_buf, write_buf_head);
+  }
+
+  void SendReady(int fd) {
+    write_buf_head = 5;
+    std::memcpy(write_buf, "Z", 1);
+    FlushRow(fd);
+  }
+
+  void WriteColdBlock(tpcc::Database *tpcc_db, storage::RawBlock *block, int fd) {
+    storage::DataTable *table = tpcc_db->order_line_table_->table_.data_table;
+    const storage::BlockLayout &layout = table->accessor_.GetBlockLayout();
+    for (uint32_t i = 0; i < layout.NumSlots(); i++) {
+      storage::TupleSlot slot(block, i);
+      if (!table->accessor_.Allocated(slot)) return;
+      ResetWrite();
+      for (uint16_t j = NUM_RESERVED_COLUMNS; j < layout.NumColumns(); j++) {
+        storage::col_id_t id(j);
+        byte *value = table->accessor_.AccessWithNullCheck(slot, id);
+        if (layout.IsVarlen(id))
+          WriteVarlenIntoRow(reinterpret_cast<storage::VarlenEntry *>(value));
+        else
+          WriteAttribute(value, layout.AttrSize(id));
+      }
+      FlushRow(fd);
+    }
+  }
+
+  void WriteHotBlock(tpcc::Database *tpcc_db, storage::RawBlock *block, int fd) {
     storage::DataTable *table = tpcc_db->order_line_table_->table_.data_table;
     const storage::BlockLayout &layout = table->accessor_.GetBlockLayout();
     if (first_call) {
@@ -442,42 +393,112 @@ class TpccLoader {
     }
     auto *row = reinterpret_cast<storage::ProjectedRow *>(&buf);
     transaction::TransactionContext *txn = txn_manager.BeginTransaction();
-    arrow::Int32Builder o_id_builder;
-    arrow::Int8Builder o_d_id_builder;
-    arrow::Int8Builder o_w_id_builder;
-    arrow::Int8Builder ol_number_builder;
-    arrow::Int32Builder ol_i_id_builder;
-    arrow::Int8Builder ol_supply_w_id_builder;
-    arrow::Int64Builder ol_delivery_d_builder;
-    arrow::Int8Builder ol_quantity_builder;
-    arrow::DoubleBuilder ol_amount_builder;
-    arrow::StringBuilder ol_dist_info_builder;
     for (uint32_t i = 0; i < layout.NumSlots(); i++) {
       storage::TupleSlot slot(block, i);
       bool visible = table->Select(txn, slot, row);
       if (!visible) continue;
-      Append<uint32_t>(&o_id_builder, row, storage::DirtyGlobals::ol_o_id_insert_pr_offset);
-      Append<uint8_t>(&o_d_id_builder, row, storage::DirtyGlobals::ol_d_id_insert_pr_offset);
-      Append<uint8_t>(&o_w_id_builder, row, storage::DirtyGlobals::ol_w_id_insert_pr_offset);
-      Append<uint8_t>(&ol_number_builder, row, storage::DirtyGlobals::ol_number_insert_pr_offset);
-      Append<uint32_t>(&ol_i_id_builder, row, storage::DirtyGlobals::ol_i_id_insert_pr_offset);
-      Append<uint8_t>(&ol_supply_w_id_builder, row, storage::DirtyGlobals::ol_supply_w_id_insert_pr_offset);
-      Append<uint64_t>(&ol_delivery_d_builder, row, storage::DirtyGlobals::ol_delivery_d_insert_pr_offset);
-      Append<uint8_t>(&ol_quantity_builder, row, storage::DirtyGlobals::ol_quantity_insert_pr_offset);
-      Append<double>(&ol_amount_builder, row, storage::DirtyGlobals::ol_amount_insert_pr_offset);
-
-      auto *varlen_pointer = row->AccessWithNullCheck(storage::DirtyGlobals::ol_dist_info_insert_pr_offset);
-      if (varlen_pointer == nullptr) {
-        auto status UNUSED_ATTRIBUTE = ol_dist_info_builder.AppendNull();
-      } else {
-        auto *entry = reinterpret_cast<storage::VarlenEntry *>(varlen_pointer);
-        auto status2 UNUSED_ATTRIBUTE =
-            ol_dist_info_builder.Append(reinterpret_cast<const uint8_t *>(entry->Content()), entry->Size());
+      ResetWrite();
+      for (uint16_t j = 0; j < row->NumColumns(); j++) {
+        byte *value = row->AccessWithNullCheck(j);
+        storage::col_id_t id = row->ColumnIds()[j];
+        if (layout.IsVarlen(id))
+          WriteVarlenIntoRow(reinterpret_cast<storage::VarlenEntry *>(value));
+        else
+          WriteAttribute(value, layout.AttrSize(id));
       }
+      FlushRow(fd);
     }
+  }
 
+  template<class IntType, class T>
+  void Append(T *builder, storage::ProjectedRow *row, uint16_t i) {
+    auto *int_pointer = row->AccessWithNullCheck(i);
+    if (int_pointer == nullptr)
+      auto status UNUSED_ATTRIBUTE = builder->AppendNull();
+    else
+      auto status1 UNUSED_ATTRIBUTE = builder->Append(*reinterpret_cast<IntType *>(int_pointer));
+  }
+
+//  std::shared_ptr<arrow::Table> MaterializeHotBlock(tpcc::Database *tpcc_db, storage::RawBlock *block) {
+//    storage::DataTable *table = tpcc_db->order_line_table_->table_.data_table;
+//    const storage::BlockLayout &layout = table->accessor_.GetBlockLayout();
+//    if (first_call) {
+//      auto initializer = storage::ProjectedRowInitializer::CreateProjectedRowInitializer(layout, layout.AllColumns());
+//      initializer.InitializeRow(&buf);
+//      first_call = false;
+//    }
+//    auto *row = reinterpret_cast<storage::ProjectedRow *>(&buf);
+//    transaction::TransactionContext *txn = txn_manager.BeginTransaction();
+//    arrow::Int32Builder o_id_builder;
+//    arrow::Int8Builder o_d_id_builder;
+//    arrow::Int8Builder o_w_id_builder;
+//    arrow::Int8Builder ol_number_builder;
+//    arrow::Int32Builder ol_i_id_builder;
+//    arrow::Int8Builder ol_supply_w_id_builder;
+//    arrow::Int64Builder ol_delivery_d_builder;
+//    arrow::Int8Builder ol_quantity_builder;
+//    arrow::DoubleBuilder ol_amount_builder;
+//    arrow::StringBuilder ol_dist_info_builder;
+//    for (uint32_t i = 0; i < layout.NumSlots(); i++) {
+//      storage::TupleSlot slot(block, i);
+//      bool visible = table->Select(txn, slot, row);
+//      if (!visible) continue;
+//      Append<uint32_t>(&o_id_builder, row, storage::DirtyGlobals::ol_o_id_insert_pr_offset);
+//      Append<uint8_t>(&o_d_id_builder, row, storage::DirtyGlobals::ol_d_id_insert_pr_offset);
+//      Append<uint8_t>(&o_w_id_builder, row, storage::DirtyGlobals::ol_w_id_insert_pr_offset);
+//      Append<uint8_t>(&ol_number_builder, row, storage::DirtyGlobals::ol_number_insert_pr_offset);
+//      Append<uint32_t>(&ol_i_id_builder, row, storage::DirtyGlobals::ol_i_id_insert_pr_offset);
+//      Append<uint8_t>(&ol_supply_w_id_builder, row, storage::DirtyGlobals::ol_supply_w_id_insert_pr_offset);
+//      Append<uint64_t>(&ol_delivery_d_builder, row, storage::DirtyGlobals::ol_delivery_d_insert_pr_offset);
+//      Append<uint8_t>(&ol_quantity_builder, row, storage::DirtyGlobals::ol_quantity_insert_pr_offset);
+//      Append<double>(&ol_amount_builder, row, storage::DirtyGlobals::ol_amount_insert_pr_offset);
+//
+//      auto *varlen_pointer = row->AccessWithNullCheck(storage::DirtyGlobals::ol_dist_info_insert_pr_offset);
+//      if (varlen_pointer == nullptr) {
+//        auto status UNUSED_ATTRIBUTE = ol_dist_info_builder.AppendNull();
+//      } else {
+//        auto *entry = reinterpret_cast<storage::VarlenEntry *>(varlen_pointer);
+//        auto status2 UNUSED_ATTRIBUTE =
+//            ol_dist_info_builder.Append(reinterpret_cast<const uint8_t *>(entry->Content()), entry->Size());
+//      }
+//    }
+//
+//    std::shared_ptr<arrow::Array> o_id, o_d_id, o_w_id, ol_number,
+//        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info;
+//    auto status UNUSED_ATTRIBUTE = o_id_builder.Finish(&o_id);
+//    auto status1 UNUSED_ATTRIBUTE = o_d_id_builder.Finish(&o_d_id);
+//    auto status2 UNUSED_ATTRIBUTE = o_w_id_builder.Finish(&o_w_id);
+//    auto status3 UNUSED_ATTRIBUTE = ol_number_builder.Finish(&ol_number);
+//    auto status4 UNUSED_ATTRIBUTE = ol_i_id_builder.Finish(&ol_i_id);
+//    auto status5 UNUSED_ATTRIBUTE = ol_supply_w_id_builder.Finish(&ol_supply_w_id);
+//    auto status6 UNUSED_ATTRIBUTE = ol_delivery_d_builder.Finish(&ol_delivery_d);
+//    auto status7 UNUSED_ATTRIBUTE = ol_quantity_builder.Finish(&ol_quantity);
+//    auto status8 UNUSED_ATTRIBUTE = ol_amount_builder.Finish(&ol_amount);
+//    auto status9 UNUSED_ATTRIBUTE = ol_dist_info_builder.Finish(&ol_dist_info);
+//
+//    std::vector<std::shared_ptr<arrow::Field>> schema_vector{arrow::field("o_id", arrow::uint32()),
+//                                                             arrow::field("o_d_id", arrow::uint8()),
+//                                                             arrow::field("o_w_id", arrow::uint8()),
+//                                                             arrow::field("ol_number", arrow::uint8()),
+//                                                             arrow::field("ol_i_id", arrow::uint32()),
+//                                                             arrow::field("ol_supply_w_id", arrow::uint8()),
+//                                                             arrow::field("ol_delivery_d", arrow::uint64()),
+//                                                             arrow::field("ol_quantity", arrow::uint8()),
+//                                                             arrow::field("ol_amount", arrow::float64()),
+//                                                             arrow::field("ol_dist_info", arrow::utf8())};
+//
+//    std::vector<std::shared_ptr<arrow::Array>> table_vector{o_id, o_d_id, o_w_id, ol_number,
+//                                                            ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity,
+//                                                            ol_amount, ol_dist_info};
+//    return arrow::Table::Make(std::make_shared<arrow::Schema>(schema_vector), table_vector);
+//  }
+};
+}
+
+struct ArrowBufferBuilder {
+  std::shared_ptr<arrow::Table> Build() {
     std::shared_ptr<arrow::Array> o_id, o_d_id, o_w_id, ol_number,
-                                  ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info;
+        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info;
     auto status UNUSED_ATTRIBUTE = o_id_builder.Finish(&o_id);
     auto status1 UNUSED_ATTRIBUTE = o_d_id_builder.Finish(&o_d_id);
     auto status2 UNUSED_ATTRIBUTE = o_w_id_builder.Finish(&o_w_id);
@@ -488,30 +509,148 @@ class TpccLoader {
     auto status7 UNUSED_ATTRIBUTE = ol_quantity_builder.Finish(&ol_quantity);
     auto status8 UNUSED_ATTRIBUTE = ol_amount_builder.Finish(&ol_amount);
     auto status9 UNUSED_ATTRIBUTE = ol_dist_info_builder.Finish(&ol_dist_info);
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector{
+        arrow::field("ol_dist_info", arrow::utf8()),
+        arrow::field("ol_amount", arrow::float64()),
+        arrow::field("ol_delivery_d", arrow::uint64()),
+        arrow::field("o_id", arrow::uint32()),
+        arrow::field("ol_i_id", arrow::uint32()),
+        arrow::field("o_d_id", arrow::uint8()),
+        arrow::field("o_w_id", arrow::uint8()),
+        arrow::field("ol_number", arrow::uint8()),
+        arrow::field("ol_supply_w_id", arrow::uint8()),
+        arrow::field("ol_quantity", arrow::uint8())
+    };
 
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector{arrow::field("o_id", arrow::uint32()),
-                                                             arrow::field("o_d_id", arrow::uint8()),
-                                                             arrow::field("o_w_id", arrow::uint8()),
-                                                             arrow::field("ol_number", arrow::uint8()),
-                                                             arrow::field("ol_i_id", arrow::uint32()),
-                                                             arrow::field("ol_supply_w_id", arrow::uint8()),
-                                                             arrow::field("ol_delivery_d", arrow::uint64()),
-                                                             arrow::field("ol_quantity", arrow::uint8()),
-                                                             arrow::field("ol_amount", arrow::float64()),
-                                                             arrow::field("ol_dist_info", arrow::utf8())};
-
-    std::vector<std::shared_ptr<arrow::Array>> table_vector{o_id, o_d_id, o_w_id, ol_number,
-                                                            ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info};
+    std::vector<std::shared_ptr<arrow::Array>> table_vector{ol_dist_info, ol_amount, ol_delivery_d, o_id, ol_i_id,
+                                                            o_d_id, o_w_id, ol_number, ol_supply_w_id, ol_quantity};
     return arrow::Table::Make(std::make_shared<arrow::Schema>(schema_vector), table_vector);
   }
-};
-}
 
-int main() {
-  terrier::storage::init_index_logger();
-  terrier::storage::init_storage_logger();
-  terrier::transaction::init_transaction_logger();
-  terrier::TpccLoader b;
-  b.Run();
+  arrow::Int32Builder o_id_builder;
+  arrow::Int8Builder o_d_id_builder;
+  arrow::Int8Builder o_w_id_builder;
+  arrow::Int8Builder ol_number_builder;
+  arrow::Int32Builder ol_i_id_builder;
+  arrow::Int8Builder ol_supply_w_id_builder;
+  arrow::Int64Builder ol_delivery_d_builder;
+  arrow::Int8Builder ol_quantity_builder;
+  arrow::DoubleBuilder ol_amount_builder;
+  arrow::StringBuilder ol_dist_info_builder;
+};
+
+#define READBUF_SIZE (1024 * 8)
+#define SUCCESS 0
+#define NEED_MORE 1
+#define DONE 2
+struct ReadBuffer {
+  template<class T>
+  T ReadValue() {
+    T val = *reinterpret_cast<T *>(buffer + read_head);
+    read_head += sizeof(T);
+    return val;
+  }
+
+  int ReadRow(ArrowBufferBuilder &builder) {
+    if (read_head + 5 > size) return NEED_MORE;
+    char packet_type = ReadValue<char>();
+    if (packet_type == 'Z') return DONE;
+    if (packet_type != 'D') throw std::runtime_error("malformed packet");
+    uint32_t packet_size = ReadValue<uint32_t>();
+    if (read_head + packet_size > size) {
+      read_head -= 5;
+      return NEED_MORE;
+    }
+
+    uint32_t varlen_size = ReadValue<uint32_t>();
+    auto status UNUSED_ATTRIBUTE = builder.ol_dist_info_builder.Append(buffer + read_head, varlen_size);
+    read_head += varlen_size;
+    read_head += sizeof(uint32_t);
+    auto status1 UNUSED_ATTRIBUTE = builder.ol_delivery_d_builder.Append(ReadValue<uint64_t>());
+    read_head += sizeof(uint32_t);
+    auto status2 UNUSED_ATTRIBUTE = builder.ol_amount_builder.Append(ReadValue<uint64_t>());
+    read_head += sizeof(uint32_t);
+    auto status3 UNUSED_ATTRIBUTE = builder.o_id_builder.Append(ReadValue<uint32_t>());
+    read_head += sizeof(uint32_t);
+    auto status4 UNUSED_ATTRIBUTE = builder.ol_i_id_builder.Append(ReadValue<uint32_t>());
+    read_head += sizeof(uint32_t);
+    auto status5 UNUSED_ATTRIBUTE = builder.o_d_id_builder.Append(ReadValue<uint8_t>());
+    read_head += sizeof(uint32_t);
+    auto status6 UNUSED_ATTRIBUTE = builder.o_w_id_builder.Append(ReadValue<uint8_t>());
+    read_head += sizeof(uint32_t);
+    auto status7 UNUSED_ATTRIBUTE = builder.ol_number_builder.Append(ReadValue<uint8_t>());
+    read_head += sizeof(uint32_t);
+    auto status8 UNUSED_ATTRIBUTE = builder.ol_supply_w_id_builder.Append(ReadValue<uint8_t>());
+    read_head += sizeof(uint32_t);
+    auto status9 UNUSED_ATTRIBUTE = builder.ol_quantity_builder.Append(ReadValue<uint8_t>());
+    return SUCCESS;
+  }
+
+  void ShiftToHead() {
+    for (uint i = 0; i < size - read_head; i++)
+      buffer[i] = buffer[read_head + i];
+    size = size - read_head;
+    read_head = 0;
+  }
+
+  void RefillBuffer(int sock) {
+    while (size < READBUF_SIZE) {
+      auto read_bytes = read(sock, buffer + size, READBUF_SIZE - size);
+      if (read_bytes == 0) return;
+      size += read_bytes;
+    }
+  }
+
+  uint32_t size = 0;
+  uint32_t read_head = 0;
+  char buffer[READBUF_SIZE]{};
+};
+
+int main(int argc, char *argv[]) {
+  if (argc != 4 && argc != 2) {
+    fprintf(stderr,
+            "Usage: %s  <type> <hostname> <hot_ratio>\n",
+            argv[0]);
+    return 1;
+  }
+
+  if (strcmp(argv[1], "server") == 0) {
+    terrier::storage::init_index_logger();
+    terrier::storage::init_storage_logger();
+    terrier::transaction::init_transaction_logger();
+    terrier::TpccLoader b;
+    b.Run();
+    return 0;
+  }
+
+  auto sock = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in serv_addr;
+  memset(&serv_addr, 0, sizeof(struct sockaddr_in));
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_port = htons(15712);
+  inet_pton(AF_INET, argv[2], &serv_addr.sin_addr);
+  connect(sock, (struct sockaddr *) &serv_addr, sizeof(struct sockaddr_in));
+  double hot_ratio = std::stod(std::string(argv[3]), nullptr);
+  send(sock, &hot_ratio, sizeof(hot_ratio), 0);
+  printf("request sent\n");
+  std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+
+  ReadBuffer reader;
+  ArrowBufferBuilder builder;
+  uint32_t rows_read = 0;
+  while (true) {
+    int result = reader.ReadRow(builder);
+    if (result == DONE) break;
+    if (result == NEED_MORE) {
+      reader.ShiftToHead();
+      reader.RefillBuffer(sock);
+      continue;
+    }
+    rows_read++;
+    if (rows_read % 50000 == 0) printf("Read %u rows \n", rows_read);
+  }
+  builder.Build();
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  fprintf(stdout, "Client side TOTAL duration: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   return 0;
 }
