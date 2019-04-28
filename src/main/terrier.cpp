@@ -711,7 +711,7 @@ int main(int argc, char *argv[]) {
   builder.Build();
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
   fprintf(stdout,
-          "Client side TOTAL duration: %lld\n",
+          "Client side TOTAL duration: %ld\n",
           std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   return 0;
 }
