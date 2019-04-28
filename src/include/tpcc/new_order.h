@@ -11,7 +11,6 @@
 #include "tpcc/worker.h"
 #include "tpcc/workload.h"
 #include "transaction/transaction_manager.h"
-#include "util/transaction_benchmark_util.h"
 #include "storage/dirty_globals.h"
 
 namespace terrier::tpcc {
@@ -618,12 +617,15 @@ class NewOrder {
 //    while (!done) {
 //      std::this_thread::yield();
 //    }
-    txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
+    txn_manager->Commit(txn, Callback, nullptr);
 
     total_amount = total_amount * (1 - c_discount) * (1 + w_tax + d_tax);
 
     return true;
   }
+
+  static void Callback(void *) {}
+
 };
 
 }  // namespace terrier::tpcc

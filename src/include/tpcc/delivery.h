@@ -9,7 +9,6 @@
 #include "tpcc/worker.h"
 #include "tpcc/workload.h"
 #include "transaction/transaction_manager.h"
-#include "util/transaction_benchmark_util.h"
 
 namespace terrier::tpcc {
 
@@ -279,9 +278,11 @@ class Delivery {
 //    while (!done) {
 //      std::this_thread::yield();
 //    }
-    txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
+    txn_manager->Commit(txn, Callback, nullptr);
     return true;
   }
+
+  static void Callback(void *) {}
 };
 
 }  // namespace terrier::tpcc

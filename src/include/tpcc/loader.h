@@ -11,7 +11,6 @@
 #include "tpcc/util.h"
 #include "tpcc/worker.h"
 #include "transaction/transaction_manager.h"
-#include "util/transaction_benchmark_util.h"
 
 namespace terrier::tpcc {
 
@@ -332,9 +331,10 @@ struct Loader {
       }
     }
 
-    txn_manager->Commit(txn, TestCallbacks::EmptyCallback, nullptr);
-
+    txn_manager->Commit(txn, Callback, nullptr);
   }
+
+  static void Callback(void *) {}
 
   template <class Random>
   static storage::ProjectedRow *BuildItemTuple(const int32_t i_id, const bool original, byte *const buffer,

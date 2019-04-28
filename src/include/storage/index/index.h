@@ -4,7 +4,7 @@
 #include <utility>
 #include <vector>
 #include "catalog/catalog_defs.h"
-#include "common/performance_counter.h"
+//#include "common/performance_counter.h"
 #include "storage/data_table.h"
 #include "storage/index/compact_ints_key.h"
 #include "storage/index/generic_key.h"
