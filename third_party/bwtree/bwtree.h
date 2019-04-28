@@ -2747,15 +2747,15 @@ class BwTree : public BwTreeBase {
     return found_pair_p;
 
   abort_traverse:
-#ifdef BWTREE_DEBUG
-
-    TERRIER_ASSERT(context_p->current_level >= 0, "Should not be default value.");
-
-    context_p->current_level = -1;
-
-    context_p->abort_counter++;
-
-#endif
+//#ifdef BWTREE_DEBUG
+//
+//    TERRIER_ASSERT(context_p->current_level >= 0, "Should not be default value.");
+//
+//    context_p->current_level = -1;
+//
+//    context_p->abort_counter++;
+//
+//#endif
 
     // This is used to identify root node
     context_p->current_snapshot.node_id = INVALID_NODE_ID;
@@ -4805,11 +4805,11 @@ class BwTree : public BwTreeBase {
           goto abort_traverse;
         }
 
-#ifdef BWTREE_DEBUG
-
-                        context_p->current_level);
-
-#endif
+//#ifdef BWTREE_DEBUG
+//
+//                        context_p->current_level);
+//
+//#endif
 
         // If there is no abort then we could safely return
         return;
@@ -6785,12 +6785,12 @@ class BwTree : public BwTreeBase {
 
       TERRIER_ASSERT(head_epoch_p == nullptr, "All garbage nodes should be freed.");
 
-#ifdef BWTREE_DEBUG
-                      freed_id_count);
-
-
-                      epoch_leave.load());
-#endif
+//#ifdef BWTREE_DEBUG
+//                      freed_id_count);
+//
+//
+//                      epoch_leave.load());
+//#endif
 
       // NOTE: Only unmap memory here because we need to access the mapping
       // table in the above routine. If it was unmapped in ~BwTree() then this
