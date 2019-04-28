@@ -4,6 +4,9 @@
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <chrono>
 #include "common/macros.h"
 #include "common/scoped_timer.h"
@@ -606,6 +609,68 @@ struct ReadBuffer {
   char buffer[READBUF_SIZE]{};
 };
 
+int sock_connect(const char *servername, int port) {
+  struct addrinfo *resolved_addr = NULL;
+  struct addrinfo *iterator;
+  char service[6];
+  int sockfd = -1;
+  int listenfd = 0;
+  int tmp;
+  struct addrinfo hints = {
+      .ai_flags = AI_PASSIVE,
+      .ai_family = AF_INET,
+      .ai_socktype = SOCK_STREAM
+  };
+  if (sprintf(service, "%d", port) < 0)
+    goto sock_connect_exit;
+  /* Resolve DNS address, use sockfd as temp storage */
+  sockfd = getaddrinfo(servername, service, &hints, &resolved_addr);
+  if (sockfd < 0) {
+    fprintf(stderr, "%s for %s:%d\n", gai_strerror(sockfd), servername,
+            port);
+    goto sock_connect_exit;
+  }
+  /* Search through results and find the one we want */
+  for (iterator = resolved_addr; iterator; iterator = iterator->ai_next) {
+    sockfd =
+        socket(iterator->ai_family, iterator->ai_socktype,
+               iterator->ai_protocol);
+    if (sockfd >= 0) {
+      if (servername) {
+        /* Client mode. Initiate connection to remote */
+        if ((tmp =
+                 connect(sockfd, iterator->ai_addr, iterator->ai_addrlen))) {
+          fprintf(stdout, "failed connect \n");
+          close(sockfd);
+          sockfd = -1;
+        }
+      } else {
+        /* Server mode. Set up listening socket an accept a connection */
+        listenfd = sockfd;
+        sockfd = -1;
+        if (bind(listenfd, iterator->ai_addr, iterator->ai_addrlen))
+          goto sock_connect_exit;
+        listen(listenfd, 1);
+        sockfd = accept(listenfd, NULL, 0);
+      }
+    }
+  }
+  sock_connect_exit:
+  if (listenfd)
+    close(listenfd);
+  if (resolved_addr)
+    freeaddrinfo(resolved_addr);
+  if (sockfd < 0) {
+    if (servername)
+      fprintf(stderr, "Couldn't connect to %s:%d\n", servername, port);
+    else {
+      perror("server accept");
+      fprintf(stderr, "accept() failed\n");
+    }
+  }
+  return sockfd;
+}
+
 int main(int argc, char *argv[]) {
   if (argc != 4 && argc != 2) {
     fprintf(stderr,
@@ -623,13 +688,7 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  auto sock = socket(AF_INET, SOCK_STREAM, 0);
-  struct sockaddr_in serv_addr;
-  memset(&serv_addr, 0, sizeof(struct sockaddr_in));
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(15712);
-  inet_pton(AF_INET, argv[2], &serv_addr.sin_addr);
-  connect(sock, (struct sockaddr *) &serv_addr, sizeof(struct sockaddr_in));
+  auto sock = sock_connect(argv[2], 15712);
   double hot_ratio = std::stod(std::string(argv[3]), nullptr);
   send(sock, &hot_ratio, sizeof(hot_ratio), 0);
   printf("request sent\n");
@@ -651,6 +710,8 @@ int main(int argc, char *argv[]) {
   }
   builder.Build();
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-  fprintf(stdout, "Client side TOTAL duration: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+  fprintf(stdout,
+          "Client side TOTAL duration: %lld\n",
+          std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   return 0;
 }
