@@ -157,7 +157,7 @@
 //    reg.Shutdown(true);
 //  }
 //}
-//
+//rm
 //// A basic test, registering a DataTable counter
 //// NOLINTNEXTLINE
 //TEST(StatRegistryTest, GTEST_DEBUG_ONLY(DataTableStatTest)) {

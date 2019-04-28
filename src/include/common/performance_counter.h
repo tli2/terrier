@@ -189,7 +189,6 @@ class PerformanceCounter {
                                                                                                \
     void ZeroCounters() { MemberList(PC_FN_ZERO) }                                             \
   };                                                                                           \
-                                                                                               \
   inline void to_json(nlohmann::json &j, const ClassName &c) { j = c.ToJson(); }  /* NOLINT */ \
   inline void from_json(const nlohmann::json &j, ClassName &c) { c.FromJson(j); } /* NOLINT */
 

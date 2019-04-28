@@ -154,7 +154,6 @@ class NotifiableTask : public DedicatedThreadTask {
    */
   void EventLoop() {
     EventUtil::EventBaseDispatch(base_);
-    LOG_TRACE("stop");
   }
 
   /**

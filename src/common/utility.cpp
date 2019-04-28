@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "common/utility.h"
-#include "loggers/main_logger.h"
 #if __APPLE__
 extern "C" {
 #include <sys/cdefs.h>
@@ -42,7 +41,6 @@ int terrier_close(int fd) {
 
   if (close_ret != 0) {
     auto error_message = terrier_error_message();
-    LOG_DEBUG("Close failed on fd: %d, errno: %d [%s]", fd, errno, error_message.c_str());
   }
 
   return close_ret;

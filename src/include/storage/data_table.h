@@ -2,7 +2,7 @@
 #include <list>
 #include <unordered_map>
 #include <vector>
-#include "common/performance_counter.h"
+//#include "common/performance_counter.h"
 #include "storage/projected_columns.h"
 #include "storage/storage_defs.h"
 #include "storage/tuple_access_strategy.h"

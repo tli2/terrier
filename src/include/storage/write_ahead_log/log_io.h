@@ -8,7 +8,7 @@
 #include <cstring>
 #include <string>
 #include "common/macros.h"
-#include "loggers/storage_logger.h"
+//#include "loggers/storage_logger.h"
 
 namespace terrier::storage {
 // TODO(Tianyu): Get rid of magic constant
