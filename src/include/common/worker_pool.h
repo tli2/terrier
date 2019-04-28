@@ -59,7 +59,7 @@ class WorkerPool {
    */
   void Startup() {
     {
-      std::lock_guard lock(task_lock_);
+      std::lock_guard<std::mutex> lock(task_lock_);
       is_running_ = true;
     }
 

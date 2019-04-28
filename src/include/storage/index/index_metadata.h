@@ -151,7 +151,7 @@ class IndexMetadata {
    * Computes whether we need to manually inline varlen attributes, i.e. too big for VarlenEntry::CreateInline.
    */
   static bool ComputeMustInlineVarlen(const IndexKeySchema &key_schema) {
-    return std::any_of(key_schema.begin(), key_schema.end(), [](const auto &key) -> bool {
+    return std::any_of(key_schema.begin(), key_schema.end(), [](const IndexKeyColumn &key) -> bool {
       switch (key.GetType()) {
         case type::TypeId::VARBINARY:
         case type::TypeId::VARCHAR:
@@ -195,7 +195,7 @@ class IndexMetadata {
     }
     // sort by the sizes
     std::stable_sort(size_idx.begin(), size_idx.end(),
-                     [](const auto &u, const auto &v) -> bool { return u.first > v.first; });
+                     [](const std::pair<uint16_t, uint16_t> &u, const std::pair<uint16_t, uint16_t> &v) -> bool { return u.first > v.first; });
     // read off the pr_offsets
     std::vector<uint16_t> pr_offsets(attr_sizes.size());
     for (uint16_t i = 0; i < size_idx.size(); i++) {

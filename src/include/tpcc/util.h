@@ -123,7 +123,7 @@ struct Util {
   // 4.3.2.5
   template <class T, class Random>
   static T RandomWithin(const uint32_t x, const uint32_t y, const uint32_t p, Random *const generator) {
-    return static_cast<T>(std::uniform_int_distribution(x, y)(*generator) / static_cast<T>(std::pow(10, p)));
+    return static_cast<T>(std::uniform_int_distribution<uint32_t>(x, y)(*generator) / static_cast<T>(std::pow(10, p)));
   }
 
   // 4.3.2.7
@@ -143,7 +143,7 @@ struct Util {
     auto astring = AlphaNumericString(x, y, false, generator);
     TERRIER_ASSERT(astring.length() >= 8, "Needs enough room for ORIGINAL.");
 
-    const uint32_t original_index = std::uniform_int_distribution(
+    const uint32_t original_index = std::uniform_int_distribution<uint32_t>(
         static_cast<uint32_t>(0), static_cast<uint32_t>(astring.length() - 8))(*generator);
 
     astring.replace(original_index, 8, "ORIGINAL");
@@ -162,13 +162,13 @@ struct Util {
   static char AlphaNumericChar(const bool numeric_only, Random *const generator) {
     static constexpr char alpha_num[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const size_t length = numeric_only ? 9 : 61;
-    return alpha_num[std::uniform_int_distribution(static_cast<size_t>(0), length)(*generator)];
+    return alpha_num[std::uniform_int_distribution<uint32_t>(static_cast<size_t>(0), length)(*generator)];
   }
 
   template <class Random>
   static std::string AlphaNumericString(const uint32_t x, const uint32_t y, const bool numeric_only,
                                         Random *const generator) {
-    const uint32_t length = std::uniform_int_distribution(x, y)(*generator);
+    const uint32_t length = std::uniform_int_distribution<uint32_t>(x, y)(*generator);
     std::string astring(length, 'a');
     for (uint32_t i = 0; i < length; i++) {
       astring[i] = AlphaNumericChar(numeric_only, generator);
