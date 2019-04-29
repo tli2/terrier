@@ -159,46 +159,43 @@ class TpccLoader {
         return;
       }
 
-      std::vector<std::shared_ptr<arrow::Table>> tables;
-      const storage::TupleAccessStrategy &accessor = order_line->accessor_;
-      for (storage::RawBlock *block : blocks) {
-        std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
-        if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
-          table = MaterializeHotBlock(tpcc_db, block);
-        } else {
-          table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
-        }
-        tables.push_back(table);
-      }
-
+//      const storage::TupleAccessStrategy &accessor = order_line->accessor_;
         // initiate rdma write
       uint64_t remote_addr_start = res.remote_props.addr;
       uint64_t remote_curr_addr = remote_addr_start;
       fprintf (stdout, "Now initiating RDMA write\n");
       std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-      for (auto &table : tables) {
-        int num_cols = table->num_columns();
-        // fprintf (stdout, "num columns: %d\n", num_cols);
-        for (int ci = 0; ci < num_cols; ci++) {
-          // printf ("index: %d\n", ci);
-          auto col = table->column(ci);
-          // std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
-          // if (col->field()->type()->id() == arrow::Type::type::STRING) continue;
-          // fprintf (stdout, "--- column name: %s\n", col->field()->name());
-          auto array_data = col->data()->chunk(0)->data();
-          int64_t length = array_data->buffers.size();
-          // std::cout << "  array_data length: " << length << std::endl;
-          for (int64_t bi = 0; bi < length; bi++) {
-            auto buffer = array_data->buffers[bi];
-            int64_t buf_size = buffer->size();
-            // std::cout << "  size: " << buf_size << std::endl;
-            if (buf_size == 0) break;
-            uint8_t *data = (uint8_t *)buffer->data();
-            
+      for (storage::RawBlock *block : blocks) {
+        std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
+        if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
+          table = MaterializeHotBlock(tpcc_db, block);
+          int num_cols = table->num_columns();
+          // fprintf (stdout, "num columns: %d\n", num_cols);
+          for (int ci = 0; ci < num_cols; ci++) {
+            // printf ("index: %d\n", ci);
+            auto col = table->column(ci);
+            // std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
+            // if (col->field()->type()->id() == arrow::Type::type::STRING) continue;
+            // fprintf (stdout, "--- column name: %s\n", col->field()->name());
+            auto array_data = col->data()->chunk(0)->data();
+            int64_t length = array_data->buffers.size();
+            // std::cout << "  array_data length: " << length << std::endl;
+            for (int64_t bi = 0; bi < length; bi++) {
+              auto buffer = array_data->buffers[bi];
+              int64_t buf_size = buffer->size();
+              // std::cout << "  size: " << buf_size << std::endl;
+              if (buf_size == 0) break;
+              uint8_t *data = (uint8_t *)buffer->data();
 
-            if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
-            remote_curr_addr += buf_size;
+
+              if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
+              remote_curr_addr += buf_size;
+            }
           }
+        } else {
+//          table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
+          if (0 != do_send(&res, reinterpret_cast<char *>(block), common::Constants::BLOCK_SIZE, remote_curr_addr)) return;
+          remote_curr_addr += common::Constants::BLOCK_SIZE;
         }
       }
       std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
