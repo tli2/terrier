@@ -50,13 +50,6 @@ std::string terrier_error_message() {
   std::vector<char> buffer(100, '\0');
   int saved_errno = errno;
   char *error_message = nullptr;
-#if __APPLE__
-  (void)strerror_r(errno, buffer.data(), buffer.size() - 1);
-  error_message = buffer.data();
-#else
-  error_message = strerror_r(saved_errno, buffer.data(), buffer.size() - 1);
-#endif
-
   errno = saved_errno;
   return std::string(error_message);
 }

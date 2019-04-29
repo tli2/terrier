@@ -44,8 +44,7 @@ if ("${UPPERCASE_BUILD_WARNING_LEVEL}" STREQUAL "CHECKIN")
 -Wno-c++98-compat-pedantic")
 
   elseif ("${COMPILER_FAMILY}" STREQUAL "gcc")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall \
--Wconversion -Wno-sign-conversion")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall")
 
   else ()
     message(FATAL_ERROR "Unknown compiler. Version info:\n${COMPILER_VERSION_FULL}")
