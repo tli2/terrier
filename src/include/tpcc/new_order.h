@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include "storage/index/index.h"
@@ -459,8 +460,8 @@ class NewOrder {
       TERRIER_ASSERT(select_result, "Item table doesn't change. All lookups should succeed.");
       const auto i_price =
           *reinterpret_cast<double *>(item_select_tuple->AccessWithNullCheck(i_price_select_pr_offset));
-//      const auto i_data =
-//          *reinterpret_cast<storage::VarlenEntry *>(item_select_tuple->AccessWithNullCheck(i_data_select_pr_offset));
+      const auto i_data =
+          *reinterpret_cast<storage::VarlenEntry *>(item_select_tuple->AccessWithNullCheck(i_data_select_pr_offset));
 
       // Look up S_I_ID, S_W_ID in index
       const auto stock_key_pr_initializer = db->stock_index_->GetProjectedRowInitializer();
@@ -488,8 +489,8 @@ class NewOrder {
           stock_select_tuple->AccessWithNullCheck(stock_select_pr_offsets[args.d_id - 1].s_order_cnt_select_pr_offset));
       const auto s_remote_cnt = *reinterpret_cast<int16_t *>(stock_select_tuple->AccessWithNullCheck(
           stock_select_pr_offsets[args.d_id - 1].s_remote_cnt_select_pr_offset));
-//      const auto s_data = *reinterpret_cast<storage::VarlenEntry *>(
-//          stock_select_tuple->AccessWithNullCheck(stock_select_pr_offsets[args.d_id - 1].s_data_select_pr_offset));
+      const auto s_data = *reinterpret_cast<storage::VarlenEntry *>(
+          stock_select_tuple->AccessWithNullCheck(stock_select_pr_offsets[args.d_id - 1].s_data_select_pr_offset));
 
       // Update S_QUANTITY, S_YTD, S_ORDER_CNT, S_REMOTE_CNT
       auto *const stock_update_tuple = stock_update_pr_initializer.InitializeRow(worker->stock_tuple_buffer);
@@ -512,13 +513,13 @@ class NewOrder {
 
       const double ol_amount = item.ol_quantity * i_price;
 
-//      const auto i_data_str = i_data.StringView();
-//      const auto s_data_str = s_data.StringView();
+      const auto i_data_str = i_data.StringView();
+      const auto s_data_str = s_data.StringView();
 
-      const std::string UNUSED_ATTRIBUTE brand_generic = "B";
-//          i_data_str.find("ORIGINAL", 0) != std::string::npos && s_data_str.find("ORIGINAL", 0 != std::string::npos)
-//              ? "B"
-//              : "G";
+      const std::string UNUSED_ATTRIBUTE brand_generic =
+          i_data_str.find("ORIGINAL", 0) != std::string::npos && s_data_str.find("ORIGINAL", 0 != std::string::npos)
+              ? "B"
+              : "G";
 
       // Insert new row in Order Line
       auto *const order_line_insert_tuple =
