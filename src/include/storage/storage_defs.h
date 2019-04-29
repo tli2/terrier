@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <string_view>
 #include "catalog/catalog_defs.h"
 #include "common/constants.h"
 #include "common/container/bitmap.h"
@@ -271,6 +272,10 @@ class VarlenEntry {
    * @return pointer to the varlen entry contents.
    */
   const byte *Content() const { return IsInlined() ? prefix_ : content_; }
+
+  std::string_view StringView() const {
+    return std::string_view(reinterpret_cast<const char *const>(Content()), Size());
+  }
 
  private:
   int32_t size_;                   // buffer reclaimable => sign bit is 0 or size <= InlineThreshold
