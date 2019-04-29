@@ -273,10 +273,6 @@ class VarlenEntry {
    */
   const byte *Content() const { return IsInlined() ? prefix_ : content_; }
 
-  std::string_view StringView() const {
-    return std::string_view(reinterpret_cast<const char *const>(Content()), Size());
-  }
-
  private:
   int32_t size_;                   // buffer reclaimable => sign bit is 0 or size <= InlineThreshold
   byte prefix_[sizeof(uint32_t)];  // Explicit padding so that we can use these bits for inlined values or prefix
