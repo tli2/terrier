@@ -159,12 +159,8 @@ class TpccLoader {
         return;
       }
 
-      // initiate rdma write
-      uint64_t remote_addr_start = res.remote_props.addr;
-      uint64_t remote_curr_addr = remote_addr_start;
+      std::vector<std::shared_ptr<arrow::Table>> tables;
       const storage::TupleAccessStrategy &accessor = order_line->accessor_;
-      fprintf (stdout, "Now initiating RDMA write\n");
-      std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
       for (storage::RawBlock *block : blocks) {
         std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
         if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
@@ -172,7 +168,15 @@ class TpccLoader {
         } else {
           table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
         }
+        tables.push_back(table);
+      }
 
+        // initiate rdma write
+      uint64_t remote_addr_start = res.remote_props.addr;
+      uint64_t remote_curr_addr = remote_addr_start;
+      fprintf (stdout, "Now initiating RDMA write\n");
+      std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+      for (auto &table : tables) {
         int num_cols = table->num_columns();
         // fprintf (stdout, "num columns: %d\n", num_cols);
         for (int ci = 0; ci < num_cols; ci++) {
