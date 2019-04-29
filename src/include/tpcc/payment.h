@@ -326,8 +326,8 @@ class Payment {
         *reinterpret_cast<double *>(customer_select_tuple->AccessWithNullCheck(c_ytd_payment_select_pr_offset));
     const auto c_payment_cnt =
         *reinterpret_cast<int16_t *>(customer_select_tuple->AccessWithNullCheck(c_payment_cnt_select_pr_offset));
-//    const auto c_credit = *reinterpret_cast<storage::VarlenEntry *>(
-//        customer_select_tuple->AccessWithNullCheck(c_credit_select_pr_offset));
+    const auto c_credit = *reinterpret_cast<storage::VarlenEntry *>(
+        customer_select_tuple->AccessWithNullCheck(c_credit_select_pr_offset));
     const auto c_data =
         *reinterpret_cast<storage::VarlenEntry *>(customer_select_tuple->AccessWithNullCheck(c_data_select_pr_offset));
 
@@ -343,18 +343,15 @@ class Payment {
     result = db->customer_table_->Update(txn, customer_slot, *customer_update_tuple);
     TERRIER_ASSERT(result, "Customer update failed. This assertion assumes 1:1 mapping between warehouse and workers.");
 
-//    const auto c_credit_str = c_credit.StringView();
-//    if (c_credit_str.compare("BC") == 0) {
-    {
+    if (std::strcmp(c_credit.Content(), "BC") == 0) {
       auto *const c_data_update_tuple = c_data_pr_initializer.InitializeRow(worker->customer_tuple_buffer);
-      const auto c_data_str = c_data.StringView();
       auto new_c_data = std::to_string(c_id);
       new_c_data.append(std::to_string(args.c_d_id));
       new_c_data.append(std::to_string(args.c_w_id));
       new_c_data.append(std::to_string(args.d_id));
       new_c_data.append(std::to_string(args.w_id));
       new_c_data.append(std::to_string(args.h_amount));
-      new_c_data.append(c_data_str);
+      new_c_data.append(c_data.Content(), c_data.Size());
       const auto new_c_data_length = std::min(new_c_data.length(), static_cast<std::size_t>(500));
       auto *const varlen = common::AllocationUtil::AllocateAligned(new_c_data_length);
       std::memcpy(varlen, new_c_data.data(), new_c_data_length);
