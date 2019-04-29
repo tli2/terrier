@@ -159,7 +159,7 @@ class TpccLoader {
         return;
       }
 
-//      const storage::TupleAccessStrategy &accessor = order_line->accessor_;
+      const storage::TupleAccessStrategy &accessor = order_line->accessor_;
         // initiate rdma write
       uint64_t remote_addr_start = res.remote_props.addr;
       uint64_t remote_curr_addr = remote_addr_start;
@@ -186,8 +186,7 @@ class TpccLoader {
               // std::cout << "  size: " << buf_size << std::endl;
               if (buf_size == 0) break;
               uint8_t *data = (uint8_t *)buffer->data();
-
-
+              
               if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
               remote_curr_addr += buf_size;
             }
@@ -196,6 +195,13 @@ class TpccLoader {
 //          table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
           if (0 != do_send(&res, reinterpret_cast<char *>(block), common::Constants::BLOCK_SIZE, remote_curr_addr)) return;
           remote_curr_addr += common::Constants::BLOCK_SIZE;
+          auto &metadata = accessor.GetArrowBlockMetadata(block);
+          auto &col = metadata.GetColumnInfo(accessor.GetBlockLayout(), storage::col_id_t(1));
+          auto &varlen_col = col.VarlenColumn();
+          if (0 != do_send(&res, reinterpret_cast<char *>(varlen_col.offsets_), sizeof(uint32_t) * varlen_col.offsets_length_, remote_curr_addr)) return;
+          remote_curr_addr += sizeof(uint32_t) * varlen_col.offsets_length_;
+          if (0 != do_send(&res, reinterpret_cast<char *>(varlen_col.values_), varlen_col.values_length_, remote_curr_addr)) return;
+          remote_curr_addr += varlen_col.values_length_;
         }
       }
       std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
