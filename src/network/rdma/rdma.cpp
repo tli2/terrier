@@ -281,8 +281,8 @@ poll_completion (struct resources *res)
     else
     {
         /* CQE found */
-        fprintf (stdout, "completion was found in CQ with status 0x%x\n",
-                wc.status);
+//        fprintf (stdout, "completion was found in CQ with status 0x%x\n",
+//                wc.status);
         /* check the completion status (here we don't care about the completion opcode */
         if (wc.status != IBV_WC_SUCCESS)
         {
@@ -340,24 +340,24 @@ post_send (struct resources *res, ibv_wr_opcode opcode)
     rc = ibv_post_send (res->qp, &sr, &bad_wr);
     if (rc)
         fprintf (stderr, "failed to post SR\n");
-    else
-    {
-        switch (opcode)
-        {
-            case IBV_WR_SEND:
-                fprintf (stdout, "Send Request was posted\n");
-                break;
-            case IBV_WR_RDMA_READ:
-                fprintf (stdout, "RDMA Read Request was posted\n");
-                break;
-            case IBV_WR_RDMA_WRITE:
-                fprintf (stdout, "RDMA Write Request was posted\n");
-                break;
-            default:
-                fprintf (stdout, "Unknown Request was posted\n");
-                break;
-        }
-    }
+//    else
+//    {
+//        switch (opcode)
+//        {
+//            case IBV_WR_SEND:
+//                fprintf (stdout, "Send Request was posted\n");
+//                break;
+//            case IBV_WR_RDMA_READ:
+//                fprintf (stdout, "RDMA Read Request was posted\n");
+//                break;
+//            case IBV_WR_RDMA_WRITE:
+//                fprintf (stdout, "RDMA Write Request was posted\n");
+//                break;
+//            default:
+//                fprintf (stdout, "Unknown Request was posted\n");
+//                break;
+//        }
+//    }
     return rc;
 }
 
@@ -396,10 +396,10 @@ post_receive (struct resources *res)
     rr.num_sge = 1;
     /* post the Receive Request to the RQ */
     rc = ibv_post_recv (res->qp, &rr, &bad_wr);
-    if (rc)
-        fprintf (stderr, "failed to post RR\n");
-    else
-        fprintf (stdout, "Receive Request was posted\n");
+//    if (rc)
+//        fprintf (stderr, "failed to post RR\n");
+//    else
+//        fprintf (stdout, "Receive Request was posted\n");
     return rc;
 }
 
@@ -454,7 +454,7 @@ resources_create (struct resources *res, struct config_t &config)
     int num_devices;
     int rc = 0;
 
-    fprintf (stdout, "searching for IB devices in host\n");
+//    fprintf (stdout, "searching for IB devices in host\n");
     /* get device names in the system */
     dev_list = ibv_get_device_list (&num_devices);
     if (!dev_list)
@@ -470,16 +470,16 @@ resources_create (struct resources *res, struct config_t &config)
         rc = 1;
         goto resources_create_exit;
     }
-    fprintf (stdout, "found %d device(s)\n", num_devices);
+//    fprintf (stdout, "found %d device(s)\n", num_devices);
     /* search for the specific device we want to work with */
     for (i = 0; i < num_devices; i++)
     {
         if (!config.dev_name)
         {
             config.dev_name = strdup (ibv_get_device_name (dev_list[i]));
-            fprintf (stdout,
-                    "device not specified, using first one found: %s\n",
-                    config.dev_name);
+//            fprintf (stdout,
+//                    "device not specified, using first one found: %s\n",
+//                    config.dev_name);
         }
         if (!strcmp (ibv_get_device_name (dev_list[i]), config.dev_name))
         {
@@ -541,9 +541,9 @@ resources_create (struct resources *res, struct config_t &config)
         rc = 1;
         goto resources_create_exit;
     }
-    fprintf (stdout,
-            "MR was registered with addr=%p, lkey=0x%x, rkey=0x%x, flags=0x%x\n",
-            res->buf, res->mr->lkey, res->mr->rkey, mr_flags);
+//    fprintf (stdout,
+//            "MR was registered with addr=%p, lkey=0x%x, rkey=0x%x, flags=0x%x\n",
+//            res->buf, res->mr->lkey, res->mr->rkey, mr_flags);
     /* create the Queue Pair */
     memset (&qp_init_attr, 0, sizeof (qp_init_attr));
     qp_init_attr.qp_type = IBV_QPT_RC;
@@ -561,7 +561,7 @@ resources_create (struct resources *res, struct config_t &config)
         rc = 1;
         goto resources_create_exit;
     }
-    fprintf (stdout, "QP was created, QP number=0x%x\n", res->qp->qp_num);
+//    fprintf (stdout, "QP was created, QP number=0x%x\n", res->qp->qp_num);
 resources_create_exit:
     if (rc)
     {
@@ -631,9 +631,9 @@ resources_clone (struct resources *res, struct resources *res_old) {
         fprintf (stderr, "ibv_reg_mr failed with mr_flags=0x%x\n", mr_flags);
         return 1;
     }
-    fprintf (stdout,
-            "MR was registered with addr=%p, lkey=0x%x, rkey=0x%x, flags=0x%x\n",
-            res->buf, res->mr->lkey, res->mr->rkey, mr_flags);
+//    fprintf (stdout,
+//            "MR was registered with addr=%p, lkey=0x%x, rkey=0x%x, flags=0x%x\n",
+//            res->buf, res->mr->lkey, res->mr->rkey, mr_flags);
     /* create the Queue Pair */
     memset (&qp_init_attr, 0, sizeof (qp_init_attr));
     qp_init_attr.qp_type = IBV_QPT_RC;
@@ -651,7 +651,7 @@ resources_clone (struct resources *res, struct resources *res_old) {
         ibv_dereg_mr (res->mr);
         return 1;
     }
-    fprintf (stdout, "QP was created, QP number=0x%x\n", res->qp->qp_num);
+//    fprintf (stdout, "QP was created, QP number=0x%x\n", res->qp->qp_num);
     return 0;
 }
 
@@ -825,7 +825,7 @@ connect_qp (struct resources *res, struct config_t &config)
     local_con_data.qp_num = htonl (res->qp->qp_num);
     local_con_data.lid = htons (res->port_attr.lid);
     memcpy (local_con_data.gid, &my_gid, 16);
-    fprintf (stdout, "\nLocal LID = 0x%x\n", res->port_attr.lid);
+//    fprintf (stdout, "\nLocal LID = 0x%x\n", res->port_attr.lid);
     if (sock_sync_data
             (res->sock, sizeof (struct cm_con_data_t), (char *) &local_con_data,
              (char *) &tmp_con_data) < 0)
@@ -841,18 +841,18 @@ connect_qp (struct resources *res, struct config_t &config)
     memcpy (remote_con_data.gid, tmp_con_data.gid, 16);
     /* save the remote side attributes, we will need it for the post SR */
     res->remote_props = remote_con_data;
-    fprintf (stdout, "Remote address = 0x%" PRIx64 "\n", remote_con_data.addr);
-    fprintf (stdout, "Remote rkey = 0x%x\n", remote_con_data.rkey);
-    fprintf (stdout, "Remote QP number = 0x%x\n", remote_con_data.qp_num);
-    fprintf (stdout, "Remote LID = 0x%x\n", remote_con_data.lid);
-    if (config.gid_idx >= 0)
-    {
-        uint8_t *p = remote_con_data.gid;
-        fprintf (stdout,
-                "Remote GID = %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9],
-                p[10], p[11], p[12], p[13], p[14], p[15]);
-    }
+//    fprintf (stdout, "Remote address = 0x%" PRIx64 "\n", remote_con_data.addr);
+//    fprintf (stdout, "Remote rkey = 0x%x\n", remote_con_data.rkey);
+//    fprintf (stdout, "Remote QP number = 0x%x\n", remote_con_data.qp_num);
+//    fprintf (stdout, "Remote LID = 0x%x\n", remote_con_data.lid);
+//    if (config.gid_idx >= 0)
+//    {
+//        uint8_t *p = remote_con_data.gid;
+//        fprintf (stdout,
+//                "Remote GID = %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n",
+//                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9],
+//                p[10], p[11], p[12], p[13], p[14], p[15]);
+//    }
     /* modify the QP to init */
     rc = modify_qp_to_init (res->qp, config);
     if (rc)
@@ -886,7 +886,7 @@ connect_qp (struct resources *res, struct config_t &config)
         fprintf (stderr, "failed to modify QP state to RTS\n");
         goto connect_qp_exit;
     }
-    fprintf (stdout, "QP state was change to RTS\n");
+//    fprintf (stdout, "QP state was change to RTS\n");
     /* sync to make sure that both sides are in states that they can connect to prevent packet loose */
     if (sock_sync_data (res->sock, 1, &test_data, &temp_char))   /* just send a dummy char back and forth */
     {
