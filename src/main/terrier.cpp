@@ -23,9 +23,9 @@
 #include "storage/dirty_globals.h"
 #include "storage/arrow_util.h"
 
-#include "network/rdma/server.h"
-#include "network/rdma/data_format.h"
-#include "network/rdma/rdma.h"
+//#include "network/rdma/server.h"
+//#include "network/rdma/data_format.h"
+//#include "network/rdma/rdma.h"
 
 #define ONE_MEGABYTE 1048576
 
@@ -70,158 +70,52 @@ class TpccLoader {
   storage::BlockCompactor compactor_;
   storage::AccessObserver access_observer_{&compactor_};
 
-  const int8_t num_threads_ = 6;
-  const uint32_t num_precomputed_txns_per_worker_ = 5000000;
+  const int8_t num_threads_ = 2;
+  const uint32_t num_precomputed_txns_per_worker_ = 5;
   const uint32_t w_payment = 43;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
   const uint32_t w_stock_level = 4;
 
-  struct config_t config = {
-      NULL,                         /* device_name */
-      NULL,                         /* server_name */
-      19875,                        /* tcp_port */
-      1,                            /* ib_port */
-      1                             /* gid_idx */
-  };
-
-  struct size_pair sizes = {0, 0};
+//  struct config_t config = {
+//      NULL,                         /* device_name */
+//      NULL,                         /* server_name */
+//      19875,                        /* tcp_port */
+//      1,                            /* ib_port */
+//      1                             /* gid_idx */
+//  };
+//
+//  struct size_pair sizes = {0, 0};
 
   common::WorkerPool thread_pool_{static_cast<uint32_t>(num_threads_), {}};
 
   void ServerLoop(tpcc::Database *tpcc_db) {
-    struct sockaddr_in sin;
-    std::memset(&sin, 0, sizeof(sin));
-    sin.sin_family = AF_INET;
-    sin.sin_addr.s_addr = INADDR_ANY;
-    sin.sin_port = htons(15712);
-
-    auto listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (listen_fd < 0) {
-      throw std::runtime_error("Failed to create listen socket");
+    storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
+    std::list<storage::RawBlock *> blocks = order_line->blocks_;
+    std::bernoulli_distribution treat_as_hot{0.0};
+    std::shared_ptr<arrow::Table> table1, table2;
+    const storage::TupleAccessStrategy &accessor = order_line->accessor_;
+    for (storage::RawBlock *block : blocks) {
+      if (accessor.GetArrowBlockMetadata(block).NumRecords() == 0) continue;
+      if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_))
+        continue;
+      table1 = MaterializeHotBlock(tpcc_db, block);
+      table2 = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
     }
-
-    int reuse = 1;
-    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-
-    bind(listen_fd, reinterpret_cast<struct sockaddr *>(&sin), sizeof(sin));
-    listen(listen_fd, 12);
-    struct sockaddr_storage addr;
-    socklen_t addrlen = sizeof(addr);
-    while (true) {
-      int new_conn_fd = accept(listen_fd, reinterpret_cast<struct sockaddr *>(&addr), &addrlen);
-      if (new_conn_fd == -1)
-        throw std::runtime_error("Failed to accept");
-      storage::DataTable *order_line = tpcc_db->order_line_table_->table_.data_table;
-      std::list<storage::RawBlock *> blocks = order_line->blocks_;
-
-      // RDMA stuff
-      struct resources res;
-      resources_init(&res);
-      res.sock = new_conn_fd;
-
-      // get table name (which is now repurposed to hot_ratio) from client to server
-      char table_name[16];
-      memset(table_name, 0, 16);
-      int rc = sock_read_data(res.sock, sizeof(table_name), table_name);
-      if (rc < 0) {
-        fprintf(stderr, "failed to receive data from client\n");
-        return;
-      }
-      fprintf(stdout, "received hot ratio: %s\n", table_name);
-      double hot_ratio = std::stod(std::string(table_name), nullptr);
-      std::bernoulli_distribution treat_as_hot{hot_ratio};
-
-      // send metadata and data size from server to client
-      char metadata[] = "FAKE METADATA";
-      size_t metadata_size = 8;
-      size_t num_blocks = blocks.size();
-      sizes.metadata_size = metadata_size;
-      sizes.data_size = ONE_MEGABYTE * num_blocks;
-      sock_write_data(res.sock, sizeof(sizes), (char *)&sizes);
-      fprintf(stderr, "sizes sent to client\n");
-
-      sock_write_data(res.sock, metadata_size, metadata);
-      fprintf(stderr, "metadata sent to client\n");
-
-      // sync resources between client and server
-      /* create resources before using them */
-      res.buf = metadata; // use metadata for now
-      res.size = metadata_size;
-      if (resources_create (&res, config)) {
-        fprintf (stderr, "failed to create resources\n");
-        return;
-      }
-      /* connect the QPs */
-      if (connect_qp (&res, config)) {
-        fprintf (stderr, "failed to connect QPs\n");
-        return;
-      }
-
-      std::vector<std::shared_ptr<arrow::Table>> tables;
-      const storage::TupleAccessStrategy &accessor = order_line->accessor_;
-      for (storage::RawBlock *block : blocks) {
-        if (accessor.GetArrowBlockMetadata(block).NumRecords() == 0) continue;
-        std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
-        if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
-          table = MaterializeHotBlock(tpcc_db, block);
-        } else {
-          table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
-        }
-        tables.push_back(table);
-      }
-
-        // initiate rdma write
-      uint64_t remote_addr_start = res.remote_props.addr;
-      uint64_t remote_curr_addr = remote_addr_start;
-      fprintf (stdout, "Now initiating RDMA write\n");
-      std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-      for (auto &table : tables) {
-        int num_cols = table->num_columns();
-        // fprintf (stdout, "num columns: %d\n", num_cols);
-        for (int ci = 0; ci < num_cols; ci++) {
-          // printf ("index: %d\n", ci);
-          auto col = table->column(ci);
-          // std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
-          // if (col->field()->type()->id() == arrow::Type::type::STRING) continue;
-          // fprintf (stdout, "--- column name: %s\n", col->field()->name());
-          auto array_data = col->data()->chunk(0)->data();
-          int64_t length = array_data->buffers.size();
-          // std::cout << "  array_data length: " << length << std::endl;
-          for (int64_t bi = 0; bi < length; bi++) {
-            auto buffer = array_data->buffers[bi];
-            int64_t buf_size = buffer->size();
-            // std::cout << "  size: " << buf_size << std::endl;
-            if (buf_size == 0) break;
-            uint8_t *data = (uint8_t *)buffer->data();
-            
-
-            if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
-            remote_curr_addr += buf_size;
-          }
-        }
-      }
-      std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-      fprintf (stdout, "Server side RDMA duration: %ld\n", std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-      fprintf (stdout, "RDMA Write completed\n");
-      fprintf (stdout, "Num blocks written: %zd\n", remote_curr_addr - remote_addr_start);
-
-      // tell client we're done
-      /* Sync so server will know that client is done mucking with its memory */
-      char temp_char = 'W';
-      if (sock_sync_data (res.sock, 1, &temp_char, &temp_char))    /* just send a dummy char back and forth */
-      {
-        fprintf (stderr, "sync error after RDMA ops\n");
-        return;
-      }
-      fprintf (stderr, "final sync done\n");
-
-      // cleanup
-      // resources_destroy (&res);
-
-      // return;
-
+    int num_cols = table1->num_columns();
+    // fprintf (stdout, "num columns: %d\n", num_cols);
+    for (int ci = 0; ci < num_cols; ci++) {
+      // printf ("index: %d\n", ci);
+      auto col1 = table1->column(ci);
+      auto col2 = table2->column(ci);
+      printf("%p, %p\n", col1.get(), col2.get());
+//      auto array_data = col->data()->chunk(0)->data();
+//      int64_t length = array_data->buffers.size();
+//      // std::cout << "  array_data length: " << length << std::endl;
+//      for (int64_t bi = 0; bi < length; bi++) {
+//        auto buffer = array_data->buffers[bi];
+//        printf("%p\n", buffer->get());
+//      }
     }
   }
 
@@ -370,22 +264,6 @@ class TpccLoader {
     std::this_thread::sleep_for(std::chrono::seconds(5));  // Let GC clean up
     EndCompactor();
     EndGC();
-//    printf("history table:\n");
-//    tpcc_db->history_table_->table_.data_table->InspectTable();
-//    printf("item table:\n");
-//    tpcc_db->item_table_->table_.data_table->InspectTable();
-//    printf("order table:\n");
-//    tpcc_db->order_table_->table_.data_table->InspectTable();
-    printf("order_line table:\n");
-    tpcc_db->order_line_table_->table_.data_table->InspectTable();
-    printf("\n\n\n");
-//    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
-//    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
-//    uint32_t aborted = 0;
-//    for (auto &entry : precomputed_args)
-//      for (auto &arg : entry)
-//        aborted += arg.aborted;
-//    printf("number of transactions aborted: %u\n", aborted);
 
     ServerLoop(tpcc_db);
     // Clean up the buffers from any non-inlined VarlenEntrys in the precomputed args
@@ -482,7 +360,7 @@ class TpccLoader {
     }
 
     std::shared_ptr<arrow::Array> o_id, o_d_id, o_w_id, ol_number,
-                                  ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info;
+        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info;
     auto status UNUSED_ATTRIBUTE = o_id_builder.Finish(&o_id);
     auto status1 UNUSED_ATTRIBUTE = o_d_id_builder.Finish(&o_d_id);
     auto status2 UNUSED_ATTRIBUTE = o_w_id_builder.Finish(&o_w_id);
@@ -506,7 +384,8 @@ class TpccLoader {
                                                              arrow::field("ol_dist_info", arrow::utf8())};
 
     std::vector<std::shared_ptr<arrow::Array>> table_vector{o_id, o_d_id, o_w_id, ol_number,
-                                                            ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info};
+                                                            ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity,
+                                                            ol_amount, ol_dist_info};
     return arrow::Table::Make(std::make_shared<arrow::Schema>(schema_vector), table_vector);
   }
 };
