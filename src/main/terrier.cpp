@@ -370,7 +370,7 @@ class TpccLoader {
   void WriteColdBlock(tpcc::Database *tpcc_db, storage::RawBlock *block, int fd) {
     storage::DataTable *table = tpcc_db->order_line_table_->table_.data_table;
     const storage::BlockLayout &layout = table->accessor_.GetBlockLayout();
-    for (uint32_t i = 0; i < layout.NumSlots(); i++) {
+    for (uint32_t i = 0; i < table->accessor_.GetArrowBlockMetadata(block).NumRecords(); i++) {
       storage::TupleSlot slot(block, i);
       if (!table->accessor_.Allocated(slot)) return;
       ResetWrite();
