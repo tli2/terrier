@@ -162,6 +162,7 @@ class TpccLoader {
       std::vector<std::shared_ptr<arrow::Table>> tables;
       const storage::TupleAccessStrategy &accessor = order_line->accessor_;
       for (storage::RawBlock *block : blocks) {
+        if (accessor.GetArrowBlockMetadata(block).NumRecords() == 0) continue;
         std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
         if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
           table = MaterializeHotBlock(tpcc_db, block);

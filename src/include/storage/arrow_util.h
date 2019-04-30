@@ -58,9 +58,9 @@ class ArrowUtil {
     storage::ArrowBlockMetadata &metadata = accessor.GetArrowBlockMetadata(block);
     auto col_bitmap =
         std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(accessor.ColumnNullBitmap(block, col_id)),
-                                        common::RawBitmap::SizeInBytes(layout.NumSlots()));
+                                        common::RawBitmap::SizeInBytes(metadata.NumRecords()));
     auto col_values = std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(accessor.ColumnStart(block, col_id)),
-                                                      layout.AttrSize(col_id) * layout.NumSlots());
+                                                      layout.AttrSize(col_id) * metadata.NumRecords());
     auto col_array_data = arrow::ArrayData::Make(InferArrowType(layout, col_id), metadata.NumRecords(),
                                                  {col_bitmap, col_values}, metadata.NullCount(col_id));
     table_vector->push_back(arrow::MakeArray(col_array_data));
@@ -76,11 +76,11 @@ class ArrowUtil {
         std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(accessor.ColumnNullBitmap(block, col_id)),
                                         common::RawBitmap::SizeInBytes(layout.NumSlots()));
     auto varlen_offset = std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(varlen_col.offsets_),
-                                                         sizeof(uint32_t) * (metadata.NumRecords() + 1));
+                                                         sizeof(uint32_t) * metadata.NumRecords());
     auto varlen_values_buffer =
         std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(varlen_col.values_), varlen_col.values_length_);
     auto varlen_values_array_data =
-        arrow::ArrayData::Make(arrow::uint8(), metadata.NumRecords(), {varlen_offset, varlen_values_buffer}, 0);
+        arrow::ArrayData::Make(arrow::uint8(), metadata.NumRecords(), {col_bitmap, varlen_offset, varlen_values_buffer}, metadata.NullCount(col_id));
     table_vector->push_back(arrow::MakeArray(varlen_values_array_data));
   }
 };
