@@ -20,7 +20,7 @@ class ArrowUtil {
     for (uint16_t i = NUM_RESERVED_COLUMNS; i < layout.NumColumns(); i++) {
       col_id_t col_id(i);
       // TODO(Tianyu): At some point, we want to do this up in the SQL layer so we get a meaningful name as well
-      schema_vector.push_back(arrow::field("", InferArrowType(layout, col_id)));
+      schema_vector.push_back(arrow::field(std::to_string(i), InferArrowType(layout, col_id)));
       if (layout.IsVarlen(col_id))
         BuildVarlenColumn(accessor, block, col_id, &schema_vector, &table_vector);
       else
@@ -80,7 +80,7 @@ class ArrowUtil {
     auto varlen_values_buffer =
         std::make_shared<arrow::Buffer>(reinterpret_cast<uint8_t *>(varlen_col.values_), varlen_col.values_length_);
     auto varlen_values_array_data =
-        arrow::ArrayData::Make(arrow::uint8(), metadata.NumRecords(), {varlen_offset, varlen_values_buffer}, 0);
+        arrow::ArrayData::Make(arrow::utf8(), metadata.NumRecords(), {col_bitmap, varlen_offset, varlen_values_buffer}, metadata.NullCount(col_id));
     table_vector->push_back(arrow::MakeArray(varlen_values_array_data));
   }
 };
