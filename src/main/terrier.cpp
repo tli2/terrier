@@ -169,39 +169,30 @@ class TpccLoader {
         std::shared_ptr<arrow::Table> table UNUSED_ATTRIBUTE;
         if (block->controller_.CurrentBlockState() != storage::BlockState::FROZEN || treat_as_hot(generator_)) {
           table = MaterializeHotBlock(tpcc_db, block);
-          int num_cols = table->num_columns();
-          // fprintf (stdout, "num columns: %d\n", num_cols);
-          for (int ci = 0; ci < num_cols; ci++) {
-            // printf ("index: %d\n", ci);
-            auto col = table->column(ci);
-            // std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
-            // if (col->field()->type()->id() == arrow::Type::type::STRING) continue;
-            // fprintf (stdout, "--- column name: %s\n", col->field()->name());
-            auto array_data = col->data()->chunk(0)->data();
-            int64_t length = array_data->buffers.size();
-            // std::cout << "  array_data length: " << length << std::endl;
-            for (int64_t bi = 0; bi < length; bi++) {
-              auto buffer = array_data->buffers[bi];
-              int64_t buf_size = buffer->size();
-              // std::cout << "  size: " << buf_size << std::endl;
-              if (buf_size == 0) break;
-              uint8_t *data = (uint8_t *)buffer->data();
-              
-              if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
-              remote_curr_addr += buf_size;
-            }
-          }
         } else {
-//          table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
-          if (0 != do_send(&res, reinterpret_cast<char *>(block), common::Constants::BLOCK_SIZE, remote_curr_addr)) return;
-          remote_curr_addr += common::Constants::BLOCK_SIZE;
-          auto &metadata = accessor.GetArrowBlockMetadata(block);
-          auto &col = metadata.GetColumnInfo(accessor.GetBlockLayout(), storage::col_id_t(1));
-          auto &varlen_col = col.VarlenColumn();
-          if (0 != do_send(&res, reinterpret_cast<char *>(varlen_col.offsets_), sizeof(uint32_t) * varlen_col.offsets_length_, remote_curr_addr)) return;
-          remote_curr_addr += sizeof(uint32_t) * varlen_col.offsets_length_;
-          if (0 != do_send(&res, reinterpret_cast<char *>(varlen_col.values_), varlen_col.values_length_, remote_curr_addr)) return;
-          remote_curr_addr += varlen_col.values_length_;
+          table = storage::ArrowUtil::AssembleToArrowTable(accessor, block);
+        }
+        int num_cols = table->num_columns();
+        // fprintf (stdout, "num columns: %d\n", num_cols);
+        for (int ci = 0; ci < num_cols; ci++) {
+          // printf ("index: %d\n", ci);
+          auto col = table->column(ci);
+          // std::cout << "---- column name: " << col->field()->type()->id() << ", should not be " << arrow::Type::type::STRING << std::endl;
+          // if (col->field()->type()->id() == arrow::Type::type::STRING) continue;
+          // fprintf (stdout, "--- column name: %s\n", col->field()->name());
+          auto array_data = col->data()->chunk(0)->data();
+          int64_t length = array_data->buffers.size();
+          // std::cout << "  array_data length: " << length << std::endl;
+          for (int64_t bi = 0; bi < length; bi++) {
+            auto buffer = array_data->buffers[bi];
+            int64_t buf_size = buffer->size();
+            // std::cout << "  size: " << buf_size << std::endl;
+            if (buf_size == 0) break;
+            uint8_t *data = (uint8_t *)buffer->data();
+
+            if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
+            remote_curr_addr += buf_size;
+          }
         }
       }
       std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
