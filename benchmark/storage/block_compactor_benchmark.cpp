@@ -257,6 +257,8 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
       for (storage::RawBlock *block : blocks) block_store_.Release(block);
       state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
     }
+    for (storage::RawBlock *block : start_blocks) block_store_.Release(block);
+
     state.
         SetItemsProcessed(num_blocks_
                               * static_cast
