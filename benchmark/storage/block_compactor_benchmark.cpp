@@ -18,7 +18,7 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   storage::BlockStore block_store_{5000, 5000};
   std::default_random_engine generator_;
   storage::RecordBufferSegmentPool buffer_pool_{100000, 100000};
-  storage::BlockLayout layout_{{8, VARLEN_COLUMN}};
+  storage::BlockLayout layout_{{8, 8, 8}};
   storage::TupleAccessStrategy accessor_{layout_};
 
   storage::DataTable table_{&block_store_, layout_, storage::layout_version_t(0)};
@@ -76,9 +76,9 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   }
 
   void RunFull(benchmark::State &state, double percent_empty,
-      storage::ArrowColumnType type = storage::ArrowColumnType::GATHERED_VARLEN) {
+               storage::ArrowColumnType type = storage::ArrowColumnType::GATHERED_VARLEN) {
     uint32_t num_tuples = 0;
-    uint32_t optimal_move = 0;
+//    uint32_t optimal_move = 0;
     // NOLINTNEXTLINE
     for (auto _ : state) {
       compactor_.tuples_moved_ = 0;
@@ -120,7 +120,9 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
 //    printf("With %f percent empty, %u tuples in total, optimal %u tuples moved in total\n", percent_empty, num_tuples, optimal_move);
   }
 
-  void RunCompaction(benchmark::State &state, double percent_empty, storage::ArrowColumnType type=storage::ArrowColumnType::GATHERED_VARLEN) {
+  void RunCompaction(benchmark::State &state,
+                     double percent_empty,
+                     storage::ArrowColumnType type = storage::ArrowColumnType::GATHERED_VARLEN) {
     // NOLINTNEXTLINE
     for (auto _ : state) {
       std::vector<storage::RawBlock *> blocks;
@@ -208,36 +210,44 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
         transaction::TransactionContext *txn = txn_manager_.BeginTransaction();
         storage::ProjectedRowInitializer initializer =
             storage::ProjectedRowInitializer::CreateProjectedRowInitializer(layout_,
-                                                                            StorageTestUtil::ProjectionListAllColumns(layout_));
+                                                                            StorageTestUtil::ProjectionListAllColumns(
+                                                                                layout_));
         byte *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
         auto *read_row = initializer.InitializeRow(buffer);
-//      arrow::Int64Builder int_builder;
-        arrow::StringBuilder string_builder;
+        arrow::Int64Builder int_builder, int_builder2;
+//        arrow::StringBuilder string_builder;
         for (storage::RawBlock *block : blocks) {
           for (uint32_t i = 0; i < layout_.NumSlots(); i++) {
             storage::TupleSlot slot(block, i);
             bool visible = table_.Select(txn, slot, read_row);
             if (!visible) continue;
-//          auto *int_pointer = read_row->AccessWithNullCheck(1);
-//          if (int_pointer == nullptr)
-//            auto status5 UNUSED_ATTRIBUTE = int_builder.AppendNull();
-//          else
-//            auto status6 UNUSED_ATTRIBUTE = int_builder.Append(*reinterpret_cast<uint64_t *>(int_pointer));
-            auto *varlen_pointer = read_row->AccessWithNullCheck(0);
-            if (varlen_pointer == nullptr) {
-              auto status UNUSED_ATTRIBUTE = string_builder.AppendNull();
-            } else {
-              auto *entry = reinterpret_cast<storage::VarlenEntry *>(varlen_pointer);
-              auto status2 UNUSED_ATTRIBUTE =
-                  string_builder.Append(reinterpret_cast<const uint8_t *>(entry->Content()), entry->Size());
-            }
+            auto *int_pointer = read_row->AccessWithNullCheck(1);
+            if (int_pointer == nullptr)
+              auto status5 UNUSED_ATTRIBUTE = int_builder.AppendNull();
+            else
+              auto status6 UNUSED_ATTRIBUTE = int_builder.Append(*reinterpret_cast<uint64_t *>(int_pointer));
+            auto *int_pointer2 = read_row->AccessWithNullCheck(2);
+            if (int_pointer2 == nullptr)
+              auto status10 UNUSED_ATTRIBUTE = int_builder2.AppendNull();
+            else
+              auto status11 UNUSED_ATTRIBUTE = int_builder2.Append(*reinterpret_cast<uint64_t *>(int_pointer2));
+//            auto *varlen_pointer = read_row->AccessWithNullCheck(0);
+//            if (varlen_pointer == nullptr) {
+//              auto status UNUSED_ATTRIBUTE = string_builder.AppendNull();
+//            } else {
+//              auto *entry = reinterpret_cast<storage::VarlenEntry *>(varlen_pointer);
+//              auto status2 UNUSED_ATTRIBUTE =
+//                  string_builder.Append(reinterpret_cast<const uint8_t *>(entry->Content()), entry->Size());
+//          }
           }
-          std::shared_ptr<arrow::Array> string_column;
-//        auto status3 UNUSED_ATTRIBUTE = int_builder.Finish(&int_column);
-          auto status4 UNUSED_ATTRIBUTE = string_builder.Finish(&string_column);
-          std::vector<std::shared_ptr<arrow::Field>> schema_vector{arrow::field("2", arrow::utf8())};
+          std::shared_ptr<arrow::Array> int_column, int_column2;
+          auto status3 UNUSED_ATTRIBUTE = int_builder.Finish(&int_column);
+          auto status12 UNUSED_ATTRIBUTE = int_builder2.Finish(&int_column2);
+//          auto status4 UNUSED_ATTRIBUTE = string_builder.Finish(&string_column);
+          std::vector<std::shared_ptr<arrow::Field>> schema_vector{arrow::field("1", arrow::uint64()),
+                                                                   arrow::field("4", arrow::uint64())};
 
-          std::vector<std::shared_ptr<arrow::Array>> table_vector{string_column};
+          std::vector<std::shared_ptr<arrow::Array>> table_vector{int_column, int_column2};
           volatile std::shared_ptr<arrow::Table> table =
               arrow::Table::Make(std::make_shared<arrow::Schema>(schema_vector), table_vector);
         }
@@ -247,7 +257,13 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
       for (storage::RawBlock *block : blocks) block_store_.Release(block);
       state.SetIterationTime(static_cast<double>(elapsed_ms) / 1000.0);
     }
-    state.SetItemsProcessed(num_blocks_ * static_cast<int64_t>(state.iterations()));
+    state.
+        SetItemsProcessed(num_blocks_
+                              * static_cast
+                                  <int64_t>(state
+                                      .
+                                          iterations()
+                              ));
   }
 
 };
@@ -344,7 +360,7 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput01)(benchmark::State &stat
 }
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput02)(benchmark::State &state) {
- RunFull(state, 0.2);
+  RunFull(state, 0.2);
 }
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput04)(benchmark::State &state) {
@@ -399,46 +415,46 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput08)(benchmark::State &stat
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(2);
 
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman0)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
-//
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman001)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
-//
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman005)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
-//
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman01)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
-//
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman02)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
-//
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman04)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
-//
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman06)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
-//
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman08)
-//    ->Unit(benchmark::kMillisecond)
-//    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
-//
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman0)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman001)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman005)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman01)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman02)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman04)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman06)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman08)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(10);
+
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction0)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
