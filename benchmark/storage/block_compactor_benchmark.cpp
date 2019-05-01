@@ -16,7 +16,7 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   storage::BlockStore block_store_{1000, 1000};
   std::default_random_engine generator_;
   storage::RecordBufferSegmentPool buffer_pool_{100000, 100000};
-  storage::BlockLayout layout_{{8, 8, VARLEN_COLUMN}};
+  storage::BlockLayout layout_{{8, VARLEN_COLUMN, VARLEN_COLUMN}};
   storage::TupleAccessStrategy accessor_{layout_};
 
   storage::DataTable table_{&block_store_, layout_, storage::layout_version_t(0)};
@@ -24,8 +24,8 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   storage::GarbageCollector gc_{&txn_manager_};
   storage::BlockCompactor compactor_;
 
-  uint32_t num_blocks_ = 10;
-  double percent_empty_ = 0.05;
+  uint32_t num_blocks_ = 500;
+  double percent_empty_ = 0.0;
 
 };
 
@@ -65,6 +65,6 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, CompactionThroughput)(benchmark::Sta
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, CompactionThroughput)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2);
+    ->MinTime(2)->Repetitions(5);
 
 }  // namespace terrier
