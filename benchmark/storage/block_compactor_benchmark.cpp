@@ -18,7 +18,7 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
   storage::BlockStore block_store_{5000, 5000};
   std::default_random_engine generator_;
   storage::RecordBufferSegmentPool buffer_pool_{100000, 100000};
-  storage::BlockLayout layout_{{8, VARLEN_COLUMN, VARLEN_COLUMN}};
+  storage::BlockLayout layout_{{8, 8, VARLEN_COLUMN}};
   storage::TupleAccessStrategy accessor_{layout_};
 
   storage::DataTable table_{&block_store_, layout_, storage::layout_version_t(0)};
@@ -214,18 +214,18 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
                                                                                 layout_));
         byte *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
         auto *read_row = initializer.InitializeRow(buffer);
-//        arrow::Int64Builder int_builder, int_builder2;
+        arrow::Int64Builder int_builder; // int_builder2;
         arrow::StringBuilder string_builder, string_builder2;
         for (storage::RawBlock *block : blocks) {
           for (uint32_t i = 0; i < layout_.NumSlots(); i++) {
             storage::TupleSlot slot(block, i);
             bool visible = table_.Select(txn, slot, read_row);
             if (!visible) continue;
-//            auto *int_pointer = read_row->AccessWithNullCheck(1);
-//            if (int_pointer == nullptr)
-//              auto status5 UNUSED_ATTRIBUTE = int_builder.AppendNull();
-//            else
-//              auto status6 UNUSED_ATTRIBUTE = int_builder.Append(*reinterpret_cast<uint64_t *>(int_pointer));
+            auto *int_pointer = read_row->AccessWithNullCheck(1);
+            if (int_pointer == nullptr)
+              auto status5 UNUSED_ATTRIBUTE = int_builder.AppendNull();
+            else
+              auto status6 UNUSED_ATTRIBUTE = int_builder.Append(*reinterpret_cast<uint64_t *>(int_pointer));
 //            auto *int_pointer2 = read_row->AccessWithNullCheck(2);
 //            if (int_pointer2 == nullptr)
 //              auto status10 UNUSED_ATTRIBUTE = int_builder2.AppendNull();
@@ -240,26 +240,26 @@ class BlockCompactorBenchmark : public benchmark::Fixture {
                   string_builder.Append(reinterpret_cast<const uint8_t *>(entry->Content()), entry->Size());
             }
 
-            auto *varlen_pointer2 = read_row->AccessWithNullCheck(1);
-            if (varlen_pointer2 == nullptr) {
-              auto status UNUSED_ATTRIBUTE = string_builder2.AppendNull();
-            } else {
-              auto *entry = reinterpret_cast<storage::VarlenEntry *>(varlen_pointer2);
-              auto status2 UNUSED_ATTRIBUTE =
-                  string_builder2.Append(reinterpret_cast<const uint8_t *>(entry->Content()), entry->Size());
-            }
+//            auto *varlen_pointer2 = read_row->AccessWithNullCheck(1);
+//            if (varlen_pointer2 == nullptr) {
+//              auto status UNUSED_ATTRIBUTE = string_builder2.AppendNull();
+//            } else {
+//              auto *entry = reinterpret_cast<storage::VarlenEntry *>(varlen_pointer2);
+//              auto status2 UNUSED_ATTRIBUTE =
+//                  string_builder2.Append(reinterpret_cast<const uint8_t *>(entry->Content()), entry->Size());
+//            }
           }
-          std::shared_ptr<arrow::Array> string_column, string_column2;
-//          std::shared_ptr<arrow::Array> int_column, int_column2;
-//          auto status3 UNUSED_ATTRIBUTE = int_builder.Finish(&int_column);
+          std::shared_ptr<arrow::Array> string_column; //string_column2;
+          std::shared_ptr<arrow::Array> int_column; //int_column2;
+          auto status3 UNUSED_ATTRIBUTE = int_builder.Finish(&int_column);
 //          auto status12 UNUSED_ATTRIBUTE = int_builder2.Finish(&int_column2);
           auto status4 UNUSED_ATTRIBUTE = string_builder.Finish(&string_column);
-          auto status5 UNUSED_ATTRIBUTE = string_builder2.Finish(&string_column2);
+//          auto status5 UNUSED_ATTRIBUTE = string_builder2.Finish(&string_column2);
 
           std::vector<std::shared_ptr<arrow::Field>> schema_vector{arrow::field("1", arrow::utf8()),
-                                                                   arrow::field("2", arrow::utf8())};
+                                                                   arrow::field("2", arrow::uint64() )};
 
-          std::vector<std::shared_ptr<arrow::Array>> table_vector{string_column, string_column2};
+          std::vector<std::shared_ptr<arrow::Array>> table_vector{string_column, int_column};
           volatile std::shared_ptr<arrow::Table> table =
               arrow::Table::Make(std::make_shared<arrow::Schema>(schema_vector), table_vector);
         }
@@ -432,42 +432,42 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput08)(benchmark::State &stat
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman0)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman001)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman005)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman01)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman02)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman04)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman06)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman08)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction0)
 //    ->Unit(benchmark::kMillisecond)
@@ -513,42 +513,42 @@ BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman08)
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput0)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput001)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput005)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput01)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput02)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput04)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput06)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput08)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
-    ->MinTime(2)->Repetitions(10);
+    ->MinTime(2)->Repetitions(5);
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
 //    ->Unit(benchmark::kMillisecond)
