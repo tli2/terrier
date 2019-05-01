@@ -357,6 +357,74 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Compaction08)(benchmark::State &stat
 }
 
 // NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Gather0)(benchmark::State &state) {
+  RunGather(state, 0.0, storage::ArrowColumnType::GATHERED_VARLEN);
+}
+
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Gather001)(benchmark::State &state) {
+  RunGather(state, 0.01, storage::ArrowColumnType::GATHERED_VARLEN);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Gather005)(benchmark::State &state) {
+  RunGather(state, 0.05, storage::ArrowColumnType::GATHERED_VARLEN);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Gather01)(benchmark::State &state) {
+  RunGather(state, 0.1, storage::ArrowColumnType::GATHERED_VARLEN);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Gather02)(benchmark::State &state) {
+  RunGather(state, 0.2, storage::ArrowColumnType::GATHERED_VARLEN);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Gather04)(benchmark::State &state) {
+  RunGather(state, 0.4, storage::ArrowColumnType::GATHERED_VARLEN);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Gather06)(benchmark::State &state) {
+  RunGather(state, 0.6, storage::ArrowColumnType::GATHERED_VARLEN);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Gather08)(benchmark::State &state) {
+  RunGather(state, 0.8, storage::ArrowColumnType::GATHERED_VARLEN);
+}
+
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark,Dict0)(benchmark::State &state) {
+  RunGather(state, 0.0, storage::ArrowColumnType::DICTIONARY_COMPRESSED);
+}
+
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Dict001)(benchmark::State &state) {
+  RunGather(state, 0.01, storage::ArrowColumnType::DICTIONARY_COMPRESSED);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Dict005)(benchmark::State &state) {
+  RunGather(state, 0.05, storage::ArrowColumnType::DICTIONARY_COMPRESSED);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Dict01)(benchmark::State &state) {
+  RunGather(state, 0.1, storage::ArrowColumnType::DICTIONARY_COMPRESSED);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Dict02)(benchmark::State &state) {
+  RunGather(state, 0.2, storage::ArrowColumnType::DICTIONARY_COMPRESSED);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Dict04)(benchmark::State &state) {
+  RunGather(state, 0.4, storage::ArrowColumnType::DICTIONARY_COMPRESSED);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Dict06)(benchmark::State &state) {
+  RunGather(state, 0.6, storage::ArrowColumnType::DICTIONARY_COMPRESSED);
+}
+// NOLINTNEXTLINE
+BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Dict08)(benchmark::State &state) {
+  RunGather(state, 0.8, storage::ArrowColumnType::DICTIONARY_COMPRESSED);
+}
+
+// NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput0)(benchmark::State &state) {
   RunFull(state, 0.0);
 }
@@ -429,126 +497,209 @@ BENCHMARK_DEFINE_F(BlockCompactorBenchmark, Throughput08)(benchmark::State &stat
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman)->Unit(benchmark::kMillisecond)->UseManualTime()->MinTime(2);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman0)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(5);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman001)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(5);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman005)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(5);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman01)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(5);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman02)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(5);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman04)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(5);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman06)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(5);
-
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman08)
-    ->Unit(benchmark::kMillisecond)
-    ->UseManualTime()
-    ->MinTime(2)->Repetitions(5);
-
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction0)
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman0)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
+//    ->MinTime(2)->Repetitions(5);
 //
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction001)
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman001)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
+//    ->MinTime(2)->Repetitions(5);
 //
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction005)
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman005)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
+//    ->MinTime(2)->Repetitions(5);
 //
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction01)
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman01)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
+//    ->MinTime(2)->Repetitions(5);
 //
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction02)
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman02)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
+//    ->MinTime(2)->Repetitions(5);
 //
-//
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction04)
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman04)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
+//    ->MinTime(2)->Repetitions(5);
 //
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction06)
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman06)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
+//    ->MinTime(2)->Repetitions(5);
 //
-//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction08)
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Strawman08)
 //    ->Unit(benchmark::kMillisecond)
 //    ->UseManualTime()
-//    ->MinTime(2)->Repetitions(10);
+//    ->MinTime(2)->Repetitions(5);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput0)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction0)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(5);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput001)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction001)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(5);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput005)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction005)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(5);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput01)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction01)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(5);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput02)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction02)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(5);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput04)
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction04)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(5);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput06)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction06)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(5);
 
-BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput08)
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Compaction08)
     ->Unit(benchmark::kMillisecond)
     ->UseManualTime()
     ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Gather0)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Gather001)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Gather005)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Gather01)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Gather02)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Gather04)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Gather06)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Gather08)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Dict0)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Dict001)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Dict005)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Dict01)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark,Dict02)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Dict04)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Dict06)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Dict08)
+    ->Unit(benchmark::kMillisecond)
+    ->UseManualTime()
+    ->MinTime(2)->Repetitions(5);
+
+
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput0)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(5);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput001)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(5);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput005)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(5);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput01)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(5);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput02)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(5);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput04)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(5);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput06)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(5);
+//
+//BENCHMARK_REGISTER_F(BlockCompactorBenchmark, Throughput08)
+//    ->Unit(benchmark::kMillisecond)
+//    ->UseManualTime()
+//    ->MinTime(2)->Repetitions(5);
 
 //BENCHMARK_REGISTER_F(BlockCompactorBenchmark, DictionaryCompressionThroughput)
 //    ->Unit(benchmark::kMillisecond)
