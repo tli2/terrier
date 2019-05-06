@@ -247,9 +247,9 @@ sock_read_data(int sock, int read_size, char *local_store) {
  *
  ******************************************************************************/
 int
-poll_completion (struct resources *res)
+poll_completion (struct resources *res, size_t amount)
 {
-    struct ibv_wc wc;
+    struct ibv_wc wc[POLL_INTERVAL];
     unsigned long start_time_msec;
     unsigned long cur_time_msec;
     struct timeval cur_time;
@@ -260,7 +260,7 @@ poll_completion (struct resources *res)
     start_time_msec = (cur_time.tv_sec * 1000) + (cur_time.tv_usec / 1000);
     do
     {
-        poll_result = ibv_poll_cq (res->cq, 1, &wc);
+        poll_result = ibv_poll_cq (res->cq, amount, &wc[0]);
         gettimeofday (&cur_time, NULL);
         cur_time_msec = (cur_time.tv_sec * 1000) + (cur_time.tv_usec / 1000);
     }
@@ -270,26 +270,30 @@ poll_completion (struct resources *res)
     {
         /* poll CQ failed */
         fprintf (stderr, "poll CQ failed\n");
-        rc = 1;
+        rc = -1;
     }
     else if (poll_result == 0)
     {
         /* the CQ is empty */
         fprintf (stderr, "completion wasn't found in the CQ after timeout\n");
-        rc = 1;
+        rc = -1;
     }
     else
     {
-        /* CQE found */
-        fprintf (stdout, "completion was found in CQ with status 0x%x\n",
-                wc.status);
-        /* check the completion status (here we don't care about the completion opcode */
-        if (wc.status != IBV_WC_SUCCESS)
-        {
-            fprintf (stderr,
-                    "got bad completion with status: 0x%x, vendor syndrome: 0x%x\n",
-                    wc.status, wc.vendor_err);
-            rc = 1;
+        return poll_result;
+        // fprintf (stdout, "found %d completions!\n", poll_result);
+        for (int wcidx = 0; wcidx < poll_result; wcidx++) {
+            /* CQE found */
+            // fprintf (stdout, "completion was found in CQ with status 0x%x\n",
+            //         wc[wcidx].status);
+            /* check the completion status (here we don't care about the completion opcode */
+            if (wc[wcidx].status != IBV_WC_SUCCESS)
+            {
+                fprintf (stderr,
+                        "got bad completion with status: 0x%x, vendor syndrome: 0x%x\n",
+                        wc[wcidx].status, wc[wcidx].vendor_err);
+                rc = -1;
+            }
         }
     }
     return rc;
@@ -340,24 +344,24 @@ post_send (struct resources *res, ibv_wr_opcode opcode)
     rc = ibv_post_send (res->qp, &sr, &bad_wr);
     if (rc)
         fprintf (stderr, "failed to post SR\n");
-    else
-    {
-        switch (opcode)
-        {
-            case IBV_WR_SEND:
-                fprintf (stdout, "Send Request was posted\n");
-                break;
-            case IBV_WR_RDMA_READ:
-                fprintf (stdout, "RDMA Read Request was posted\n");
-                break;
-            case IBV_WR_RDMA_WRITE:
-                fprintf (stdout, "RDMA Write Request was posted\n");
-                break;
-            default:
-                fprintf (stdout, "Unknown Request was posted\n");
-                break;
-        }
-    }
+    // else
+    // {
+    //     switch (opcode)
+    //     {
+    //         case IBV_WR_SEND:
+    //             fprintf (stdout, "Send Request was posted\n");
+    //             break;
+    //         case IBV_WR_RDMA_READ:
+    //             fprintf (stdout, "RDMA Read Request was posted\n");
+    //             break;
+    //         case IBV_WR_RDMA_WRITE:
+    //             fprintf (stdout, "RDMA Write Request was posted\n");
+    //             break;
+    //         default:
+    //             fprintf (stdout, "Unknown Request was posted\n");
+    //             break;
+    //     }
+    // }
     return rc;
 }
 
@@ -522,7 +526,7 @@ resources_create (struct resources *res, struct config_t &config)
         goto resources_create_exit;
     }
     /* each side will send only one WR, so Completion Queue with 1 entry is enough */
-    cq_size = 10;
+    cq_size = POLL_INTERVAL;
     res->cq = ibv_create_cq (res->ib_ctx, cq_size, NULL, NULL, 0);
     if (!res->cq)
     {
@@ -547,10 +551,10 @@ resources_create (struct resources *res, struct config_t &config)
     /* create the Queue Pair */
     memset (&qp_init_attr, 0, sizeof (qp_init_attr));
     qp_init_attr.qp_type = IBV_QPT_RC;
-    qp_init_attr.sq_sig_all = 1;
+    qp_init_attr.sq_sig_all = 0;
     qp_init_attr.send_cq = res->cq;
     qp_init_attr.recv_cq = res->cq;
-    qp_init_attr.cap.max_send_wr = 1;
+    qp_init_attr.cap.max_send_wr = POLL_INTERVAL;
     qp_init_attr.cap.max_recv_wr = 1;
     qp_init_attr.cap.max_send_sge = 1;
     qp_init_attr.cap.max_recv_sge = 1;
@@ -609,50 +613,6 @@ resources_create_exit:
         }
     }
     return rc;
-}
-
-int
-resources_clone (struct resources *res, struct resources *res_old) {
-    struct ibv_qp_init_attr qp_init_attr;
-
-    // copy over everything except for buf and size
-    char *buf = res->buf;
-    int size = res->size;
-    memcpy(res, res_old, sizeof(struct resources));
-    res->buf = buf;
-    res->size = size;
-
-    // create new mr and qp for new resource
-    int mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
-        IBV_ACCESS_REMOTE_WRITE;
-    res->mr = ibv_reg_mr (res->pd, res->buf, res->size, mr_flags);
-    if (!res->mr)
-    {
-        fprintf (stderr, "ibv_reg_mr failed with mr_flags=0x%x\n", mr_flags);
-        return 1;
-    }
-    fprintf (stdout,
-            "MR was registered with addr=%p, lkey=0x%x, rkey=0x%x, flags=0x%x\n",
-            res->buf, res->mr->lkey, res->mr->rkey, mr_flags);
-    /* create the Queue Pair */
-    memset (&qp_init_attr, 0, sizeof (qp_init_attr));
-    qp_init_attr.qp_type = IBV_QPT_RC;
-    qp_init_attr.sq_sig_all = 1;
-    qp_init_attr.send_cq = res->cq;
-    qp_init_attr.recv_cq = res->cq;
-    qp_init_attr.cap.max_send_wr = 1;
-    qp_init_attr.cap.max_recv_wr = 1;
-    qp_init_attr.cap.max_send_sge = 1;
-    qp_init_attr.cap.max_recv_sge = 1;
-    res->qp = ibv_create_qp (res->pd, &qp_init_attr);
-    if (!res->qp)
-    {
-        fprintf (stderr, "failed to create QP\n");
-        ibv_dereg_mr (res->mr);
-        return 1;
-    }
-    fprintf (stdout, "QP was created, QP number=0x%x\n", res->qp->qp_num);
-    return 0;
 }
 
 /******************************************************************************
@@ -717,7 +677,7 @@ modify_qp_to_rtr (struct ibv_qp *qp, uint32_t remote_qpn, uint16_t dlid,
     int rc;
     memset (&attr, 0, sizeof (attr));
     attr.qp_state = IBV_QPS_RTR;
-    attr.path_mtu = IBV_MTU_256;
+    attr.path_mtu = IBV_MTU_1024;
     attr.dest_qp_num = remote_qpn;
     attr.rq_psn = 0;
     attr.max_dest_rd_atomic = 1;

@@ -38,11 +38,13 @@ struct resources
     int sock;                     /* TCP socket file descriptor */
 };
 
+#define POLL_INTERVAL 100
+
 int sock_connect (const char *servername, int port);
 int sock_sync_data (int sock, int xfer_size, char *local_data, char *remote_data);
 int sock_write_data(int sock, int xfer_size, char *local_data);
 int sock_read_data(int sock, int max_size, char *local_store);
-int poll_completion (struct resources *res);
+int poll_completion (struct resources *res, size_t amount);
 int post_send (struct resources *res, ibv_wr_opcode opcode);
 int post_receive (struct resources *res);
 

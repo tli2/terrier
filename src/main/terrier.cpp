@@ -191,7 +191,6 @@ class TpccLoader {
             if (buf_size == 0) break;
             uint8_t *data = (uint8_t *)buffer->data();
             
-
             if (0 != do_send(&res, reinterpret_cast<char *>(data), buf_size, remote_curr_addr)) return;
             remote_curr_addr += buf_size;
           }

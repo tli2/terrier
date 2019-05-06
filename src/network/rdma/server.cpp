@@ -44,6 +44,8 @@
 
 // struct size_pair sizes = {0, 0};
 
+size_t num_sends_since_poll = 0;
+
 int do_send(struct resources *res, char *buf, size_t buf_size, uint64_t remote_addr) {
   int mr_flags = IBV_ACCESS_LOCAL_WRITE;
   res->buf = buf;
@@ -53,13 +55,21 @@ int do_send(struct resources *res, char *buf, size_t buf_size, uint64_t remote_a
   // fprintf (stdout, "Sending address 0x%x to 0x%x\n", block, res.remote_props.addr);
   if (post_send (res, IBV_WR_RDMA_WRITE))
   {
-      fprintf (stderr, "failed to post SR\n");
-      return 1;
+    fprintf (stderr, "failed to post SR\n");
+    return 1;
   }
-  if (poll_completion (res))
-  {
+  num_sends_since_poll++;
+
+  if (num_sends_since_poll >= POLL_INTERVAL) {
+    size_t amount = POLL_INTERVAL;
+    size_t num_completed = poll_completion (res, amount);
+    if (num_completed <= 0)
+    {
       fprintf (stderr, "poll completion failed\n");
       return 1;
+    }
+    amount -= num_completed;
+    num_sends_since_poll = amount;
   }
   return 0;
 }
