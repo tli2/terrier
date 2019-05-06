@@ -79,7 +79,18 @@ int main(int argc, char *argv[]) {
     fprintf (stderr, "failed to connect QPs\n");
     return 1;
   }
-  
+
+  size_t num_polls = 0;
+  while (true) {
+    if (poll_completion (&res))
+    {
+        fprintf (stderr, "poll completion failed\n");
+        break;
+    }
+    num_polls++;
+  }
+  fprintf (stdout, "num_polls: %zu\n", num_polls);
+
   // wait for server to tell us it's done
   /* Sync so server will know that client is done mucking with its memory */
   char temp_char = 'W';

@@ -16,8 +16,8 @@
 
 #include "rdma.h"
 
-/* poll CQ timeout in millisec (2 seconds) */
-#define MAX_POLL_CQ_TIMEOUT 2000
+/* poll CQ timeout in millisec (20 seconds) */
+#define MAX_POLL_CQ_TIMEOUT 20000
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 static inline uint64_t
 htonll (uint64_t x)
@@ -520,7 +520,7 @@ resources_create (struct resources *res, struct config_t &config)
         goto resources_create_exit;
     }
     /* each side will send only one WR, so Completion Queue with 1 entry is enough */
-    cq_size = 10;
+    cq_size = 100;
     res->cq = ibv_create_cq (res->ib_ctx, cq_size, NULL, NULL, 0);
     if (!res->cq)
     {
@@ -549,7 +549,7 @@ resources_create (struct resources *res, struct config_t &config)
     qp_init_attr.send_cq = res->cq;
     qp_init_attr.recv_cq = res->cq;
     qp_init_attr.cap.max_send_wr = 1;
-    qp_init_attr.cap.max_recv_wr = 1;
+    qp_init_attr.cap.max_recv_wr = 100;
     qp_init_attr.cap.max_send_sge = 1;
     qp_init_attr.cap.max_recv_sge = 1;
     res->qp = ibv_create_qp (res->pd, &qp_init_attr);
@@ -671,7 +671,7 @@ modify_qp_to_rtr (struct ibv_qp *qp, uint32_t remote_qpn, uint16_t dlid,
     int rc;
     memset (&attr, 0, sizeof (attr));
     attr.qp_state = IBV_QPS_RTR;
-    attr.path_mtu = IBV_MTU_256;
+    attr.path_mtu = IBV_MTU_1024;
     attr.dest_qp_num = remote_qpn;
     attr.rq_psn = 0;
     attr.max_dest_rd_atomic = 1;
