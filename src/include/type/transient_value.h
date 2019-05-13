@@ -26,6 +26,8 @@ class TransientValuePeeker;
  * C types are extracted from TransientValue objects using the TransientValuePeeker class.
  * @see TransientValueFactory
  * @see TransientValuePeeker
+ *
+ *
  */
 class TransientValue {
   friend class TransientValueFactory;                     // Access to constructor

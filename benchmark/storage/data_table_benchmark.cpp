@@ -1,3 +1,4 @@
+
 #include <memory>
 #include <vector>
 
@@ -53,8 +54,8 @@ class DataTableBenchmark : public benchmark::Fixture {
   const storage::BlockLayout layout_{{column_size_, column_size_, column_size_}};
 
   // Tuple properties
-  const storage::ProjectedRowInitializer initializer_ = storage::ProjectedRowInitializer::CreateProjectedRowInitializer(
-      layout_, StorageTestUtil::ProjectionListAllColumns(layout_));
+  const storage::ProjectedRowInitializer initializer_ =
+      storage::ProjectedRowInitializer::Create(layout_, StorageTestUtil::ProjectionListAllColumns(layout_));
 
   // Workload
   const uint32_t num_inserts_ = 10000000;
@@ -100,31 +101,6 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, SimpleInsert)(benchmark::State &state) {
 // Insert the num_inserts_ of tuples into a DataTable concurrently
 // NOLINTNEXTLINE
 BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentInsert)(benchmark::State &state) {
-  storage::DataTable table(&block_store_, layout_, storage::layout_version_t(0));
-  // We can use dummy timestamps here since we're not invoking concurrency control
-  transaction::TransactionContext txn(transaction::timestamp_t(0), transaction::timestamp_t(0), &buffer_pool_,
-                                      LOGGING_DISABLED);
-  std::vector<storage::TupleSlot> slots;
-  for (uint32_t i = 0; i < num_inserts_; ++i)
-    slots.push_back(table.Insert(&txn, *redo_));
-
-  auto workload = [&](uint32_t id) {
-    // We can use dummy timestamps here since we're not invoking concurrency control
-    transaction::TransactionContext txn(transaction::timestamp_t(0), transaction::timestamp_t(0), &buffer_pool_,
-                                        LOGGING_DISABLED);
-    for (uint32_t i = 0; i < num_inserts_ / num_threads_; i++) table.Update(&txn, slots[num_threads_ * i + id], *redo_);
-  };
-  common::WorkerPool thread_pool(num_threads_, {});
-  // NOLINTNEXTLINE
-  for (auto _ : state) {
-    MultiThreadTestUtil::RunThreadsUntilFinish(&thread_pool, num_threads_, workload);
-  }
-
-  state.SetItemsProcessed(state.iterations() * num_inserts_);
-}
-
-// NOLINTNEXTLINE
-BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentUpdate)(benchmark::State &state) {
   // NOLINTNEXTLINE
   for (auto _ : state) {
     storage::DataTable table(&block_store_, layout_, storage::layout_version_t(0));
@@ -224,16 +200,13 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomRead)(benchmark::State &s
   state.SetItemsProcessed(state.iterations() * num_reads_);
 }
 
-//BENCHMARK_REGISTER_F(DataTableBenchmark, SimpleInsert)->Unit(benchmark::kMillisecond);
-//
-//BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime();
-//
-//BENCHMARK_REGISTER_F(DataTableBenchmark, SequentialRead)->Unit(benchmark::kMillisecond);
-//
-//BENCHMARK_REGISTER_F(DataTableBenchmark, RandomRead)->Unit(benchmark::kMillisecond);
-//
-//BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentRandomRead)->Unit(benchmark::kMillisecond)->UseRealTime();
+BENCHMARK_REGISTER_F(DataTableBenchmark, SimpleInsert)->Unit(benchmark::kMillisecond);
 
-BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentUpdate)->Unit(benchmark::kMillisecond)->UseRealTime()->MinTime(5);
+BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime();
 
+BENCHMARK_REGISTER_F(DataTableBenchmark, SequentialRead)->Unit(benchmark::kMillisecond);
+
+BENCHMARK_REGISTER_F(DataTableBenchmark, RandomRead)->Unit(benchmark::kMillisecond);
+
+BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentRandomRead)->Unit(benchmark::kMillisecond)->UseRealTime();
 }  // namespace terrier

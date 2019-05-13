@@ -12,6 +12,5 @@ if (TERRIER_BUILD_BENCHMARKS)
 
     add_subdirectory(catalog)
     add_subdirectory(storage)
-    add_subdirectory(tpcc)
     add_subdirectory(transaction)
 endif()

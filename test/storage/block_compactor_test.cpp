@@ -52,7 +52,7 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
   }
 
   storage::BlockCompactor compactor;
-  compactor.PutInQueue({block, &table});
+  compactor.PutInQueue(block);
   compactor.ProcessCompactionQueue(&txn_manager);  // should always succeed with no other threads
 
   auto initializer = storage::ProjectedRowInitializer::Create(layout, StorageTestUtil::ProjectionListAllColumns(layout));
@@ -78,9 +78,9 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
         tuples.erase(slot);
       } else {
         // Need to copy and do quadratic comparison later.
-        byte *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
-        std::memcpy(buffer, read_row, initializer.ProjectedRowSize());
-        moved_rows.push_back(reinterpret_cast<storage::ProjectedRow *>(buffer));
+        byte *local_buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
+        std::memcpy(local_buffer, read_row, initializer.ProjectedRowSize());
+        moved_rows.push_back(reinterpret_cast<storage::ProjectedRow *>(local_buffer));
       }
     }
   }
@@ -109,7 +109,7 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
   gc.PerformGarbageCollection();  // Second call to deallocate.
   // Deallocated arrow buffers
   for (const auto &col_id : layout.AllColumns()) {
-    arrow_metadata.Deallocate(layout, col_id);
+    arrow_metadata.GetColumnInfo(layout, col_id).Deallocate();
   }
   delete block;
 }
