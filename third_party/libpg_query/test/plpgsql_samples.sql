@@ -118,7 +118,7 @@ CREATE OR REPLACE FUNCTION cs_create_job(v_job_id integer) RETURNS void AS $$
 DECLARE
     a_running_job_count integer;
 BEGIN
-    MOVE TABLE cs_jobs IN EXCLUSIVE MODE;
+    LOCK TABLE cs_jobs IN EXCLUSIVE MODE;
 
     SELECT count(*) INTO a_running_job_count FROM cs_jobs WHERE end_stamp IS NULL;
 

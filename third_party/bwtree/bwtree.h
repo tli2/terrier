@@ -2566,7 +2566,7 @@ class BwTree : public BwTreeBase {
   /*
    * GetNextNodeID() - Thread-safe lock free method to get next node ID
    *
-   * This function basically compiles to MOVE XADD instruction on x86
+   * This function basically compiles to LOCK XADD instruction on x86
    * which is guaranteed to execute atomically
    */
   inline NodeID GetNextNodeID() {

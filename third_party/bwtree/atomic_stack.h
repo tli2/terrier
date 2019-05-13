@@ -15,13 +15,13 @@ namespace third_party::bwtree {
  * being compared has been modified several times with the final value
  * unchanged. In this case we attach a monotomically increasing version
  * number with the pointer, and update them using double word compare and swap
- * which will be compiled into MOVE CMPXCHG16B on x86-64
+ * which will be compiled into LOCK CMPXCHG16B on x86-64
  *
  * Since CMPXCHG16B requires 16 byte memory alignment, if this object is used
  * as a member or stack variable it should be specially treated and allocated
  * on a 16 byte aligned address.
  *
- * Double word load will be translated into MOVE CMPXCHG16B with 128 bit value 0
+ * Double word load will be translated into LOCK CMPXCHG16B with 128 bit value 0
  * If comparison is successful then we know the destination is 0. If CAS fails
  * then the destination is loaded into RDX:RAX. In both case RDX:RAX could
  * be loaded with the value in atomic variable.

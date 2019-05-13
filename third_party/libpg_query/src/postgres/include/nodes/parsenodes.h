@@ -2866,7 +2866,7 @@ typedef struct DiscardStmt
 } DiscardStmt;
 
 /* ----------------------
- *		MOVE Statement
+ *		LOCK Statement
  * ----------------------
  */
 typedef struct LockStmt
