@@ -1,11 +1,8 @@
 #include "storage/block_compactor.h"
-#include "storage/dirty_globals.h"
 #include <algorithm>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <tpcc/database.h>
-#include "tpcc/database.h"
 #include "storage/sql_table.h"
 #include "storage/index/bwtree_index.h"
 #include "storage/index/index_defs.h"
@@ -31,7 +28,6 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
       }
       case BlockState::COOLING: {
         if (!CheckForVersionsAndGaps(block->data_table_->accessor_, block)) {
-//          printf("Gathering of block %p failed\n", entry.first);
           continue;
         }
         // TODO(Tianyu): The use of transaction here is pretty sketchy	
@@ -39,7 +35,6 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
         GatherVarlens(txn, block, block->data_table_);
         controller.GetBlockState()->store(BlockState::FROZEN);
         txn_manager->Commit(txn, NoOp, nullptr);
-//        printf("Gathering of block %p successful!\n", entry.first);
         break;
       }
       case BlockState::FROZEN:
@@ -63,10 +58,8 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
 //      cg->txn_->compacted_ = block;
 //      cg->txn_->table_ = block->data_table_;
 //    }
-//          printf("compaction of block %p successful\n", entry.first);
     txn_manager->Commit(cg->txn_, NoOp, nullptr);
   } else {
-//          printf("compaction of block %p failed!!!\n", entry.first);
     txn_manager->Abort(cg->txn_);
   }
 }
@@ -182,72 +175,6 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   // the case.
   bool ret = cg->table_->Delete(cg->txn_, from);
   if (!ret) return false;
-  /*
-  if (cg->table_ == DirtyGlobals::tpcc_db->history_table_->table_.data_table) {
-    // No Indexes
-//    throw std::runtime_error("no compaction should happen on the history table");
-    return true;
-  } else if (cg->table_ == DirtyGlobals::tpcc_db->item_table_->table_.data_table) {
-    // No compaction should ever happen
-    throw std::runtime_error("no compaction should happen on the item table");
-  } else if (cg->table_ == DirtyGlobals::tpcc_db->order_table_->table_.data_table) {
-    const auto order_key_pr_initializer = DirtyGlobals::tpcc_db->order_index_->GetProjectedRowInitializer();
-    TERRIER_ASSERT(order_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
-    auto *const order_key = order_key_pr_initializer.InitializeRow(buf_);
-
-    std::memcpy(order_key->AccessForceNotNull(DirtyGlobals::o_id_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
-                sizeof(int32_t));
-    std::memcpy(order_key->AccessForceNotNull(DirtyGlobals::o_d_id_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_d_id_insert_pr_offset),
-                sizeof(int8_t));
-    std::memcpy(order_key->AccessForceNotNull(DirtyGlobals::o_w_id_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_w_id_insert_pr_offset),
-                sizeof(int8_t));
-    DirtyGlobals::tpcc_db->order_index_->Insert(*order_key, to);
-
-    // insert in Order secondary index
-    const auto order_secondary_key_pr_initializer = DirtyGlobals::tpcc_db->order_secondary_index_->GetProjectedRowInitializer();
-    TERRIER_ASSERT(order_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
-    auto *const order_secondary_key =
-        order_secondary_key_pr_initializer.InitializeRow(buf_);
-    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_id_secondary_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_id_insert_pr_offset),
-                sizeof(int32_t));
-    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_d_id_secondary_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_d_id_insert_pr_offset),
-                sizeof(int8_t));
-    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_w_id_secondary_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_w_id_insert_pr_offset),
-                sizeof(int8_t));
-    std::memcpy(order_secondary_key->AccessForceNotNull(DirtyGlobals::o_c_id_secondary_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::o_c_id_insert_pr_offset),
-                sizeof(int32_t));
-    DirtyGlobals::tpcc_db->order_secondary_index_->Insert(*order_secondary_key, to);
-    return true;
-  } else if (cg->table_ == DirtyGlobals::tpcc_db->order_line_table_->table_.data_table) {
-    const auto order_line_key_pr_initializer = DirtyGlobals::tpcc_db->order_line_index_->GetProjectedRowInitializer();
-    TERRIER_ASSERT(order_line_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
-    auto *const order_line_key = order_line_key_pr_initializer.InitializeRow(buf_);
-
-    std::memcpy(order_line_key->AccessForceNotNull(DirtyGlobals::ol_w_id_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_w_id_insert_pr_offset),
-                sizeof(int8_t));
-    std::memcpy(order_line_key->AccessForceNotNull(DirtyGlobals::ol_d_id_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_d_id_insert_pr_offset),
-                sizeof(int8_t));
-    std::memcpy(order_line_key->AccessForceNotNull(DirtyGlobals::ol_o_id_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_o_id_insert_pr_offset),
-                sizeof(int32_t));
-    std::memcpy(order_line_key->AccessForceNotNull(DirtyGlobals::ol_number_key_pr_offset),
-                record->Delta()->AccessWithNullCheck(DirtyGlobals::ol_number_insert_pr_offset),
-                sizeof(int8_t));
-
-    DirtyGlobals::tpcc_db->order_line_index_->Insert(*order_line_key, to);
-    return true;
-  } else {
-    throw std::runtime_error("unexpected table being compacted");
-  }*/
   tuples_moved_++;
   return true;
 }
@@ -278,7 +205,6 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
 
     // Not contiguous. If the code reaches here the slot must be allocated, and we have seen an unallocated slot before
     if (unallocated_region_start) {
-//      printf("not contiguous\n");
       return false;
     }
 
@@ -286,7 +212,6 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
     // Check that there are no versions alive
     auto *record = version_ptrs[offset];
     if (record != nullptr) {
-//      printf("has versions\n");
       return false;
     }
   }
@@ -297,7 +222,6 @@ bool BlockCompactor::CheckForVersionsAndGaps(const TupleAccessStrategy &accessor
   // At this point we are guaranteed to complete the transformation process. We can start modifying block
   // header in place.
   if (ret) accessor.GetArrowBlockMetadata(block).NumRecords() = num_records;
-//  if (!ret) printf("compare exchange failed\n");
   return ret;
 }
 

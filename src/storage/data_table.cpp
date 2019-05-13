@@ -6,8 +6,7 @@
 #include "storage/storage_util.h"
 #include "transaction/transaction_context.h"
 #include "transaction/transaction_util.h"
-#include "storage/dirty_globals.h"
-#define MAX_THREADS 40
+#include "storage/block_access_controller.h"
 
 namespace terrier::storage {
 DataTable::DataTable(BlockStore *const store, const BlockLayout &layout, const layout_version_t layout_version)
@@ -16,8 +15,6 @@ DataTable::DataTable(BlockStore *const store, const BlockLayout &layout, const l
                  "First column must have size 8 for the version chain.");
   TERRIER_ASSERT(layout.NumColumns() > NUM_RESERVED_COLUMNS,
                  "First column is reserved for version info, second column is reserved for logical delete.");
-  for (uint32_t i = 0; i < MAX_THREADS; i ++)
-    insertion_heads_.push_back(nullptr);
 }
 
 DataTable::~DataTable() {
@@ -43,10 +40,10 @@ void DataTable::Scan(transaction::TransactionContext *const txn, SlotIterator *c
   // safe
   uint32_t filled = 0;
   while (filled < out_buffer->MaxTuples() && *start_pos != end()) {
-    ProjectedColumns::RowView row = out_buffer->InterpretAsRow(accessor_.GetBlockLayout(), filled);
+    ProjectedColumns::RowView row = out_buffer->InterpretAsRow(filled);
     const TupleSlot slot = **start_pos;
     // Only fill the buffer with valid, visible tuples
-    if (accessor_.Allocated(slot) && SelectIntoBuffer(txn, slot, &row)) {
+    if (SelectIntoBuffer(txn, slot, &row)) {
       out_buffer->TupleSlots()[filled] = slot;
       filled++;
     }
@@ -136,10 +133,8 @@ TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const Pr
   // to change the insertion head. We do not expect this loop to be executed more than
   // twice, but there is technically a possibility for blocks with only a few slots.
   TupleSlot result;
-  uint64_t id = ((uint64_t)pthread_self()) % MAX_THREADS;
   while (true) {
-    RawBlock *block = insertion_heads_[id];
-//    RawBlock *block = insertion_head_.load();
+    RawBlock *block = insertion_head_.load();
     if (block != nullptr && accessor_.Allocate(block, &result)) break;
     NewBlock(block);
   }
@@ -203,6 +198,8 @@ bool DataTable::SelectIntoBuffer(transaction::TransactionContext *const txn, con
                  "The output buffer never returns the version pointer columns, so it should have "
                  "fewer attributes.");
   TERRIER_ASSERT(out_buffer->NumColumns() > 0, "The output buffer should return at least one attribute.");
+  // This cannot be visible if it's already deallocated.
+  if (!accessor_.Allocated(slot)) return false;
 
   UndoRecord *version_ptr;
   bool visible;
@@ -216,11 +213,14 @@ bool DataTable::SelectIntoBuffer(transaction::TransactionContext *const txn, con
                      "Output buffer should not read the version pointer column.");
       StorageUtil::CopyAttrIntoProjection(accessor_, slot, out_buffer, i);
     }
+
+    // TODO(Matt): might not need to read visible in the loop (move after?) but not confident without large random tests
+    // We still need to check the allocated bit because GC could have flipped it since last check
+    visible = Visible(slot, accessor_);
+
     // Here we will need to check that the version pointer did not change during our read. If it did, the content
     // we have read might have been rolled back and an abort has already unlinked the associated undo-record,
     // we will have to loop around to avoid a dirty read.
-    // TODO(Matt): might not need to read visible in the loop (move after?) but not confident without large random tests
-    visible = Visible(slot, accessor_);
   } while (version_ptr != AtomicallyReadVersionPtr(slot, accessor_));
 
   // Nullptr in version chain means no version visible to any transaction alive at this point.
@@ -303,18 +303,14 @@ bool DataTable::CompareAndSwapVersionPtr(const TupleSlot slot, const TupleAccess
 }
 
 void DataTable::NewBlock(RawBlock *expected_val) {
-  uint64_t id = ((uint64_t)pthread_self()) % MAX_THREADS;
   common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
   // Want to stop early if another thread is already getting a new block
-  if (expected_val != insertion_heads_[id]) return;
-//  if (expected_val != insertion_head_) return;
+  if (expected_val != insertion_head_) return;
   RawBlock *new_block = block_store_->Get();
   accessor_.InitializeRawBlockForDataTable(this, new_block, layout_version_);
-  insertion_heads_[id] = new_block;
-//  insertion_head_ = new_block;
+  insertion_head_ = new_block;
   blocks_.push_back(new_block);
   data_table_counter_.IncrementNumNewBlock(1);
-//  if (this == DirtyGlobals::history) printf("allocating new block\n");
 }
 
 void DataTable::DeallocateVarlensOnShutdown(RawBlock *block) {

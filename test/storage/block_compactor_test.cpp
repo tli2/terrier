@@ -55,7 +55,7 @@ struct BlockCompactorTest : public ::terrier::TerrierTest {
   compactor.PutInQueue({block, &table});
   compactor.ProcessCompactionQueue(&txn_manager);  // should always succeed with no other threads
 
-  storage::ProjectedRowInitializer initializer(layout, StorageTestUtil::ProjectionListAllColumns(layout));
+  auto initializer = storage::ProjectedRowInitializer::Create(layout, StorageTestUtil::ProjectionListAllColumns(layout));
   byte *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedRowSize());
   auto *read_row = initializer.InitializeRow(buffer);
   std::vector<storage::ProjectedRow *> moved_rows;

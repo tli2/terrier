@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -27,7 +28,7 @@ class Schema {
   class Column {
    public:
     /**
-     * Instantiates a Column object, primary to be used for building a Schema object
+     * Instantiates a Column object, primary to be used for building a Schema object (non VARLEN attributes)
      * @param name column name
      * @param type SQL type for this column
      * @param nullable true if the column is nullable, false otherwise
@@ -45,9 +46,10 @@ class Schema {
     }
 
     /**
-     * Instantiates a Column object, primary to be used for building a Schema object
+     * Instantiates a Column object, primary to be used for building a Schema object (VARLEN attributes only)
      * @param name column name
      * @param type SQL type for this column
+     * @param max_varlen_size the maximum length of the varlen entry
      * @param nullable true if the column is nullable, false otherwise
      * @param oid internal unique identifier for this column
      */
@@ -76,13 +78,16 @@ class Schema {
      */
     uint8_t GetAttrSize() const { return attr_size_; }
 
+    /**
+     * @return The maximum length of this column (only valid if it's VARLEN)
+     */
     uint16_t GetMaxVarlenSize() const {
       TERRIER_ASSERT(attr_size_ == VARLEN_COLUMN, "This attribute has no meaning for non-VARLEN columns.");
       return max_varlen_size_;
     }
 
     /**
-     * @return true if the attribute is inlined, false if it's a pointer to a varlen entry
+     * @return SQL type for this column
      */
     type::TypeId GetType() const { return type_; }
     /**
@@ -90,13 +95,45 @@ class Schema {
      */
     col_oid_t GetOid() const { return oid_; }
 
+    /**
+     * Default constructor for deserialization
+     */
+    Column() = default;
+
+    /**
+     * @return column serialized to json
+     */
+    nlohmann::json ToJson() const {
+      nlohmann::json j;
+      j["name"] = name_;
+      j["type"] = type_;
+      j["attr_size"] = attr_size_;
+      j["max_varlen_size"] = max_varlen_size_;
+      j["nullable"] = nullable_;
+      j["oid"] = oid_;
+      return j;
+    }
+
+    /**
+     * Deserializes a column
+     * @param j serialized column
+     */
+    void FromJson(const nlohmann::json &j) {
+      name_ = j.at("name").get<std::string>();
+      type_ = j.at("type").get<type::TypeId>();
+      attr_size_ = j.at("attr_size").get<uint8_t>();
+      max_varlen_size_ = j.at("max_varlen_size").get<uint16_t>();
+      nullable_ = j.at("nullable").get<bool>();
+      oid_ = j.at("oid").get<col_oid_t>();
+    }
+
    private:
-    const std::string name_;
-    const type::TypeId type_;
+    std::string name_;
+    type::TypeId type_;
     uint8_t attr_size_;
     uint16_t max_varlen_size_;
-    const bool nullable_;
-    const col_oid_t oid_;
+    bool nullable_;
+    col_oid_t oid_;
     // TODO(Matt): default value would go here
     // Value default_;
   };
@@ -112,6 +149,12 @@ class Schema {
       col_oid_to_offset[columns_[i].GetOid()] = i;
     }
   }
+
+  /**
+   * Default constructor used for deserialization
+   */
+  Schema() = default;
+
   /**
    * @param col_offset offset into the schema specifying which Column to access
    * @return description of the schema for a specific column
@@ -129,13 +172,58 @@ class Schema {
     const uint32_t col_offset = col_oid_to_offset.at(col_oid);
     return columns_[col_offset];
   }
+
+  /**
+   * @param name name of the Column to access
+   * @return description of the schema for a specific column
+   * @throw std::out_of_range if the column doesn't exist.
+   */
+  Column GetColumn(const std::string &name) const {
+    for (auto &c : columns_) {
+      if (c.GetName() == name) {
+        return c;
+      }
+    }
+    throw std::out_of_range("Column name doesn't exist");
+  }
   /**
    * @return description of this SQL table's schema as a collection of Columns
    */
   const std::vector<Column> &GetColumns() const { return columns_; }
 
+  /**
+   * @return serialized schema
+   */
+  nlohmann::json ToJson() const {
+    // Only need to serialize columns_ because col_oid_to_offset is derived from columns_
+    nlohmann::json j;
+    j["columns"] = columns_;
+    return j;
+  }
+
+  /**
+   * Should not be used. See TERRIER_ASSERT
+   */
+  void FromJson(const nlohmann::json &j) {
+    TERRIER_ASSERT(false, "Schema::FromJson should never be invoked directly; use DeserializeSchema");
+  }
+
+  /**
+   * Deserialize a schema
+   * @param j json containing serialized schema
+   * @return deserialized schema object
+   */
+  std::shared_ptr<Schema> static DeserializeSchema(const nlohmann::json &j) {
+    auto columns = j.at("columns").get<std::vector<Schema::Column>>();
+    return std::make_shared<Schema>(columns);
+  }
+
  private:
   const std::vector<Column> columns_;
   std::unordered_map<col_oid_t, uint32_t> col_oid_to_offset;
 };
+
+DEFINE_JSON_DECLARATIONS(Schema::Column);
+DEFINE_JSON_DECLARATIONS(Schema);
+
 }  // namespace terrier::catalog

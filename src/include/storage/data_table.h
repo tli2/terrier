@@ -241,8 +241,7 @@ class DataTable {
   mutable common::SpinLatch blocks_latch_;
   // to avoid having to grab a latch every time we insert. Failures are very, very infrequent since these
   // only happen when blocks are full, thus we can afford to be optimistic
-  std::vector<RawBlock *> insertion_heads_;
-//  std::atomic<RawBlock *> insertion_head_ = nullptr;
+  std::atomic<RawBlock *> insertion_head_ = nullptr;
   mutable DataTableCounter data_table_counter_;
 
   // A templatized version for select, so that we can use the same code for both row and column access.

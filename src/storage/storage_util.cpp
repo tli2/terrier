@@ -98,51 +98,6 @@ uint32_t StorageUtil::PadUpToSize(const uint8_t word_size, const uint32_t offset
   return (offset + mask) & (~mask);
 }
 
-std::pair<BlockLayout, ColumnMap> StorageUtil::BlockLayoutFromSchema(const catalog::Schema &schema) {
-  // Begin with the NUM_RESERVED_COLUMNS in the attr_sizes
-  std::vector<uint8_t> attr_sizes;
-  attr_sizes.reserve(NUM_RESERVED_COLUMNS + schema.GetColumns().size());
-
-  for (uint8_t i = 0; i < NUM_RESERVED_COLUMNS; i++) {
-    attr_sizes.emplace_back(8);
-  }
-
-  TERRIER_ASSERT(attr_sizes.size() == NUM_RESERVED_COLUMNS,
-                 "attr_sizes should be initialized with NUM_RESERVED_COLUMNS elements.");
-
-  for (const auto &column : schema.GetColumns()) {
-    attr_sizes.push_back(column.GetAttrSize());
-  }
-
-  auto offsets = ComputeBaseAttributeOffsets(attr_sizes, NUM_RESERVED_COLUMNS);
-
-  ColumnMap col_oid_to_id;
-  // Build the map from Schema columns to underlying columns
-  for (const auto &column : schema.GetColumns()) {
-    switch (column.GetAttrSize()) {
-      case VARLEN_COLUMN:
-        col_oid_to_id[column.GetOid()] = col_id_t(offsets[0]++);
-        break;
-      case 8:
-        col_oid_to_id[column.GetOid()] = col_id_t(offsets[1]++);
-        break;
-      case 4:
-        col_oid_to_id[column.GetOid()] = col_id_t(offsets[2]++);
-        break;
-      case 2:
-        col_oid_to_id[column.GetOid()] = col_id_t(offsets[3]++);
-        break;
-      case 1:
-        col_oid_to_id[column.GetOid()] = col_id_t(offsets[4]++);
-        break;
-      default:
-        throw std::runtime_error("unexpected switch case value");
-    }
-  }
-
-  return {storage::BlockLayout(attr_sizes), col_oid_to_id};
-}
-
 std::vector<uint16_t> StorageUtil::ComputeBaseAttributeOffsets(const std::vector<uint8_t> &attr_sizes,
                                                                uint16_t num_reserved_columns) {
   // First compute {count_varlen, count_8, count_4, count_2, count_1}
@@ -184,6 +139,16 @@ std::vector<uint16_t> StorageUtil::ComputeBaseAttributeOffsets(const std::vector
     offsets[i] = static_cast<uint16_t>(offsets[i] + offsets[i - 1]);
   }
   return offsets;
+}
+
+std::vector<storage::col_id_t> StorageUtil::ProjectionListAllColumns(const storage::BlockLayout &layout) {
+  std::vector<storage::col_id_t> col_ids(layout.NumColumns() - NUM_RESERVED_COLUMNS);
+  // Add all of the column ids from the layout to the projection list
+  // 0 is version vector so we skip it
+  for (uint16_t col = NUM_RESERVED_COLUMNS; col < layout.NumColumns(); col++) {
+    col_ids[col - NUM_RESERVED_COLUMNS] = storage::col_id_t(col);
+  }
+  return col_ids;
 }
 
 }  // namespace terrier::storage

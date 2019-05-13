@@ -3,7 +3,6 @@
 #include <utility>
 #include "common/macros.h"
 #include "common/strong_typedef.h"
-#include "storage/dirty_globals.h"
 namespace terrier::storage {
 
 /**
@@ -111,7 +110,6 @@ class BlockAccessController {
       }
       break;
     }
-    if (blocked) DirtyGlobals::blocked_transactions++;
   }
 
 
