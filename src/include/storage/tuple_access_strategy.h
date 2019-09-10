@@ -80,6 +80,7 @@ class TupleAccessStrategy {
   };
 
  public:
+
   /**
    * Initializes a TupleAccessStrategy
    * @param layout block layout to use
