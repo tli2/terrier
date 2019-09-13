@@ -213,7 +213,7 @@ void TransactionManager::Rollback(TransactionContext *txn, const storage::UndoRe
     return;
   }
   const storage::TupleSlot slot = record.Slot();
-  const storage::TupleAccessStrategy &accessor = table->accessor_;
+  const auto &accessor = table->accessor_;
   storage::UndoRecord *undo_record = table->AtomicallyReadVersionPtr(slot, accessor);
   // In a loop, we will need to undo all updates belonging to this transaction. Because we do not unlink undo records,
   // otherwise this ends up being a quadratic operation to rollback the first record not yet rolled back in the chain.
@@ -231,7 +231,7 @@ void TransactionManager::Rollback(TransactionContext *txn, const storage::UndoRe
         break;
       case storage::DeltaRecordType::INSERT:
         // Same as update, need to deallocate possible varlens.
-        DeallocateInsertedTupleIfVarlen(txn, undo_record, accessor);
+        // DeallocateInsertedTupleIfVarlen(txn, undo_record, accessor);
         accessor.SetNull(slot, VERSION_POINTER_COLUMN_ID);
         accessor.Deallocate(slot);
         break;
@@ -248,6 +248,20 @@ void TransactionManager::Rollback(TransactionContext *txn, const storage::UndoRe
 void TransactionManager::DeallocateColumnUpdateIfVarlen(TransactionContext *txn, storage::UndoRecord *undo,
                                                         uint16_t projection_list_index,
                                                         const storage::TupleAccessStrategy &accessor) const {
+  const storage::BlockLayout &layout = accessor.GetBlockLayout();
+  storage::col_id_t col_id = undo->Delta()->ColumnIds()[projection_list_index];
+  if (layout.IsVarlen(col_id)) {
+    auto *varlen = reinterpret_cast<storage::VarlenEntry *>(accessor.AccessWithNullCheck(undo->Slot(), col_id));
+    if (varlen != nullptr) {
+      TERRIER_ASSERT(varlen->NeedReclaim() || varlen->IsInlined(), "Fresh updates cannot be compacted or compressed");
+      if (varlen->NeedReclaim()) txn->loose_ptrs_.push_back(varlen->Content());
+    }
+  }
+}
+
+void TransactionManager::DeallocateColumnUpdateIfVarlen(TransactionContext *txn, storage::UndoRecord *undo,
+                                                        uint16_t projection_list_index,
+                                                        const storage::RowAccessStrategy &accessor) const {
   const storage::BlockLayout &layout = accessor.GetBlockLayout();
   storage::col_id_t col_id = undo->Delta()->ColumnIds()[projection_list_index];
   if (layout.IsVarlen(col_id)) {

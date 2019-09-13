@@ -57,7 +57,7 @@ class IndexMetadata {
   /**
    * @return unsorted index attribute sizes (key schema order), varlens are marked
    */
-  const std::vector<uint8_t> &GetAttributeSizes() const { return attr_sizes_; }
+  const std::vector<uint32_t> &GetAttributeSizes() const { return attr_sizes_; }
 
   /**
    * @return actual inlined index attribute sizes
@@ -72,7 +72,7 @@ class IndexMetadata {
   /**
    * @return offsets to write into for compact ints (key schema order)
    */
-  const std::vector<uint8_t> &GetCompactIntsOffsets() const { return compact_ints_offsets_; }
+  const std::vector<uint32_t> &GetCompactIntsOffsets() const { return compact_ints_offsets_; }
 
   /**
    * @return mapping from key oid to projected row offset
@@ -98,10 +98,10 @@ class IndexMetadata {
   FRIEND_TEST(BwTreeKeyTests, IndexMetadataGenericKeyMustInlineVarlenTest);
 
   catalog::IndexSchema key_schema_;                                             // for GenericKey
-  std::vector<uint8_t> attr_sizes_;                                             // for CompactIntsKey
+  std::vector<uint32_t> attr_sizes_;                                             // for CompactIntsKey
   std::vector<uint16_t> inlined_attr_sizes_;                                    // for GenericKey
   bool must_inline_varlen_;                                                     // for GenericKey
-  std::vector<uint8_t> compact_ints_offsets_;                                   // for CompactIntsKey
+  std::vector<uint32_t> compact_ints_offsets_;                                   // for CompactIntsKey
   std::unordered_map<catalog::indexkeycol_oid_t, uint16_t> key_oid_to_offset_;  // for execution layer
   ProjectedRowInitializer initializer_;                                         // user-facing initializer
   ProjectedRowInitializer inlined_initializer_;                                 // for GenericKey, internal only
@@ -111,8 +111,8 @@ class IndexMetadata {
    * e.g.   if key_schema is {INTEGER, INTEGER, BIGINT, TINYINT, SMALLINT}
    *        then attr_sizes returned is {4, 4, 8, 1, 2}
    */
-  static std::vector<uint8_t> ComputeAttributeSizes(const catalog::IndexSchema &key_schema) {
-    std::vector<uint8_t> attr_sizes;
+  static std::vector<uint32_t> ComputeAttributeSizes(const catalog::IndexSchema &key_schema) {
+    std::vector<uint32_t> attr_sizes;
     auto key_cols = key_schema.GetColumns();
     attr_sizes.reserve(key_cols.size());
     for (const auto &key : key_cols) {
@@ -173,9 +173,9 @@ class IndexMetadata {
    *        exclusive scan {0, 4, 8, 16, 17}
    *        since offset[i] = where to write sorted attr i in a compact ints key
    */
-  static std::vector<uint8_t> ComputeCompactIntsOffsets(const std::vector<uint8_t> &attr_sizes) {
+  static std::vector<uint32_t> ComputeCompactIntsOffsets(const std::vector<uint32_t> &attr_sizes) {
     // exclusive scan
-    std::vector<uint8_t> scan;
+    std::vector<uint32_t> scan;
     scan.reserve(attr_sizes.size());
     scan.emplace_back(0);
     for (uint16_t i = 1; i < attr_sizes.size(); i++) {
@@ -227,7 +227,7 @@ class IndexMetadata {
    * By default, the uint8_t attr_sizes that we pass around in our system are not the real attribute sizes.
    * The MSB is set to indicate whether a column is VARLEN or otherwise. We mask these off to get the real sizes.
    */
-  static std::vector<uint8_t> GetRealAttrSizes(std::vector<uint8_t> attr_sizes) {
+  static std::vector<uint32_t> GetRealAttrSizes(std::vector<uint32_t> attr_sizes) {
     std::transform(attr_sizes.begin(), attr_sizes.end(), attr_sizes.begin(),
                    [](uint8_t elem) -> uint8_t { return static_cast<uint8_t>(elem & INT8_MAX); });
     return attr_sizes;

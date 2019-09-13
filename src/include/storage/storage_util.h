@@ -15,6 +15,7 @@ class Schema;
 namespace terrier::storage {
 class ProjectedRow;
 class TupleAccessStrategy;
+class RowAccessStrategy;
 class UndoRecord;
 
 /**
@@ -33,7 +34,7 @@ class StorageUtil {
    * @param projection_list_index the projection_list_index to copy to
    */
   template <class RowType>
-  static void CopyWithNullCheck(const byte *from, RowType *to, uint8_t size, uint16_t projection_list_index);
+  static void CopyWithNullCheck(const byte *from, RowType *to, uint32_t size, uint16_t projection_list_index);
 
   /**
    * Copy from pointer location into the tuple slot at given column id. If the pointer location is null,
@@ -44,6 +45,8 @@ class StorageUtil {
    * @param col_id the col_id to copy into
    */
   static void CopyWithNullCheck(const byte *from, const TupleAccessStrategy &accessor, TupleSlot to, col_id_t col_id);
+
+  static void CopyWithNullCheck(const byte *from, const RowAccessStrategy &accessor, TupleSlot to, col_id_t col_id);
 
   /**
    * Copy an attribute from a block into a ProjectedRow.
@@ -56,6 +59,9 @@ class StorageUtil {
   static void CopyAttrIntoProjection(const TupleAccessStrategy &accessor, TupleSlot from, RowType *to,
                                      uint16_t projection_list_offset);
 
+  template <class RowType>
+  static void CopyAttrIntoProjection(const RowAccessStrategy &accessor, TupleSlot from, RowType *const to, uint16_t projection_list_offset);
+
   /**
    * Copy an attribute from a ProjectedRow into a block.
    * @param accessor TupleAccessStrategy used to interact with the given block.
@@ -67,6 +73,9 @@ class StorageUtil {
   static void CopyAttrFromProjection(const TupleAccessStrategy &accessor, TupleSlot to, const RowType &from,
                                      uint16_t projection_list_offset);
 
+  template <class RowType>
+  static void CopyAttrFromProjection(const RowAccessStrategy &accessor, TupleSlot to, const RowType &from,
+                                     uint16_t projection_list_offset);
   /**
    * Applies delta into the given buffer.
    *
@@ -90,7 +99,7 @@ class StorageUtil {
    * @param offset address to be aligned
    * @return modified version of address padded to align to word_size
    */
-  static uint32_t PadUpToSize(uint8_t word_size, uint32_t offset);
+  static uint32_t PadUpToSize(uint32_t word_size, uint32_t offset);
 
   /**
    * Given a pointer, pad the pointer so that the pointer aligns to the given size.
@@ -99,7 +108,7 @@ class StorageUtil {
    * @return padded pointer
    */
   // This const qualifier on ptr lies. Use this really only for pointer arithmetic.
-  static byte *AlignedPtr(const uint8_t size, const void *ptr) {
+  static byte *AlignedPtr(const uint32_t size, const void *ptr) {
     TERRIER_ASSERT((size & (size - 1)) == 0, "word_size should be a power of two.");
     // Because size is a power of two, mask is always all 1s up to the length of size.
     // example, size is 8 (1000), mask is (0111)
@@ -131,7 +140,7 @@ class StorageUtil {
    *
    * @return {offset_varlen, offset_8, offset_4, offset_2, offset_1}
    */
-  static std::vector<uint16_t> ComputeBaseAttributeOffsets(const std::vector<uint8_t> &attr_sizes,
+  static std::vector<uint16_t> ComputeBaseAttributeOffsets(const std::vector<uint32_t> &attr_sizes,
                                                            uint16_t num_reserved_columns);
 
   /**

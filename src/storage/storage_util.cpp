@@ -7,10 +7,12 @@
 #include "storage/projected_columns.h"
 #include "storage/tuple_access_strategy.h"
 #include "storage/undo_record.h"
+#include "storage/row_access_strategy.h"
+
 namespace terrier::storage {
 
 template <class RowType>
-void StorageUtil::CopyWithNullCheck(const byte *const from, RowType *const to, const uint8_t size,
+void StorageUtil::CopyWithNullCheck(const byte *const from, RowType *const to, const uint32_t size,
                                     const uint16_t projection_list_index) {
   if (from == nullptr)
     to->SetNull(projection_list_index);
@@ -18,9 +20,9 @@ void StorageUtil::CopyWithNullCheck(const byte *const from, RowType *const to, c
     std::memcpy(to->AccessForceNotNull(projection_list_index), from, size);
 }
 
-template void StorageUtil::CopyWithNullCheck<ProjectedRow>(const byte *, ProjectedRow *, uint8_t, uint16_t);
+template void StorageUtil::CopyWithNullCheck<ProjectedRow>(const byte *, ProjectedRow *, uint32_t, uint16_t);
 template void StorageUtil::CopyWithNullCheck<ProjectedColumns::RowView>(const byte *, ProjectedColumns::RowView *,
-                                                                        uint8_t, uint16_t);
+                                                                        uint32_t, uint16_t);
 
 void StorageUtil::CopyWithNullCheck(const byte *const from, const TupleAccessStrategy &accessor, const TupleSlot to,
                                     const col_id_t col_id) {
@@ -28,6 +30,14 @@ void StorageUtil::CopyWithNullCheck(const byte *const from, const TupleAccessStr
     accessor.SetNull(to, col_id);
   else
     std::memcpy(accessor.AccessForceNotNull(to, col_id), from, accessor.GetBlockLayout().AttrSize(col_id));
+}
+
+void StorageUtil::CopyWithNullCheck(const byte *const from, const RowAccessStrategy &accessor, const TupleSlot to,
+                                    const col_id_t col_id) {
+  if (from == nullptr)
+    accessor.SetNull(to, col_id);
+  else
+    std::memcpy(accessor.AccessForceNotNull(to, col_id), from, accessor.AttrSizes()[!col_id]);
 }
 
 template <class RowType>
@@ -45,6 +55,20 @@ template void StorageUtil::CopyAttrIntoProjection<ProjectedColumns::RowView>(con
                                                                              ProjectedColumns::RowView *, uint16_t);
 
 template <class RowType>
+void StorageUtil::CopyAttrIntoProjection(const RowAccessStrategy &accessor, const TupleSlot from, RowType *const to,
+                                         const uint16_t projection_list_offset) {
+  col_id_t col_id = to->ColumnIds()[projection_list_offset];
+  uint8_t attr_size = accessor.AttrSizes()[!col_id];
+  byte *stored_attr = accessor.AccessWithNullCheck(from, col_id);
+  CopyWithNullCheck(stored_attr, to, attr_size, projection_list_offset);
+}
+
+template void StorageUtil::CopyAttrIntoProjection<ProjectedRow>(const RowAccessStrategy &, TupleSlot, ProjectedRow *,
+                                                                uint16_t);
+template void StorageUtil::CopyAttrIntoProjection<ProjectedColumns::RowView>(const RowAccessStrategy &, TupleSlot,
+                                                                             ProjectedColumns::RowView *, uint16_t);
+
+template <class RowType>
 void StorageUtil::CopyAttrFromProjection(const TupleAccessStrategy &accessor, const TupleSlot to, const RowType &from,
                                          const uint16_t projection_list_offset) {
   col_id_t col_id = from.ColumnIds()[projection_list_offset];
@@ -55,6 +79,20 @@ void StorageUtil::CopyAttrFromProjection(const TupleAccessStrategy &accessor, co
 template void StorageUtil::CopyAttrFromProjection<ProjectedRow>(const TupleAccessStrategy &, TupleSlot,
                                                                 const ProjectedRow &, uint16_t);
 template void StorageUtil::CopyAttrFromProjection<ProjectedColumns::RowView>(const TupleAccessStrategy &, TupleSlot,
+                                                                             const ProjectedColumns::RowView &,
+                                                                             uint16_t);
+
+template <class RowType>
+void StorageUtil::CopyAttrFromProjection(const RowAccessStrategy &accessor, const TupleSlot to, const RowType &from,
+                                         const uint16_t projection_list_offset) {
+  col_id_t col_id = from.ColumnIds()[projection_list_offset];
+  const byte *stored_attr = from.AccessWithNullCheck(projection_list_offset);
+  CopyWithNullCheck(stored_attr, accessor, to, col_id);
+}
+
+template void StorageUtil::CopyAttrFromProjection<ProjectedRow>(const RowAccessStrategy &, TupleSlot,
+                                                                const ProjectedRow &, uint16_t);
+template void StorageUtil::CopyAttrFromProjection<ProjectedColumns::RowView>(const RowAccessStrategy &, TupleSlot,
                                                                              const ProjectedColumns::RowView &,
                                                                              uint16_t);
 
@@ -84,6 +122,12 @@ void StorageUtil::ApplyDelta(const BlockLayout &layout, const ProjectedRow &delt
   }
 }
 
+
+template void StorageUtil::ApplyDelta<ProjectedRow>(const BlockLayout &layout, const ProjectedRow &delta,
+                                                    ProjectedRow *buffer);
+template void StorageUtil::ApplyDelta<ProjectedColumns::RowView>(const BlockLayout &layout, const ProjectedRow &delta,
+                                                                 ProjectedColumns::RowView *buffer);
+
 template <class RowType>
 void StorageUtil::ApplyDelta(const std::vector<uint32_t> &attr_sizes, const ProjectedRow &delta, RowType *const buffer) {
   // the projection list in delta and buffer have to be sorted in the same way for this to work,
@@ -96,7 +140,7 @@ void StorageUtil::ApplyDelta(const std::vector<uint32_t> &attr_sizes, const Proj
       // Should apply changes
       TERRIER_ASSERT(delta_col_id != VERSION_POINTER_COLUMN_ID,
                      "Output buffer should never return the version vector column.");
-      uint32_t attr_size = attr_sizes[delta_col_id];
+      uint32_t attr_size = attr_sizes[!delta_col_id];
       StorageUtil::CopyWithNullCheck(delta.AccessWithNullCheck(delta_i), buffer, attr_size, buffer_i);
       delta_i++;
       buffer_i++;
@@ -110,12 +154,14 @@ void StorageUtil::ApplyDelta(const std::vector<uint32_t> &attr_sizes, const Proj
   }
 }
 
-template void StorageUtil::ApplyDelta<ProjectedRow>(const BlockLayout &layout, const ProjectedRow &delta,
+template void StorageUtil::ApplyDelta<ProjectedRow>(const std::vector<uint32_t> &attr_sizes, const ProjectedRow &delta,
                                                     ProjectedRow *buffer);
-template void StorageUtil::ApplyDelta<ProjectedColumns::RowView>(const BlockLayout &layout, const ProjectedRow &delta,
+template void StorageUtil::ApplyDelta<ProjectedColumns::RowView>(const std::vector<uint32_t> &attr_sizes, const ProjectedRow &delta,
                                                                  ProjectedColumns::RowView *buffer);
 
-uint32_t StorageUtil::PadUpToSize(const uint8_t word_size, const uint32_t offset) {
+
+
+uint32_t StorageUtil::PadUpToSize(const uint32_t word_size, const uint32_t offset) {
   TERRIER_ASSERT((word_size & (word_size - 1)) == 0, "word_size should be a power of two.");
   // Because size is a power of two, mask is always all 1s up to the length of size.
   // example, size is 8 (1000), mask is (0111)
@@ -124,7 +170,7 @@ uint32_t StorageUtil::PadUpToSize(const uint8_t word_size, const uint32_t offset
   return (offset + mask) & (~mask);
 }
 
-std::vector<uint16_t> StorageUtil::ComputeBaseAttributeOffsets(const std::vector<uint8_t> &attr_sizes,
+std::vector<uint16_t> StorageUtil::ComputeBaseAttributeOffsets(const std::vector<uint32_t> &attr_sizes,
                                                                uint16_t num_reserved_columns) {
   // First compute {count_varlen, count_8, count_4, count_2, count_1}
   // Then {offset_varlen, offset_8, offset_4, offset_2, offset_1} is the inclusive scan of the counts

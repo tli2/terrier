@@ -66,7 +66,7 @@ void RandomWorkloadTransaction::Finish() {
 }
 
 // TODO(Tianyu): Convert to DI
-LargeTransactionBenchmarkObject::LargeTransactionBenchmarkObject(const std::vector<uint8_t> &attr_sizes,
+LargeTransactionBenchmarkObject::LargeTransactionBenchmarkObject(const std::vector<uint32_t> &attr_sizes,
                                                                  uint32_t initial_table_size, uint32_t txn_length,
                                                                  std::vector<double> operation_ratio,
                                                                  storage::BlockStore *block_store,

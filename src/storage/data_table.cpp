@@ -10,7 +10,7 @@
 
 namespace terrier::storage {
 DataTable::DataTable(BlockStore *const store, const BlockLayout &layout, const layout_version_t layout_version)
-    : block_store_(store), layout_version_(layout_version), accessor_(layout) {
+    : block_store_(store), layout_version_(layout_version), accessor_(layout.attr_sizes_) {
   TERRIER_ASSERT(layout.AttrSize(VERSION_POINTER_COLUMN_ID) == 8,
                  "First column must have size 8 for the version chain.");
   TERRIER_ASSERT(layout.NumColumns() > NUM_RESERVED_COLUMNS,
@@ -20,7 +20,7 @@ DataTable::DataTable(BlockStore *const store, const BlockLayout &layout, const l
 DataTable::~DataTable() {
   common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
   for (RawBlock *block : blocks_) {
-    StorageUtil::DeallocateVarlens(block, accessor_);
+    // StorageUtil::DeallocateVarlens(block, accessor_);
     // for (col_id_t i : accessor_.GetBlockLayout().Varlens())
     //  accessor_.GetArrowBlockMetadata(block).GetColumnInfo(accessor_.GetBlockLayout(), i).Deallocate();
     block_store_->Release(block);
@@ -253,7 +253,7 @@ bool DataTable::SelectIntoBuffer(transaction::TransactionContext *const txn, con
     switch (version_ptr->Type()) {
       case DeltaRecordType::UPDATE:
         // Normal delta to be applied. Does not modify the logical delete column.
-        StorageUtil::ApplyDelta(accessor_.GetBlockLayout(), *(version_ptr->Delta()), out_buffer);
+        StorageUtil::ApplyDelta(accessor_.AttrSizes(), *(version_ptr->Delta()), out_buffer);
         break;
       case DeltaRecordType::INSERT:
         visible = false;

@@ -192,41 +192,41 @@ TEST_F(DataTableTests, SimpleInsertSelect) {
 
 // Insert some number of tuples and sequentially scan for them down the table
 // NOLINTNEXTLINE
-TEST_F(DataTableTests, SimpleSequentialScan) {
-  const uint32_t num_iterations = 10;
-  const uint16_t max_columns = 20;
-  for (uint32_t iteration = 0; iteration < num_iterations; ++iteration) {
-    RandomDataTableTestObject tested(&block_store_, max_columns, null_ratio_(generator_), &generator_);
-    // make sure we test the edge case where a block is filled
-    uint32_t num_inserts = iteration == 0
-                               ? tested.Layout().NumSlots()
-                               : std::uniform_int_distribution<uint32_t>(1, tested.Layout().NumSlots())(generator_);
-
-    // Populate the table with random tuples
-    for (uint32_t i = 0; i < num_inserts; ++i)
-      tested.InsertRandomTuple(transaction::timestamp_t(0), &generator_, &buffer_pool_);
-
-    std::vector<storage::col_id_t> all_cols = StorageTestUtil::ProjectionListAllColumns(tested.Layout());
-    EXPECT_NE((!all_cols[all_cols.size() - 1]), -1);
-    storage::ProjectedColumnsInitializer initializer(tested.Layout(), all_cols, num_inserts);
-    auto *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedColumnsSize());
-    storage::ProjectedColumns *columns = initializer.Initialize(buffer);
-    auto it = tested.GetTable().begin();
-    tested.Scan(&it, transaction::timestamp_t(1), columns, &buffer_pool_);
-    EXPECT_EQ(num_inserts, columns->NumTuples());
-    // Test that the scan ends as soon as there are no more valid tuples,
-    if (it != tested.GetTable().end()) {
-      EXPECT_EQ(it, tested.GetTable().end());
-    }
-    for (uint32_t i = 0; i < tested.InsertedTuples().size(); i++) {
-      storage::ProjectedColumns::RowView stored = columns->InterpretAsRow(i);
-      const storage::ProjectedRow *ref =
-          tested.GetReferenceVersionedTuple(columns->TupleSlots()[i], transaction::timestamp_t(1));
-      EXPECT_TRUE(StorageTestUtil::ProjectionListEqualShallow(tested.Layout(), &stored, ref));
-    }
-    delete[] buffer;
-  }
-}
+//TEST_F(DataTableTests, SimpleSequentialScan) {
+//  const uint32_t num_iterations = 10;
+//  const uint16_t max_columns = 20;
+//  for (uint32_t iteration = 0; iteration < num_iterations; ++iteration) {
+//    RandomDataTableTestObject tested(&block_store_, max_columns, null_ratio_(generator_), &generator_);
+//    // make sure we test the edge case where a block is filled
+//    uint32_t num_inserts = iteration == 0
+//                               ? tested.Layout().NumSlots()
+//                               : std::uniform_int_distribution<uint32_t>(1, tested.Layout().NumSlots())(generator_);
+//
+//    // Populate the table with random tuples
+//    for (uint32_t i = 0; i < num_inserts; ++i)
+//      tested.InsertRandomTuple(transaction::timestamp_t(0), &generator_, &buffer_pool_);
+//
+//    std::vector<storage::col_id_t> all_cols = StorageTestUtil::ProjectionListAllColumns(tested.Layout());
+//    EXPECT_NE((!all_cols[all_cols.size() - 1]), -1);
+//    storage::ProjectedColumnsInitializer initializer(tested.Layout(), all_cols, num_inserts);
+//    auto *buffer = common::AllocationUtil::AllocateAligned(initializer.ProjectedColumnsSize());
+//    storage::ProjectedColumns *columns = initializer.Initialize(buffer);
+//    auto it = tested.GetTable().begin();
+//    tested.Scan(&it, transaction::timestamp_t(1), columns, &buffer_pool_);
+//    EXPECT_EQ(num_inserts, columns->NumTuples());
+//    // Test that the scan ends as soon as there are no more valid tuples,
+//    if (it != tested.GetTable().end()) {
+//      EXPECT_EQ(it, tested.GetTable().end());
+//    }
+//    for (uint32_t i = 0; i < tested.InsertedTuples().size(); i++) {
+//      storage::ProjectedColumns::RowView stored = columns->InterpretAsRow(i);
+//      const storage::ProjectedRow *ref =
+//          tested.GetReferenceVersionedTuple(columns->TupleSlots()[i], transaction::timestamp_t(1));
+//      EXPECT_TRUE(StorageTestUtil::ProjectionListEqualShallow(tested.Layout(), &stored, ref));
+//    }
+//    delete[] buffer;
+//  }
+//}
 
 // Generates a random table layout and coin flip bias for an attribute being null, inserts 1 random tuple into an empty
 // DataTable. Then, randomly updates the tuple num_updates times. Finally, Selects at each timestamp to verify that the
@@ -290,28 +290,28 @@ TEST_F(DataTableTests, WriteWriteConflictUpdateFails) {
 // Test that insertion into a block does not wrap around even in the presence of deleted slots. This makes compaction
 // a lot easier to write.
 // NOLINTNEXTLINE
-TEST_F(DataTableTests, InsertNoWrap) {
-  const uint32_t num_iterations = 10;
-  const uint16_t max_columns = 10;
-  for (uint32_t iteration = 0; iteration < num_iterations; ++iteration) {
-    RandomDataTableTestObject tested(&block_store_, max_columns, null_ratio_(generator_), &generator_);
-    storage::RawBlock *block = nullptr;
-    // fill the block. bypass the test object to be more efficient with buffers
-    transaction::timestamp_t timestamp(0);
-    auto *txn = new transaction::TransactionContext(timestamp, timestamp, &buffer_pool_, DISABLED);
-    for (uint32_t i = 0; i < tested.Layout().NumSlots(); i++) {
-      storage::RawBlock *inserted_block = tested.InsertRandomTuple(txn, &generator_, &buffer_pool_).GetBlock();
-      if (block == nullptr) block = inserted_block;
-      EXPECT_EQ(inserted_block, block);
-    }
-
-    // Bypass concurrency control and remove some tuples
-    storage::TupleAccessStrategy accessor(tested.Layout());
-    accessor.Deallocate({block, 0});
-
-    // Even though there is still space available, we should insert into a new block
-    EXPECT_NE(block, tested.InsertRandomTuple(transaction::timestamp_t(0), &generator_, &buffer_pool_).GetBlock());
-    delete txn;
-  }
-}
+//TEST_F(DataTableTests, InsertNoWrap) {
+//  const uint32_t num_iterations = 10;
+//  const uint16_t max_columns = 10;
+//  for (uint32_t iteration = 0; iteration < num_iterations; ++iteration) {
+//    RandomDataTableTestObject tested(&block_store_, max_columns, null_ratio_(generator_), &generator_);
+//    storage::RawBlock *block = nullptr;
+//    // fill the block. bypass the test object to be more efficient with buffers
+//    transaction::timestamp_t timestamp(0);
+//    auto *txn = new transaction::TransactionContext(timestamp, timestamp, &buffer_pool_, DISABLED);
+//    for (uint32_t i = 0; i < tested.Layout().NumSlots(); i++) {
+//      storage::RawBlock *inserted_block = tested.InsertRandomTuple(txn, &generator_, &buffer_pool_).GetBlock();
+//      if (block == nullptr) block = inserted_block;
+//      EXPECT_EQ(inserted_block, block);
+//    }
+//
+//    // Bypass concurrency control and remove some tuples
+//    storage::TupleAccessStrategy accessor(tested.Layout());
+//    accessor.Deallocate({block, 0});
+//
+//    // Even though there is still space available, we should insert into a new block
+//    EXPECT_NE(block, tested.InsertRandomTuple(transaction::timestamp_t(0), &generator_, &buffer_pool_).GetBlock());
+//    delete txn;
+//  }
+//}
 }  // namespace terrier

@@ -105,7 +105,7 @@ class LargeTransactionBenchmarkObject {
    * @param gc_on whether gc is enabled
    * @param log_manager pointer to the LogManager if enabled
    */
-  LargeTransactionBenchmarkObject(const std::vector<uint8_t> &attr_sizes, uint32_t initial_table_size,
+  LargeTransactionBenchmarkObject(const std::vector<uint32_t> &attr_sizes, uint32_t initial_table_size,
                                   uint32_t txn_length, std::vector<double> operation_ratio,
                                   storage::BlockStore *block_store, storage::RecordBufferSegmentPool *buffer_pool,
                                   std::default_random_engine *generator, bool gc_on,

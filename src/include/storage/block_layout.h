@@ -37,9 +37,9 @@ class BlockLayout {
    * @param col_id the column id to check for
    * @return attribute size at given col_id.
    */
-  uint8_t AttrSize(col_id_t col_id) const {
+  uint32_t AttrSize(col_id_t col_id) const {
     // mask off the first bit as we use that to check for varlen
-    return static_cast<uint8_t>(INT32_MAX & attr_sizes_.at(!col_id));
+    return static_cast<uint32_t>(INT32_MAX & attr_sizes_.at(!col_id));
   }
 
   /**
@@ -80,7 +80,7 @@ class BlockLayout {
    */
   uint32_t NumSlots() const { return num_slots_; }
 
- private:
+// private:
   std::vector<uint32_t> attr_sizes_;
   // keeps track of all the varlens to make iteration through all varlen columns faster
   std::vector<col_id_t> varlens_;

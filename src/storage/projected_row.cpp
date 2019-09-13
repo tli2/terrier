@@ -68,7 +68,7 @@ ProjectedRowInitializer ProjectedRowInitializer::Create(const BlockLayout &layou
   // If the col ids are valid ones laid out by BlockLayout, ascending order of id guarantees
   // descending order in attribute size.
   std::sort(col_ids.begin(), col_ids.end(), std::less<>());
-  std::vector<uint8_t> attr_sizes;
+  std::vector<uint32_t> attr_sizes;
   attr_sizes.reserve(col_ids.size());
   for (auto const &col_id : col_ids) {
     attr_sizes.emplace_back(layout.AttrSize(col_id));
@@ -88,7 +88,7 @@ ProjectedRowInitializer ProjectedRowInitializer::Create(std::vector<AttrType> re
   return ProjectedRowInitializer(real_attr_sizes, col_ids);
 }
 
-template ProjectedRowInitializer ProjectedRowInitializer::Create(std::vector<uint8_t> real_attr_sizes,
+template ProjectedRowInitializer ProjectedRowInitializer::Create(std::vector<uint32_t> real_attr_sizes,
                                                                  const std::vector<uint16_t> &pr_offsets);
 template ProjectedRowInitializer ProjectedRowInitializer::Create(std::vector<uint16_t> real_attr_sizes,
                                                                  const std::vector<uint16_t> &pr_offsets);

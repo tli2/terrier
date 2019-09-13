@@ -1,6 +1,6 @@
+#pragma once
 #include <utility>
 #include <vector>
-#include <libpg_query/src/postgres/include/storage/bufmgr.h>
 #include "common/container/concurrent_bitmap.h"
 #include "common/macros.h"
 #include "storage/arrow_block_metadata.h"
@@ -14,26 +14,16 @@ class DataTable;
 class RowAccessStrategy {
  public:
   explicit RowAccessStrategy(const std::vector<uint32_t> &attr_sizes)
-      : layout_(ComputeLayout(attr_sizes)), attr_sizes_(attr_sizes) {}
+      : attr_sizes_(attr_sizes), layout_(ComputeLayout()) {
+
+  }
 
   void InitializeRawBlock(storage::DataTable *data_table, RawBlock *raw, layout_version_t layout_version) const {
     underlying_.InitializeRawBlock(data_table, raw, layout_version);
   }
 
-  ArrowBlockMetadata &GetArrowBlockMetadata(RawBlock *block) const {
-    return underlying_.GetArrowBlockMetadata(block);
-  }
-
   bool Allocated(const TupleSlot slot) const {
     return underlying_.Allocated(slot);
-  }
-
-  common::RawConcurrentBitmap *ColumnNullBitmap(RawBlock *block, const col_id_t col_id) const {
-    return nullptr;
-  }
-
-  byte *ColumnStart(RawBlock *block, const col_id_t col_id) const {
-    return nullptr;
   }
 
   /**
@@ -43,7 +33,7 @@ class RowAccessStrategy {
    */
   byte *AccessWithNullCheck(const TupleSlot slot, const col_id_t col_id) const {
     if (col_id == col_id_t(0)) return underlying_.AccessWithNullCheck(slot, col_id);
-    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id_t(1));
     if (!reinterpret_cast<common::RawBitmap *>(tuple_start)->Test(!col_id)) return nullptr;
     return tuple_start + attr_offsets_[!col_id];
   }
@@ -56,7 +46,7 @@ class RowAccessStrategy {
    */
   byte *AccessWithoutNullCheck(const TupleSlot slot, const col_id_t col_id) const {
     if (col_id == col_id_t(0)) return underlying_.AccessWithoutNullCheck(slot, col_id);
-    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id_t(1));
     return tuple_start + attr_offsets_[!col_id];
   }
 
@@ -68,8 +58,8 @@ class RowAccessStrategy {
    * @return a pointer to the attribute.
    */
   byte *AccessForceNotNull(const TupleSlot slot, const col_id_t col_id) const {
-    if (col_id == col_id_t(0)) return underlying_.AccessWithNullCheck(slot, col_id);
-    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
+    if (col_id == col_id_t(0)) return underlying_.AccessForceNotNull(slot, col_id);
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id_t(1));
     auto *bitmap = reinterpret_cast<common::RawBitmap *>(tuple_start);
     if (!bitmap->Test(!col_id)) bitmap->Flip(!col_id);
     return tuple_start + attr_offsets_[!col_id];
@@ -83,8 +73,8 @@ class RowAccessStrategy {
    */
   bool IsNull(const TupleSlot slot, const col_id_t col_id) const {
     if (col_id == col_id_t(0)) return underlying_.IsNull(slot, col_id);
-    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
-    return reinterpret_cast<common::RawBitmap *>(tuple_start)->Test(!col_id);
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id_t(1));
+    return !reinterpret_cast<common::RawBitmap *>(tuple_start)->Test(!col_id);
   }
 
   /**
@@ -97,8 +87,8 @@ class RowAccessStrategy {
       underlying_.SetNull(slot, col_id);
       return;
     }
-    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
-    reinterpret_cast<common::RawBitmap *>(tuple_start)->Set(!col_id, true);
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id_t(1));
+    reinterpret_cast<common::RawBitmap *>(tuple_start)->Set(!col_id, false);
   }
 
   /**
@@ -111,8 +101,8 @@ class RowAccessStrategy {
       underlying_.SetNotNull(slot, col_id);
       return;
     }
-    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
-    reinterpret_cast<common::RawBitmap *>(tuple_start)->Set(!col_id, false);
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id_t(1));
+    reinterpret_cast<common::RawBitmap *>(tuple_start)->Set(!col_id, true);
   }
 
   /**
@@ -160,21 +150,22 @@ class RowAccessStrategy {
   const std::vector<uint32_t> &AttrSizes() const { return attr_sizes_; }
 
  private:
+  std::vector<uint32_t> attr_sizes_;
+  std::vector<uint32_t> attr_offsets_;
   const BlockLayout layout_;
   const TupleAccessStrategy underlying_{layout_};
-  std::vector<uint32_t> attr_sizes_;
   // Start of each mini block, in offset to the start of the block
-  std::vector<uint32_t> attr_offsets_;
 
-  BlockLayout ComputeLayout(std::vector<uint32_t> attr_sizes) {
-    std::sort(attr_sizes.begin() + NUM_RESERVED_COLUMNS, attr_sizes.end(), std::greater<>());
+
+  BlockLayout ComputeLayout() {
+    std::sort(attr_sizes_.begin() + NUM_RESERVED_COLUMNS, attr_sizes_.end(), std::greater<>());
     attr_offsets_.push_back(0);
-    uint32_t tuple_size = common::RawBitmap::SizeInBytes(attr_sizes.size() - 1);
+    uint32_t tuple_size = common::RawBitmap::SizeInBytes(attr_sizes_.size() - 1);
     tuple_size = StorageUtil::PadUpToSize(8, tuple_size);
 
-    for (uint32_t i = 1; i < static_cast<uint32_t>(attr_sizes.size()); i++) {
+    for (uint32_t i = 1; i < static_cast<uint32_t>(attr_sizes_.size()); i++) {
       attr_offsets_.push_back(tuple_size);
-      tuple_size += attr_sizes[i];
+      tuple_size += attr_sizes_[i];
     }
 
     tuple_size = StorageUtil::PadUpToSize(8, tuple_size);

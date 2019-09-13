@@ -2,10 +2,11 @@
 #include <list>
 #include <unordered_map>
 #include <vector>
+#include <iostream>
 #include "common/performance_counter.h"
 #include "storage/projected_columns.h"
 #include "storage/storage_defs.h"
-#include "storage/tuple_access_strategy.h"
+#include "storage/row_access_strategy.h"
 #include "storage/undo_record.h"
 
 namespace terrier::transaction {
@@ -227,7 +228,7 @@ class DataTable {
 
   BlockStore *const block_store_;
   const layout_version_t layout_version_;
-  const TupleAccessStrategy accessor_;
+  const RowAccessStrategy accessor_;
 
   // TODO(Tianyu): For now, on insertion, we simply sequentially go through a block and allocate a
   // new one when the current one is full. Needless to say, we will need to revisit this when extending GC to handle
@@ -253,10 +254,22 @@ class DataTable {
   // Atomically read out the version pointer value.
   UndoRecord *AtomicallyReadVersionPtr(TupleSlot slot, const TupleAccessStrategy &accessor) const;
 
+  UndoRecord *AtomicallyReadVersionPtr(const TupleSlot slot, const RowAccessStrategy &accessor) const {
+    // Okay to ignore presence bit, because we use that for logical delete, not for validity of the version pointer value
+    byte *ptr_location = accessor.AccessWithoutNullCheck(slot, VERSION_POINTER_COLUMN_ID);
+    return reinterpret_cast<std::atomic<UndoRecord *> *>(ptr_location)->load();
+  }
+
   // Atomically write the version pointer value. Should only be used by Insert where there is guaranteed to be no
   // contention
   void AtomicallyWriteVersionPtr(TupleSlot slot, const TupleAccessStrategy &accessor, UndoRecord *desired);
 
+  void AtomicallyWriteVersionPtr(const TupleSlot slot, const RowAccessStrategy &accessor,
+                                            UndoRecord *const desired) {
+    // Okay to ignore presence bit, because we use that for logical delete, not for validity of the version pointer value
+    byte *ptr_location = accessor.AccessWithoutNullCheck(slot, VERSION_POINTER_COLUMN_ID);
+    reinterpret_cast<std::atomic<UndoRecord *> *>(ptr_location)->store(desired);
+  }
   // Checks for Snapshot Isolation conflicts, used by Update
   bool HasConflict(const transaction::TransactionContext &txn, UndoRecord *version_ptr) const;
 
@@ -270,9 +283,24 @@ class DataTable {
   // (logical delete bitmap is non-NULL).
   bool Visible(TupleSlot slot, const TupleAccessStrategy &accessor) const;
 
+  bool Visible(const TupleSlot slot, const RowAccessStrategy &accessor) const {
+    const bool present = accessor.Allocated(slot);
+    const bool not_deleted = !accessor.IsNull(slot, VERSION_POINTER_COLUMN_ID);
+    std::cout << present << std::endl;
+    std::cout << not_deleted << std::endl;
+    return present && not_deleted;
+  }
+
   // Compares and swaps the version pointer to be the undo record, only if its value is equal to the expected one.
   bool CompareAndSwapVersionPtr(TupleSlot slot, const TupleAccessStrategy &accessor, UndoRecord *expected,
                                 UndoRecord *desired);
+
+  bool CompareAndSwapVersionPtr(const TupleSlot slot, const RowAccessStrategy &accessor,
+                                           UndoRecord *expected, UndoRecord *const desired) {
+    // Okay to ignore presence bit, because we use that for logical delete, not for validity of the version pointer value
+    byte *ptr_location = accessor.AccessWithoutNullCheck(slot, VERSION_POINTER_COLUMN_ID);
+    return reinterpret_cast<std::atomic<UndoRecord *> *>(ptr_location)->compare_exchange_strong(expected, desired);
+  }
 
   // Allocates a new block to be used as insertion head.
   void NewBlock(RawBlock *expected_val);
