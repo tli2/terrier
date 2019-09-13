@@ -81,6 +81,9 @@ class StorageUtil {
   template <class RowType>
   static void ApplyDelta(const BlockLayout &layout, const ProjectedRow &delta, RowType *buffer);
 
+  template <class RowType>
+  static void ApplyDelta(const std::vector<uint32_t> &attr_sizes, const ProjectedRow &delta, RowType *buffer);
+
   /**
    * Given an address offset, aligns it to the word_size
    * @param word_size size in bytes to align offset to

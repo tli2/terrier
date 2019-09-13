@@ -21,8 +21,8 @@ DataTable::~DataTable() {
   common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
   for (RawBlock *block : blocks_) {
     StorageUtil::DeallocateVarlens(block, accessor_);
-    for (col_id_t i : accessor_.GetBlockLayout().Varlens())
-      accessor_.GetArrowBlockMetadata(block).GetColumnInfo(accessor_.GetBlockLayout(), i).Deallocate();
+    // for (col_id_t i : accessor_.GetBlockLayout().Varlens())
+    //  accessor_.GetArrowBlockMetadata(block).GetColumnInfo(accessor_.GetBlockLayout(), i).Deallocate();
     block_store_->Release(block);
   }
 }
@@ -82,8 +82,8 @@ DataTable::SlotIterator DataTable::end() const {  // NOLINT for STL name compabi
 }
 
 bool DataTable::Update(transaction::TransactionContext *const txn, const TupleSlot slot, const ProjectedRow &redo) {
-  TERRIER_ASSERT(redo.NumColumns() <= accessor_.GetBlockLayout().NumColumns() - NUM_RESERVED_COLUMNS,
-                 "The input buffer cannot change the reserved columns, so it should have fewer attributes.");
+  // TERRIER_ASSERT(redo.NumColumns() <= accessor_.GetBlockLayout().NumColumns() - NUM_RESERVED_COLUMNS,
+  //               "The input buffer cannot change the reserved columns, so it should have fewer attributes.");
   TERRIER_ASSERT(redo.NumColumns() > 0, "The input buffer should modify at least one attribute.");
   UndoRecord *const undo = txn->UndoRecordForUpdate(this, slot, redo);
   slot.GetBlock()->controller_.WaitUntilHot();
@@ -123,9 +123,9 @@ bool DataTable::Update(transaction::TransactionContext *const txn, const TupleSl
 }
 
 TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const ProjectedRow &redo) {
-  TERRIER_ASSERT(redo.NumColumns() == accessor_.GetBlockLayout().NumColumns() - NUM_RESERVED_COLUMNS,
-                 "The input buffer never changes the version pointer column, so it should have  exactly 1 fewer "
-                 "attribute than the DataTable's layout.");
+  // TERRIER_ASSERT(redo.NumColumns() == accessor_.GetBlockLayout().NumColumns() - NUM_RESERVED_COLUMNS,
+  //               "The input buffer never changes the version pointer column, so it should have  exactly 1 fewer "
+  //               "attribute than the DataTable's layout.");
 
   // Attempt to allocate a new tuple from the block we are working on right now.
   // If that block is full, try to request a new block. Because other concurrent
@@ -191,9 +191,9 @@ bool DataTable::Delete(transaction::TransactionContext *const txn, const TupleSl
 template <class RowType>
 bool DataTable::SelectIntoBuffer(transaction::TransactionContext *const txn, const TupleSlot slot,
                                  RowType *const out_buffer) const {
-  TERRIER_ASSERT(out_buffer->NumColumns() <= accessor_.GetBlockLayout().NumColumns() - NUM_RESERVED_COLUMNS,
-                 "The output buffer never returns the version pointer columns, so it should have "
-                 "fewer attributes.");
+  // TERRIER_ASSERT(out_buffer->NumColumns() <= accessor_.GetBlockLayout().NumColumns() - NUM_RESERVED_COLUMNS,
+  //              "The output buffer never returns the version pointer columns, so it should have "
+  //               "fewer attributes.");
   TERRIER_ASSERT(out_buffer->NumColumns() > 0, "The output buffer should return at least one attribute.");
   // This cannot be visible if it's already deallocated.
   if (!accessor_.Allocated(slot)) return false;

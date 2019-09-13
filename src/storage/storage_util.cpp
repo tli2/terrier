@@ -84,6 +84,32 @@ void StorageUtil::ApplyDelta(const BlockLayout &layout, const ProjectedRow &delt
   }
 }
 
+template <class RowType>
+void StorageUtil::ApplyDelta(const std::vector<uint32_t> &attr_sizes, const ProjectedRow &delta, RowType *const buffer) {
+  // the projection list in delta and buffer have to be sorted in the same way for this to work,
+  // which should be guaranteed if both are constructed correctly using ProjectedRowInitializer,
+  // (or copied from a valid ProjectedRow)
+  uint16_t delta_i = 0, buffer_i = 0;
+  while (delta_i < delta.NumColumns() && buffer_i < buffer->NumColumns()) {
+    col_id_t delta_col_id = delta.ColumnIds()[delta_i], buffer_col_id = buffer->ColumnIds()[buffer_i];
+    if (delta_col_id == buffer_col_id) {
+      // Should apply changes
+      TERRIER_ASSERT(delta_col_id != VERSION_POINTER_COLUMN_ID,
+                     "Output buffer should never return the version vector column.");
+      uint32_t attr_size = attr_sizes[delta_col_id];
+      StorageUtil::CopyWithNullCheck(delta.AccessWithNullCheck(delta_i), buffer, attr_size, buffer_i);
+      delta_i++;
+      buffer_i++;
+    } else if (delta_col_id > buffer_col_id) {
+      // buffer is behind
+      buffer_i++;
+    } else {
+      // delta is behind
+      delta_i++;
+    }
+  }
+}
+
 template void StorageUtil::ApplyDelta<ProjectedRow>(const BlockLayout &layout, const ProjectedRow &delta,
                                                     ProjectedRow *buffer);
 template void StorageUtil::ApplyDelta<ProjectedColumns::RowView>(const BlockLayout &layout, const ProjectedRow &delta,

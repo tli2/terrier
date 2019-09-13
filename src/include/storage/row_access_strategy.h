@@ -13,7 +13,8 @@ class DataTable;
 
 class RowAccessStrategy {
  public:
-  explicit RowAccessStrategy(const std::vector<uint32_t> &attr_sizes) : layout_(ComputeLayout(attr_sizes)) {}
+  explicit RowAccessStrategy(const std::vector<uint32_t> &attr_sizes)
+      : layout_(ComputeLayout(attr_sizes)), attr_sizes_(attr_sizes) {}
 
   void InitializeRawBlock(storage::DataTable *data_table, RawBlock *raw, layout_version_t layout_version) const {
     underlying_.InitializeRawBlock(data_table, raw, layout_version);
@@ -81,8 +82,9 @@ class RowAccessStrategy {
    * @return true if null, false otherwise
    */
   bool IsNull(const TupleSlot slot, const col_id_t col_id) const {
-    TERRIER_ASSERT(slot.GetOffset() < layout_.NumSlots(), "Offset out of bounds!");
-    return !ColumnNullBitmap(slot.GetBlock(), col_id)->Test(slot.GetOffset());
+    if (col_id == col_id_t(0)) return underlying_.IsNull(slot, col_id);
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
+    return reinterpret_cast<common::RawBitmap *>(tuple_start)->Test(!col_id);
   }
 
   /**
@@ -91,8 +93,12 @@ class RowAccessStrategy {
    * @param col_id id of the column
    */
   void SetNull(const TupleSlot slot, const col_id_t col_id) const {
-    TERRIER_ASSERT(slot.GetOffset() < layout_.NumSlots(), "Offset out of bounds!");
-    ColumnNullBitmap(slot.GetBlock(), col_id)->Flip(slot.GetOffset(), true);
+    if (col_id == col_id_t(0)) {
+      underlying_.SetNull(slot, col_id);
+      return;
+    }
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
+    reinterpret_cast<common::RawBitmap *>(tuple_start)->Set(!col_id, true);
   }
 
   /**
@@ -101,8 +107,12 @@ class RowAccessStrategy {
    * @param col_id id of the column
    */
   void SetNotNull(const TupleSlot slot, const col_id_t col_id) const {
-    TERRIER_ASSERT(slot.GetOffset() < layout_.NumSlots(), "Offset out of bounds!");
-    ColumnNullBitmap(slot.GetBlock(), col_id)->Flip(slot.GetOffset(), false);
+    if (col_id == col_id_t(0)) {
+      underlying_.SetNotNull(slot, col_id);
+      return;
+    }
+    byte *tuple_start = underlying_.AccessWithoutNullCheck(slot, col_id);
+    reinterpret_cast<common::RawBitmap *>(tuple_start)->Set(!col_id, false);
   }
 
   /**
@@ -147,9 +157,12 @@ class RowAccessStrategy {
    */
   const BlockLayout &GetBlockLayout() const { return layout_; }
 
+  const std::vector<uint32_t> &AttrSizes() const { return attr_sizes_; }
+
  private:
   const BlockLayout layout_;
   const TupleAccessStrategy underlying_{layout_};
+  std::vector<uint32_t> attr_sizes_;
   // Start of each mini block, in offset to the start of the block
   std::vector<uint32_t> attr_offsets_;
 
