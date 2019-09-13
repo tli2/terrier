@@ -64,6 +64,18 @@ class DeferredActionManager {
     return processed;
   }
 
+  uint32_t Process(timestamp_t oldest_txn) {
+    const auto backlog_size = static_cast<uint32_t>(back_log_.size());
+    uint32_t processed = ClearBacklog(oldest_txn);
+    // There is no point in draining new actions if we haven't cleared the backlog.
+    // This leaves some mechanisms for the rest of the system to detect congestion
+    // at the deferred action manager and potentially backoff
+    if (backlog_size != processed) return processed;
+    // Otherwise, ingest all the new actions
+    processed += ProcessNewActions(oldest_txn);
+    return processed;
+  }
+
  private:
   TimestampManager *timestamp_manager_;
   // TODO(Tianyu): We might want to change this data structure to be more specialized than std::queue
