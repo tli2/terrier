@@ -2,7 +2,6 @@
 #include <list>
 #include <unordered_map>
 #include <vector>
-#include <iostream>
 #include "common/performance_counter.h"
 #include "storage/projected_columns.h"
 #include "storage/storage_defs.h"
@@ -286,8 +285,6 @@ class DataTable {
   bool Visible(const TupleSlot slot, const RowAccessStrategy &accessor) const {
     const bool present = accessor.Allocated(slot);
     const bool not_deleted = !accessor.IsNull(slot, VERSION_POINTER_COLUMN_ID);
-    std::cout << present << std::endl;
-    std::cout << not_deleted << std::endl;
     return present && not_deleted;
   }
 
