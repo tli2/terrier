@@ -20,11 +20,11 @@ namespace terrier {
 class DataTableBenchmark : public benchmark::Fixture {
  public:
   void SetUp(const benchmark::State &state) final {
-    const uint32_t num_attrs = 9;
     std::vector<uint32_t> attrs;
     for (uint32_t i = 0; i <= num_attrs; i++)
       attrs.push_back(8);
     layout_ = storage::BlockLayout(attrs);
+    initializer_ = storage::ProjectedRowInitializer::Create(layout_, StorageTestUtil::ProjectionListAllColumns(layout_));
     // generate a random redo ProjectedRow to Insert
     redo_buffer_ = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
     redo_ = initializer_.InitializeRow(redo_buffer_);
@@ -55,17 +55,20 @@ class DataTableBenchmark : public benchmark::Fixture {
 
   // Tuple layout
   const uint8_t column_size_ = 8;
-  storage::BlockLayout layout_{{column_size_, column_size_}};
+  storage::BlockLayout layout_{{8, 8}};
 
   // Tuple properties
-  const storage::ProjectedRowInitializer initializer_ =
-      storage::ProjectedRowInitializer::Create(layout_, StorageTestUtil::ProjectionListAllColumns(layout_));
+  storage::ProjectedRowInitializer initializer_ = storage::ProjectedRowInitializer::Create(layout_, layout_.AllColumns());
 
   // Workload
   const uint32_t num_inserts_ = 10000000;
   const uint32_t num_reads_ = 10000000;
   const uint32_t num_threads_ = 4;
   const uint64_t buffer_pool_reuse_limit_ = 10000000;
+
+  const uint32_t num_attrs_updated = 8;
+  const uint32_t num_attrs = 8;
+
 
   // Test infrastructure
   std::default_random_engine generator_;
@@ -101,6 +104,37 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, SimpleInsert)(benchmark::State &state) {
 
   state.SetItemsProcessed(state.iterations() * num_inserts_);
 }
+
+BENCHMARK_DEFINE_F(DataTableBenchmark, SimpleUpdate)(benchmark::State &state) {
+  // Setup the table
+  storage::DataTable table(&block_store_, layout_, storage::layout_version_t(0));
+  // We can use dummy timestamps here since we're not invoking concurrency control
+  transaction::TransactionContext txn(transaction::timestamp_t(0), transaction::timestamp_t(0), &buffer_pool_,
+                                      DISABLED);
+  std::vector<storage::TupleSlot> slots;
+  for (uint32_t i = 0; i < num_inserts_; ++i) {
+    slots.push_back(table.Insert(&txn, *redo_));
+  }
+
+  // Initialize an update
+  std::vector<storage::col_id_t> col_ids;
+  for (uint32_t i = 0; i < num_attrs_updated; i++)
+    col_ids.emplace_back(i + 1);
+  const storage::ProjectedRowInitializer initializer_ =
+      storage::ProjectedRowInitializer::Create(layout_, col_ids);
+  initializer_.InitializeRow(redo_);
+  StorageTestUtil::PopulateRandomRow(redo_, layout_, 0, &generator_);
+
+  // generate the random update to apply
+  for (auto _ : state) {
+    for (uint32_t i = 0; i < num_inserts_; ++i) {
+      table.Update(&txn, slots[i], *redo_);
+    }
+  }
+
+  state.SetItemsProcessed(state.iterations() * num_inserts_);
+}
+
 
 // Insert the num_inserts_ of tuples into a DataTable concurrently
 // NOLINTNEXTLINE
@@ -205,6 +239,8 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomRead)(benchmark::State &s
 }
 
 BENCHMARK_REGISTER_F(DataTableBenchmark, SimpleInsert)->Unit(benchmark::kMillisecond);
+// BENCHMARK_REGISTER_F(DataTableBenchmark, SimpleUpdate)->Unit(benchmark::kMillisecond);
+
 
 //BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime();
 
