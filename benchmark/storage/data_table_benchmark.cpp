@@ -20,6 +20,11 @@ namespace terrier {
 class DataTableBenchmark : public benchmark::Fixture {
  public:
   void SetUp(const benchmark::State &state) final {
+    const uint32_t num_attrs = 9;
+    std::vector<uint32_t> attrs;
+    for (uint32_t i = 0; i <= num_attrs; i++)
+      attrs.push_back(8);
+    layout_ = storage::BlockLayout(attrs);
     // generate a random redo ProjectedRow to Insert
     redo_buffer_ = common::AllocationUtil::AllocateAligned(initializer_.ProjectedRowSize());
     redo_ = initializer_.InitializeRow(redo_buffer_);
@@ -50,7 +55,7 @@ class DataTableBenchmark : public benchmark::Fixture {
 
   // Tuple layout
   const uint8_t column_size_ = 8;
-  const storage::BlockLayout layout_{{column_size_, column_size_, column_size_}};
+  storage::BlockLayout layout_{{column_size_, column_size_}};
 
   // Tuple properties
   const storage::ProjectedRowInitializer initializer_ =
@@ -64,7 +69,7 @@ class DataTableBenchmark : public benchmark::Fixture {
 
   // Test infrastructure
   std::default_random_engine generator_;
-  storage::BlockStore block_store_{1000, 1000};
+  storage::BlockStore block_store_{100000, 100000};
   storage::RecordBufferSegmentPool buffer_pool_{num_inserts_, buffer_pool_reuse_limit_};
 
   // Insert buffer pointers
@@ -201,11 +206,11 @@ BENCHMARK_DEFINE_F(DataTableBenchmark, ConcurrentRandomRead)(benchmark::State &s
 
 BENCHMARK_REGISTER_F(DataTableBenchmark, SimpleInsert)->Unit(benchmark::kMillisecond);
 
-BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime();
+//BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentInsert)->Unit(benchmark::kMillisecond)->UseRealTime();
 
-BENCHMARK_REGISTER_F(DataTableBenchmark, SequentialRead)->Unit(benchmark::kMillisecond);
+//BENCHMARK_REGISTER_F(DataTableBenchmark, SequentialRead)->Unit(benchmark::kMillisecond);
 
-BENCHMARK_REGISTER_F(DataTableBenchmark, RandomRead)->Unit(benchmark::kMillisecond);
+//BENCHMARK_REGISTER_F(DataTableBenchmark, RandomRead)->Unit(benchmark::kMillisecond);
 
-BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentRandomRead)->Unit(benchmark::kMillisecond)->UseRealTime();
+//BENCHMARK_REGISTER_F(DataTableBenchmark, ConcurrentRandomRead)->Unit(benchmark::kMillisecond)->UseRealTime();
 }  // namespace terrier

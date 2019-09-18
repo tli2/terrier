@@ -87,6 +87,8 @@ class TupleAccessStrategy {
    */
   explicit TupleAccessStrategy(BlockLayout layout);
 
+  explicit TupleAccessStrategy(std::vector<uint32_t> attr_sizes) : TupleAccessStrategy(BlockLayout(std::move(attr_sizes))) {}
+
   /**
    * Initializes a new block to conform to the layout given. This will write the
    * headers and divide up the blocks into mini blocks(each mini block contains
@@ -245,6 +247,8 @@ class TupleAccessStrategy {
    * @return the block layout.
    */
   const BlockLayout &GetBlockLayout() const { return layout_; }
+
+  const std::vector<uint32_t> AttrSizes() const { return layout_.attr_sizes_; }
 
  private:
   const BlockLayout layout_;
