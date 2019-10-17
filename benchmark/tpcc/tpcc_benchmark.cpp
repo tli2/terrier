@@ -245,22 +245,22 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     // cleanup
     EndCompactor();
     EndGC();
-//    printf("history table:\n");
-//    tpcc_db->history_table_->table_.data_table->InspectTable();
-//    printf("item table:\n");
-//    tpcc_db->item_table_->table_.data_table->InspectTable();
-//    printf("order table:\n");
-//    tpcc_db->order_table_->table_.data_table->InspectTable();
-//    printf("order_line table:\n");
-//    tpcc_db->order_line_table_->table_.data_table->InspectTable();
-//    printf("\n\n\n");
-//    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
-//    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
-//    uint32_t aborted = 0;
-//    for (auto &entry : precomputed_args)
-//      for (auto &arg : entry)
-//        aborted += arg.aborted;
-//    printf("number of transactions aborted: %u\n", aborted);
+    printf("history table:\n");
+    tpcc_db->history_table_->table_.data_table->InspectTable();
+    printf("item table:\n");
+    tpcc_db->item_table_->table_.data_table->InspectTable();
+    printf("order table:\n");
+    tpcc_db->order_table_->table_.data_table->InspectTable();
+    printf("order_line table:\n");
+    tpcc_db->order_line_table_->table_.data_table->InspectTable();
+    printf("\n\n\n");
+    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
+    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
+    uint32_t aborted = 0;
+    for (auto &entry : precomputed_args)
+      for (auto &arg : entry)
+        aborted += arg.aborted;
+    printf("number of transactions aborted: %u\n", aborted);
     delete tpcc_db;
     delete log_manager_;
   }
@@ -289,5 +289,5 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
   }
 }
 
-BENCHMARK_REGISTER_F(TPCCBenchmark, Basic)->Unit(benchmark::kMillisecond)->UseManualTime()->Repetitions(5);
+BENCHMARK_REGISTER_F(TPCCBenchmark, Basic)->Unit(benchmark::kMillisecond)->UseManualTime();
 }  // namespace terrier
