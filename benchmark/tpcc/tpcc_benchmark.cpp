@@ -39,8 +39,8 @@ class TPCCBenchmark : public benchmark::Fixture {
 
   void StartGC(transaction::TransactionManager *const txn_manager) {
 
-//    gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
-    gc_ = new storage::GarbageCollector(txn_manager);
+    gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
+//    gc_ = new storage::GarbageCollector(txn_manager);
     run_gc_ = true;
     gc_thread_ = std::thread([this] { GCThreadLoop(); });
   }
@@ -76,9 +76,9 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::AccessObserver access_observer_{&compactor_};
 
   const bool only_count_new_order_ = false;
-  const int8_t num_threads_ = 3;
+  const int8_t num_threads_ = 1;
   const uint32_t num_precomputed_txns_per_worker_ = 100000;
-  const uint32_t w_payment = 43;
+  const uint32_t w_payment = 44;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
   const uint32_t w_stock_level = 4;
@@ -289,5 +289,5 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
   }
 }
 
-BENCHMARK_REGISTER_F(TPCCBenchmark, Basic)->Unit(benchmark::kMillisecond)->UseManualTime()->Repetitions(10);
+BENCHMARK_REGISTER_F(TPCCBenchmark, Basic)->Unit(benchmark::kMillisecond)->UseManualTime()->Repetitions(5);
 }  // namespace terrier

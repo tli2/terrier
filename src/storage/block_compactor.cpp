@@ -17,16 +17,29 @@ void NoOp(void * /* unused */) {}
 
 void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn_manager) {
   std::forward_list<RawBlock *> to_process = std::move(compaction_queue_);
-  CompactionGroup *cg = nullptr;
   for (auto &block : to_process) {
     BlockAccessController &controller = block->controller_;
     switch (controller.CurrentBlockState()) {
       case BlockState::HOT: {
-        if (cg == nullptr) cg = new CompactionGroup(txn_manager->BeginTransaction(), block->data_table_);
+        CompactionGroup *cg = new CompactionGroup(txn_manager->BeginTransaction(), block->data_table_);
         if (block->data_table_ != cg->table_) throw std::runtime_error("need to remove hack");
         // TODO(Tianyu): This is probably fine for now, but we will want to not only compact within a block
         // but also across blocks to eventually free up slots
         cg->blocks_to_compact_.emplace(block, std::vector<uint32_t>());
+
+        if (EliminateGaps(cg)) {
+          // Has to mark block as cooling before transaction commit, so we have a guarantee that
+          // any older transactions
+          controller.GetBlockState()->store(BlockState::COOLING);
+
+          if (cg->txn_->IsReadOnly()) {
+            cg->txn_->compacted_ = block;
+            cg->txn_->table_ = block->data_table_;
+          }
+          txn_manager->Commit(cg->txn_, NoOp, nullptr);
+        } else {
+          txn_manager->Abort(cg->txn_);
+        }
         break;
       }
       case BlockState::COOLING: {
@@ -45,29 +58,8 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
       case BlockState::FROZEN:
         // okay
         break;
-      default:
-        throw std::runtime_error("unexpected control flow");
+      default:throw std::runtime_error("unexpected control flow");
     }
-  }
-  if (cg == nullptr) return;
-  if (EliminateGaps(cg)) {
-    // Has to mark block as cooling before transaction commit, so we have a guarantee that
-    // any older transactions
-    for (auto &entry : cg->blocks_to_compact_) {
-      RawBlock *block = entry.first;
-      BlockAccessController &controller = block->controller_;
-      controller.GetBlockState()->store(BlockState::COOLING);
-    }
-
-//    if (cg->txn_->IsReadOnly()) {
-//      cg->txn_->compacted_ = block;
-//      cg->txn_->table_ = block->data_table_;
-//    }
-//          printf("compaction of block %p successful\n", entry.first);
-    txn_manager->Commit(cg->txn_, NoOp, nullptr);
-  } else {
-//          printf("compaction of block %p failed!!!\n", entry.first);
-    txn_manager->Abort(cg->txn_);
   }
 }
 
@@ -182,7 +174,6 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
   // the case.
   bool ret = cg->table_->Delete(cg->txn_, from);
   if (!ret) return false;
-  /*
   if (cg->table_ == DirtyGlobals::tpcc_db->history_table_->table_.data_table) {
     // No Indexes
 //    throw std::runtime_error("no compaction should happen on the history table");
@@ -207,7 +198,8 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
     DirtyGlobals::tpcc_db->order_index_->Insert(*order_key, to);
 
     // insert in Order secondary index
-    const auto order_secondary_key_pr_initializer = DirtyGlobals::tpcc_db->order_secondary_index_->GetProjectedRowInitializer();
+    const auto order_secondary_key_pr_initializer =
+        DirtyGlobals::tpcc_db->order_secondary_index_->GetProjectedRowInitializer();
     TERRIER_ASSERT(order_key_pr_initializer.ProjectedRowSize() < BUF_SIZE, "buffer too small");
     auto *const order_secondary_key =
         order_secondary_key_pr_initializer.InitializeRow(buf_);
@@ -247,7 +239,7 @@ bool BlockCompactor::MoveTuple(CompactionGroup *cg, TupleSlot from, TupleSlot to
     return true;
   } else {
     throw std::runtime_error("unexpected table being compacted");
-  }*/
+  }
   tuples_moved_++;
   return true;
 }
@@ -320,8 +312,7 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
     ArrowColumnInfo &col_info = metadata.GetColumnInfo(layout, col_id);
     auto *values = reinterpret_cast<VarlenEntry *>(accessor.ColumnStart(block, col_id));
     switch (col_info.Type()) {
-      case ArrowColumnType::GATHERED_VARLEN:
-        CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
+      case ArrowColumnType::GATHERED_VARLEN:CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
         break;
       case ArrowColumnType::DICTIONARY_COMPRESSED:
         BuildDictionary(txn,
@@ -331,8 +322,7 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
                         &col_info,
                         values);
         break;
-      default:
-        throw std::runtime_error("unexpected control flow");
+      default:throw std::runtime_error("unexpected control flow");
     }
   }
 }
