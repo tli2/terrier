@@ -312,7 +312,8 @@ void BlockCompactor::GatherVarlens(transaction::TransactionContext *txn, RawBloc
     ArrowColumnInfo &col_info = metadata.GetColumnInfo(layout, col_id);
     auto *values = reinterpret_cast<VarlenEntry *>(accessor.ColumnStart(block, col_id));
     switch (col_info.Type()) {
-      case ArrowColumnType::GATHERED_VARLEN:CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
+      case ArrowColumnType::GATHERED_VARLEN:
+        CopyToArrowVarlen(txn, &metadata, col_id, column_bitmap, &col_info, values);
         break;
       case ArrowColumnType::DICTIONARY_COMPRESSED:
         BuildDictionary(txn,
