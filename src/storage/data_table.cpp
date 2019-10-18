@@ -303,15 +303,12 @@ bool DataTable::CompareAndSwapVersionPtr(const TupleSlot slot, const TupleAccess
 }
 
 void DataTable::NewBlock(RawBlock *expected_val) {
-  uint64_t id = ((uint64_t)pthread_self()) % MAX_THREADS;
   common::SpinLatch::ScopedSpinLatch guard(&blocks_latch_);
   // Want to stop early if another thread is already getting a new block
-  if (expected_val != insertion_heads_[id]) return;
-//  if (expected_val != insertion_head_) return;
+  if (expected_val != insertion_head_) return;
   RawBlock *new_block = block_store_->Get();
   accessor_.InitializeRawBlockForDataTable(this, new_block, layout_version_);
-  insertion_heads_[id] = new_block;
-//  insertion_head_ = new_block;
+  insertion_head_ = new_block;
   blocks_.push_back(new_block);
   data_table_counter_.IncrementNumNewBlock(1);
 //  if (this == DirtyGlobals::history) printf("allocating new block\n");

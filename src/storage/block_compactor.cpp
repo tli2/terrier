@@ -58,7 +58,8 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
       case BlockState::FROZEN:
         // okay
         break;
-      default:throw std::runtime_error("unexpected control flow");
+      default:
+        throw std::runtime_error("unexpected control flow");
     }
   }
 }
