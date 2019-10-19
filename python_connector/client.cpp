@@ -71,14 +71,14 @@ struct ArrowBufferBuilder {
     return arrow::Table::Make(std::make_shared<arrow::Schema>(schema_vector), table_vector);
   }
 
-  arrow::Int32Builder o_id_builder;
-  arrow::Int8Builder o_d_id_builder;
-  arrow::Int8Builder o_w_id_builder;
-  arrow::Int8Builder ol_number_builder;
-  arrow::Int32Builder ol_i_id_builder;
-  arrow::Int8Builder ol_supply_w_id_builder;
-  arrow::Int64Builder ol_delivery_d_builder;
-  arrow::Int8Builder ol_quantity_builder;
+  arrow::UInt32Builder o_id_builder;
+  arrow::UInt8Builder o_d_id_builder;
+  arrow::UInt8Builder o_w_id_builder;
+  arrow::UInt8Builder ol_number_builder;
+  arrow::UInt32Builder ol_i_id_builder;
+  arrow::UInt8Builder ol_supply_w_id_builder;
+  arrow::UInt64Builder ol_delivery_d_builder;
+  arrow::UInt8Builder ol_quantity_builder;
   arrow::DoubleBuilder ol_amount_builder;
   arrow::StringBuilder ol_dist_info_builder;
 };
@@ -110,7 +110,7 @@ struct ReadBuffer {
     read_head += sizeof(uint32_t);
     auto status1 UNUSED_ATTRIBUTE = builder.ol_delivery_d_builder.Append(ReadValue<uint64_t>());
     read_head += sizeof(uint32_t);
-    auto status2 UNUSED_ATTRIBUTE = builder.ol_amount_builder.Append(ReadValue<uint64_t>());
+    auto status2 UNUSED_ATTRIBUTE = builder.ol_amount_builder.Append(ReadValue<double>());
     read_head += sizeof(uint32_t);
     auto status3 UNUSED_ATTRIBUTE = builder.o_id_builder.Append(ReadValue<uint32_t>());
     read_head += sizeof(uint32_t);
@@ -210,7 +210,7 @@ int sock_connect(const char *servername, int port) {
   return sockfd;
 }
 
-bool read_table(const char *servername, double hot_ratio) {
+pybind11::object read_table(const char *servername, double hot_ratio) {
   auto sock = sock_connect(servername, 15712);
   send(sock, &hot_ratio, sizeof(hot_ratio), 0);
   ReadBuffer reader;
@@ -227,17 +227,12 @@ bool read_table(const char *servername, double hot_ratio) {
     rows_read++;
     if (rows_read % 50000 == 0) printf("Read %u rows \n", rows_read);
   }
-//  return pybind11::reinterpret_steal<pybind11::object>(pybind11::handle(arrow::py::wrap_table(builder.Build())));
-  auto ctable = builder.Build();
-
-//  PyObject *pytable = arrow::py::wrap_table(ctable);
-//  printf("%p\n", pytable);
-  return true;
+  return pybind11::reinterpret_steal<pybind11::object>(pybind11::handle(arrow::py::wrap_table(builder.Build())));
 }
 
 
 PYBIND11_MODULE(client, m) {
-  arrow::py::import_pyarrow();
+//  arrow::py::import_pyarrow();
   m.def("read_table", &read_table, "foo");
 }
 }
