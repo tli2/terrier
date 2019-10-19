@@ -9,7 +9,7 @@
 #include <netdb.h>
 #include <chrono>
 
-#include "../../pybind11/include/pybind11/pybind11.h"
+#include "pybind11/pybind11.h"
 #include "common/macros.h"
 #include "common/scoped_timer.h"
 #include "common/worker_pool.h"
@@ -30,6 +30,8 @@
 #include "transaction/transaction_manager.h"
 #include "storage/dirty_globals.h"
 #include "storage/arrow_util.h"
+#include <arrow/python/pyarrow.h>
+
 
 namespace terrier {
 #define READBUF_SIZE (1024 * 8)
@@ -93,7 +95,9 @@ struct ReadBuffer {
     if (read_head + 5 > size) return NEED_MORE;
     char packet_type = ReadValue<char>();
     if (packet_type == 'Z') return DONE;
-    if (packet_type != 'D') throw std::runtime_error("malformed packet");
+    if (packet_type != 'D') {
+      throw std::runtime_error("malformed packet" + std::string(1, packet_type));
+    }
     uint32_t packet_size = ReadValue<uint32_t>();
     if (read_head + packet_size > size) {
       read_head -= 5;
@@ -206,7 +210,7 @@ int sock_connect(const char *servername, int port) {
   return sockfd;
 }
 
-PyObject *read_table(const char *servername, double hot_ratio) {
+bool read_table(const char *servername, double hot_ratio) {
   auto sock = sock_connect(servername, 15712);
   send(sock, &hot_ratio, sizeof(hot_ratio), 0);
   ReadBuffer reader;
@@ -223,10 +227,16 @@ PyObject *read_table(const char *servername, double hot_ratio) {
     rows_read++;
     if (rows_read % 50000 == 0) printf("Read %u rows \n", rows_read);
   }
-  return arrow::py::wrap_table(builder.Build());
+//  return pybind11::reinterpret_steal<pybind11::object>(pybind11::handle(arrow::py::wrap_table(builder.Build())));
+  auto ctable = builder.Build();
+
+//  PyObject *pytable = arrow::py::wrap_table(ctable);
+//  printf("%p\n", pytable);
+  return true;
 }
 
-PYBIND11_MODULE(arrow_reader, m) {
+
+PYBIND11_MODULE(client, m) {
   arrow::py::import_pyarrow();
   m.def("read_table", &read_table, "foo");
 }

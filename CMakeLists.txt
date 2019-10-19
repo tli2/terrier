@@ -374,10 +374,10 @@ set(TERRIER_BENCHMARK_LINK_LIBS
     pg_query)
 
 # ---[ Subdirectories
+add_subdirectory(pybind11)
 add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(benchmark)
-add_subdirectory(pybind11)
-pybind11_add_module(client src/main/client.cpp)
-target_link_libraries(client PRIVATE ARROW_PYTHON ${TERRIER_LINK_LIBS})
+pybind11_add_module(client python_connector/client.cpp)
+target_link_libraries(client PRIVATE ${TERRIER_LINK_LIBS})
 
