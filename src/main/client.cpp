@@ -227,6 +227,7 @@ PyObject *read_table(const char *servername, double hot_ratio) {
 }
 
 PYBIND11_MODULE(arrow_reader, m) {
+  arrow::py::import_pyarrow();
   m.def("read_table", &read_table, "foo");
 }
 }
