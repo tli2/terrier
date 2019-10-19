@@ -379,5 +379,5 @@ add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(benchmark)
 pybind11_add_module(client python_connector/client.cpp)
-target_link_libraries(client PRIVATE ${TERRIER_LINK_LIBS})
+target_link_libraries(client PRIVATE terrier_shared ${ARROW_PYTHON})
 

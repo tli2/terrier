@@ -42,7 +42,7 @@ ADD_TERRIER_LIB(terrier
 # Terrier executable
 ###############################################
 add_executable(terrier main/terrier.cpp)
-target_link_libraries(terrier terrier_shared ${ARROW_LIBRARIES} ${ARROW_PYTHON} )
+target_link_libraries(terrier terrier_shared)
 
 
 
