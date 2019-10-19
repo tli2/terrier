@@ -377,3 +377,7 @@ set(TERRIER_BENCHMARK_LINK_LIBS
 add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(benchmark)
+add_subdirectory(pybind11)
+pybind11_add_module(client src/main/client.cpp)
+target_link_libraries(client PRIVATE ARROW_PYTHON ${TERRIER_LINK_LIBS})
+

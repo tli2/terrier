@@ -692,7 +692,7 @@ int main(int argc, char *argv[]) {
   double hot_ratio = std::stod(std::string(argv[3]), nullptr);
   send(sock, &hot_ratio, sizeof(hot_ratio), 0);
   printf("request sent\n");
-  std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+//  std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 
   ReadBuffer reader;
   ArrowBufferBuilder builder;
@@ -709,9 +709,9 @@ int main(int argc, char *argv[]) {
     if (rows_read % 50000 == 0) printf("Read %u rows \n", rows_read);
   }
   builder.Build();
-  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-  fprintf(stdout,
-          "Client side TOTAL duration: %ld\n",
-          std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+//  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+//  fprintf(stdout,
+//          "Client side TOTAL duration: %ld\n",
+//          std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   return 0;
 }

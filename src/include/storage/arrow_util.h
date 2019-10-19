@@ -1,4 +1,5 @@
 #include <arrow/api.h>
+#include <arrow/python/pyarrow.h>
 #include <memory>
 #include <vector>
 #include "storage/arrow_block_metadata.h"
