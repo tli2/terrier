@@ -223,6 +223,7 @@ class ProjectedRowInitializer {
    */
   template <typename AttrType>
   ProjectedRowInitializer(const std::vector<AttrType> &attr_sizes, std::vector<col_id_t> col_ids);
+  ProjectedRowInitializer() = default;
 
   uint32_t size_ = 0;
   std::vector<col_id_t> col_ids_;

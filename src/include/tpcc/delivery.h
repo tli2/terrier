@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <random>
 #include "catalog/catalog_defs.h"
 #include "storage/sql_table.h"
 #include "storage/storage_defs.h"
@@ -41,7 +42,7 @@ class Delivery {
   catalog::indexkeycol_oid_t ol_w_id_key_oid;
   catalog::indexkeycol_oid_t ol_number_key_oid;
 
-  const storage::ProjectedRowInitializer order_line_select_pr_initializer;
+  storage::ProjectedRowInitializer order_line_select_pr_initializer;
   const storage::ProjectedRowInitializer order_line_update_pr_initializer;
   const uint8_t ol_o_id_key_pr_offset;
   const uint8_t ol_d_id_key_pr_offset;
@@ -61,6 +62,8 @@ class Delivery {
   const uint8_t c_id_key_pr_offset;
   const uint8_t c_d_id_key_pr_offset;
   const uint8_t c_w_id_key_pr_offset;
+
+  uint16_t ol_o_id_offset, ol_d_id_offset, ol_w_id_offset, ol_number_offset, ol_i_id_offset, ol_supply_w_id_offset, ol_quantity_offset, ol_amount_offset;
 
  public:
   explicit Delivery(const Database *const db)
@@ -116,9 +119,39 @@ class Delivery {
         c_delivery_cnt_pr_offset(static_cast<uint8_t>(customer_pr_map.at(c_delivery_cnt_oid))),
         c_id_key_pr_offset(static_cast<uint8_t>(db->customer_index_->GetKeyOidToOffsetMap().at(c_id_key_oid))),
         c_d_id_key_pr_offset(static_cast<uint8_t>(db->customer_index_->GetKeyOidToOffsetMap().at(c_d_id_key_oid))),
-        c_w_id_key_pr_offset(static_cast<uint8_t>(db->customer_index_->GetKeyOidToOffsetMap().at(c_w_id_key_oid)))
+        c_w_id_key_pr_offset(static_cast<uint8_t>(db->customer_index_->GetKeyOidToOffsetMap().at(c_w_id_key_oid))) {
 
-  {}
+    std::vector<catalog::col_oid_t> oids;
+    for (const catalog::Schema::Column &c : db->order_line_schema_.GetColumns())
+      oids.push_back(c.GetOid());
+
+    auto ol_init = db->order_line_table_->InitializerForProjectedRow(oids);
+
+    order_line_select_pr_initializer = ol_init.first;
+    ol_o_id_offset = ol_init.second[db->order_line_schema_.GetColumn(0).GetOid()];
+    ol_d_id_offset = ol_init.second[db->order_line_schema_.GetColumn(1).GetOid()];
+    ol_w_id_offset = ol_init.second[db->order_line_schema_.GetColumn(2).GetOid()];
+    ol_number_offset = ol_init.second[db->order_line_schema_.GetColumn(3).GetOid()];
+    ol_i_id_offset = ol_init.second[db->order_line_schema_.GetColumn(4).GetOid()];
+    ol_supply_w_id_offset = ol_init.second[db->order_line_schema_.GetColumn(5).GetOid()];
+    ol_quantity_offset = ol_init.second[db->order_line_schema_.GetColumn(7).GetOid()];
+    ol_amount_offset = ol_init.second[db->order_line_schema_.GetColumn(8).GetOid()];
+  }
+
+  template <class Random>
+  uint64_t GenerateDeliveryTime(storage::ProjectedRow *order_line_select_tuple, Random *generator) const {
+    std::uniform_int_distribution dist(5000, 10000);
+    auto ol_o_id UNUSED_ATTRIBUTE = *reinterpret_cast<uint32_t *>(order_line_select_tuple->AccessWithNullCheck(ol_o_id_offset));
+    auto ol_d_id UNUSED_ATTRIBUTE = *reinterpret_cast<uint8_t *>(order_line_select_tuple->AccessWithNullCheck(ol_d_id_offset));
+    auto ol_w_id = *reinterpret_cast<uint8_t *>(order_line_select_tuple->AccessWithNullCheck(ol_w_id_offset));
+    auto ol_number = *reinterpret_cast<uint8_t *>(order_line_select_tuple->AccessWithNullCheck(ol_number_offset));
+    auto ol_i_id = *reinterpret_cast<uint32_t *>(order_line_select_tuple->AccessWithNullCheck(ol_i_id_offset));
+    auto ol_supply_w_id = *reinterpret_cast<uint8_t *>(order_line_select_tuple->AccessWithNullCheck(ol_supply_w_id_offset));
+    auto ol_quantity = *reinterpret_cast<uint8_t *>(order_line_select_tuple->AccessWithNullCheck(ol_quantity_offset));
+    auto ol_amount UNUSED_ATTRIBUTE= *reinterpret_cast<double *>(order_line_select_tuple->AccessWithNullCheck(ol_amount_offset));
+
+    return ol_number * ol_w_id * (ol_i_id + ol_supply_w_id + ol_quantity) + dist(*generator);
+  }
 
   // 2.4.2
   template <class Random>
@@ -216,7 +249,7 @@ class Delivery {
       *reinterpret_cast<int32_t *>(order_line_key_lo->AccessForceNotNull(ol_o_id_key_pr_offset)) = no_o_id;
       *reinterpret_cast<int8_t *>(order_line_key_lo->AccessForceNotNull(ol_number_key_pr_offset)) = 1;
 
-      *reinterpret_cast<int8_t *>(order_line_key_hi->AccessForceNotNull(ol_w_id_key_pr_offset)) = args.w_id;
+      *reinterpret_cast<int8_t *>(order_line_key_hi->AccessForceNotNull(ol_w_id_key_pr_offset))= args.w_id;
       *reinterpret_cast<int8_t *>(order_line_key_hi->AccessForceNotNull(ol_d_id_key_pr_offset)) = d_id;
       *reinterpret_cast<int32_t *>(order_line_key_hi->AccessForceNotNull(ol_o_id_key_pr_offset)) = no_o_id;
       *reinterpret_cast<int8_t *>(order_line_key_hi->AccessForceNotNull(ol_number_key_pr_offset)) =
@@ -235,10 +268,12 @@ class Delivery {
         select_result = db->order_line_table_->Select(txn, tuple_slot, order_line_select_tuple);
         TERRIER_ASSERT(select_result,
                        "Order Line select failed. This assertion assumes 1:1 mapping between warehouse and workers.");
-        ol_amount += *reinterpret_cast<double *>(order_line_select_tuple->AccessForceNotNull(0));
+        ol_amount += *reinterpret_cast<double *>(order_line_select_tuple->AccessForceNotNull(ol_amount_offset));
 
+        uint64_t delivery_time = GenerateDeliveryTime<Random>(order_line_select_tuple, generator);
         order_line_update_tuple = order_line_update_pr_initializer.InitializeRow(worker->order_line_tuple_buffer);
-        *reinterpret_cast<uint64_t *>(order_line_update_tuple->AccessForceNotNull(0)) = args.ol_delivery_d;
+        *reinterpret_cast<uint64_t *>(order_line_update_tuple->AccessForceNotNull(0)) = delivery_time;
+        printf("%llu\n", delivery_time);
         update_result = db->order_line_table_->Update(txn, tuple_slot, *order_line_update_tuple);
         if (!update_result) {
           // This can fail due to remote orders
