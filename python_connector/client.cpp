@@ -227,12 +227,12 @@ pybind11::object read_table(const char *servername, double hot_ratio) {
     rows_read++;
     if (rows_read % 50000 == 0) printf("Read %u rows \n", rows_read);
   }
+  arrow::py::import_pyarrow();
   return pybind11::reinterpret_steal<pybind11::object>(pybind11::handle(arrow::py::wrap_table(builder.Build())));
 }
 
 
 PYBIND11_MODULE(client, m) {
-//  arrow::py::import_pyarrow();
   m.def("read_table", &read_table, "foo");
 }
 }

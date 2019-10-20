@@ -374,7 +374,6 @@ set(TERRIER_BENCHMARK_LINK_LIBS
     pg_query)
 
 # ---[ Subdirectories
-add_subdirectory(pybind11)
 add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(benchmark)
