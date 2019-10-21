@@ -172,7 +172,7 @@ timestamp_t TransactionManager::OldestTransactionStartTime() const {
 TransactionQueue TransactionManager::CompletedTransactionsForGC(int gc_id) {
   common::SpinLatch::ScopedSpinLatch guard(&curr_running_txns_latch_);
   TransactionQueue hand_to_gc(std::move(completed_txns_[gc_id]));
-//  TERRIER_ASSERT(completed_txns_.empty(), "TransactionManager's queue should now be empty.");
+  TERRIER_ASSERT(completed_txns_[gc_id].empty(), "TransactionManager's queue should now be empty.");
   return hand_to_gc;
 }
 

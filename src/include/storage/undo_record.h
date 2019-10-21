@@ -76,6 +76,10 @@ class UndoRecord {
     return static_cast<uint32_t>(sizeof(UndoRecord) + (type_ == DeltaRecordType::UPDATE ? Delta()->Size() : 0));
   }
 
+  bool &Pruned() {
+    return pruned_;
+  }
+
   /**
    * @param redo the redo changes to be applied
    * @return size of the UndoRecord which can store the delta resulting from applying redo in memory, in bytes
@@ -105,6 +109,7 @@ class UndoRecord {
                                       DataTable *const table) {
     auto *result = reinterpret_cast<UndoRecord *>(head);
     result->type_ = DeltaRecordType::INSERT;
+    result->Pruned() = false;
     result->next_ = nullptr;
     result->timestamp_.store(timestamp);
     result->table_ = table;
@@ -125,6 +130,7 @@ class UndoRecord {
                                       DataTable *const table) {
     auto *result = reinterpret_cast<UndoRecord *>(head);
     result->type_ = DeltaRecordType::DELETE;
+    result->Pruned() = false;
     result->next_ = nullptr;
     result->timestamp_.store(timestamp);
     result->table_ = table;
@@ -147,6 +153,7 @@ class UndoRecord {
     auto *result = reinterpret_cast<UndoRecord *>(head);
 
     result->type_ = DeltaRecordType::UPDATE;
+    result->Pruned() = false;
     result->next_ = nullptr;
     result->timestamp_.store(timestamp);
     result->table_ = table;
@@ -173,6 +180,7 @@ class UndoRecord {
     auto *result = reinterpret_cast<UndoRecord *>(head);
 
     result->type_ = DeltaRecordType::UPDATE;
+    result->Pruned() = false;
     result->next_ = nullptr;
     result->timestamp_.store(timestamp);
     result->table_ = table;
@@ -185,6 +193,7 @@ class UndoRecord {
 
  private:
   DeltaRecordType type_;
+  bool pruned_;
   std::atomic<UndoRecord *> next_;
   std::atomic<transaction::timestamp_t> timestamp_;
   DataTable *table_;

@@ -139,7 +139,7 @@ void GarbageCollector::TruncateVersionChain(DataTable *const table, const TupleS
   UndoRecord *next;
   // Traverse until we find the earliest UndoRecord that can be unlinked.
   while (true) {
-    if (curr->Table() == nullptr) return;
+    if (curr->Pruned()) return;
     next = curr->Next();
     // This is a legitimate case where we truncated the version chain but had to restart because the previous head
     // was aborted.
@@ -157,7 +157,7 @@ void GarbageCollector::TruncateVersionChain(DataTable *const table, const TupleS
   // is newest-to-oldest sorted. Flip them all to tell the others
   curr->Next().store(nullptr);
   while (curr != nullptr) {
-    curr->Table() = nullptr;
+    curr->Pruned() = true;
     curr = curr->Next();
   }
 

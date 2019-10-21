@@ -165,7 +165,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
 
   // we need transactions, TPCC database, and GC
   log_manager_ = new storage::LogManager(LOG_FILE_NAME, &buffer_pool_);
-  transaction::TransactionManager txn_manager(&buffer_pool_, true, log_manager_);
+  transaction::TransactionManager txn_manager(&buffer_pool_, true, log_manager_, 3);
   auto tpcc_builder = tpcc::Builder(&block_store_);
 
   // random number generation is slow, so we precompute the args
