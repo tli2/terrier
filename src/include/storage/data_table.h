@@ -219,9 +219,6 @@ class DataTable {
     for (RawBlock *block : blocks_) {
       total_count++;
       counts[block->controller_.CurrentBlockState()]++;
-      if (block->controller_.CurrentBlockState() == BlockState::HOT) {
-        printf("F\n");
-      }
     }
     printf("Total number of blocks %u\n", total_count);
     for (auto &entry : counts) {
