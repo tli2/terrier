@@ -62,7 +62,10 @@ class BlockCompactor {
    * Adds a block associated with a data table to the compaction to be processed in the future.
    * @param entry the block (and its parent data table) that needs to be processed by the compactor
    */
-  void PutInQueue(RawBlock *block) { compaction_queue_.push_front(block); }
+  void PutInQueue(RawBlock *block) {
+    common::SpinLatch::ScopedSpinLatch guard(&queue_latch_);
+    compaction_queue_.push_front(block);
+  }
 
   void EmptyQueue() { compaction_queue_.clear(); }
 
@@ -98,6 +101,7 @@ class BlockCompactor {
   }
 
   std::forward_list<RawBlock *> compaction_queue_;
+  common::SpinLatch queue_latch_;
   byte buf_[BUF_SIZE];
 };
 }  // namespace terrier::storage

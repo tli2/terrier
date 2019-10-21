@@ -38,20 +38,53 @@ class TPCCBenchmark : public benchmark::Fixture {
   }
 
   void StartGC(transaction::TransactionManager *const txn_manager) {
+//    gc_0 = new storage::GarbageCollector(txn_manager, &access_observer_, 0);
+//    gc_1 = new storage::GarbageCollector(txn_manager, &access_observer_, 1);
+//    gc_2 = new storage::GarbageCollector(txn_manager, &access_observer_, 2);
 
-    gc_ = new storage::GarbageCollector(txn_manager, &access_observer_);
-//    gc_ = new storage::GarbageCollector(txn_manager);
+    gc_0 = new storage::GarbageCollector(txn_manager, nullptr, 0);
+    gc_1 = new storage::GarbageCollector(txn_manager, nullptr, 1);
+    gc_2 = new storage::GarbageCollector(txn_manager, nullptr, 2);
+
     run_gc_ = true;
-    gc_thread_ = std::thread([this] { GCThreadLoop(); });
+    gc_thread_0 = std::thread([this] {
+      while (run_gc_) {
+        std::this_thread::sleep_for(gc_period_);
+        gc_0->PerformGarbageCollection();
+      }
+    });
+    gc_thread_1 = std::thread([this] {
+      while (run_gc_) {
+        std::this_thread::sleep_for(gc_period_);
+        gc_1->PerformGarbageCollection();
+      }
+    });
+    gc_thread_2 = std::thread([this] {
+      while (run_gc_) {
+        std::this_thread::sleep_for(gc_period_);
+        gc_2->PerformGarbageCollection();
+      }
+    });
   }
 
   void EndGC() {
     run_gc_ = false;
-    gc_thread_.join();
+    gc_thread_0.join();
+    gc_thread_1.join();
+    gc_thread_2.join();
+
     // Make sure all garbage is collected. This take 2 runs for unlink and deallocate
-    gc_->PerformGarbageCollection();
-    gc_->PerformGarbageCollection();
-    delete gc_;
+    gc_0->PerformGarbageCollection();
+    gc_0->PerformGarbageCollection();
+    delete gc_0;
+
+    gc_1->PerformGarbageCollection();
+    gc_1->PerformGarbageCollection();
+    delete gc_1;
+
+    gc_2->PerformGarbageCollection();
+    gc_2->PerformGarbageCollection();
+    delete gc_2;
   }
 
   void StartCompactor(transaction::TransactionManager *const txn_manager) {
@@ -76,8 +109,8 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::AccessObserver access_observer_{&compactor_};
 
   const bool only_count_new_order_ = false;
-  const int8_t num_threads_ = 1;
-  const uint32_t num_precomputed_txns_per_worker_ = 100000;
+  const int8_t num_threads_ = 2;
+  const uint32_t num_precomputed_txns_per_worker_ = 10000;
   const uint32_t w_payment = 44;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
@@ -97,17 +130,15 @@ class TPCCBenchmark : public benchmark::Fixture {
     }
   }
 
-  std::thread gc_thread_;
-  storage::GarbageCollector *gc_ = nullptr;
-  volatile bool run_gc_ = false;
-  const std::chrono::milliseconds gc_period_{1};
+  std::thread gc_thread_0;
+  storage::GarbageCollector *gc_0 = nullptr;
+  std::thread gc_thread_1;
+  storage::GarbageCollector *gc_1 = nullptr;
+  std::thread gc_thread_2;
+  storage::GarbageCollector *gc_2 = nullptr;
 
-  void GCThreadLoop() {
-    while (run_gc_) {
-      std::this_thread::sleep_for(gc_period_);
-      gc_->PerformGarbageCollection();
-    }
-  }
+  volatile bool run_gc_ = false;
+  const std::chrono::milliseconds gc_period_{5};
 
   std::thread compactor_thread_;
   volatile bool run_compactor_ = false;
@@ -183,7 +214,7 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
       workers.emplace_back(tpcc_db);
     }
     printf("loading database...\n");
-    compactor_ = storage::BlockCompactor();
+    compactor_.EmptyQueue();
     access_observer_ = storage::AccessObserver(&compactor_);
 
     tpcc::Loader::PopulateDatabase(&txn_manager, &generator_, tpcc_db, workers);

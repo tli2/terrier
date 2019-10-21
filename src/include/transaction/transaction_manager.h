@@ -27,8 +27,11 @@ class TransactionManager {
    * @param log_manager the log manager in the system, or LOGGING_DISABLED(nulllptr) if logging is turned off.
    */
   TransactionManager(storage::RecordBufferSegmentPool *const buffer_pool, const bool gc_enabled,
-                     storage::LogManager *log_manager)
-      : buffer_pool_(buffer_pool), gc_enabled_(gc_enabled), log_manager_(log_manager) {}
+                     storage::LogManager *log_manager, uint32_t num_gc = 1)
+      : buffer_pool_(buffer_pool), gc_enabled_(gc_enabled), log_manager_(log_manager), num_gc_(num_gc) {
+    for (uint32_t i = 0; i < num_gc; i++)
+      completed_txns_.emplace_back();
+  }
 
   /**
    * Begins a transaction.
@@ -73,7 +76,7 @@ class TransactionManager {
    * Return a copy of the completed txns queue and empty the local version
    * @return copy of the completed txns for the GC to process
    */
-  TransactionQueue CompletedTransactionsForGC();
+  TransactionQueue CompletedTransactionsForGC(int gc_id);
 
  private:
   storage::RecordBufferSegmentPool *buffer_pool_;
@@ -86,8 +89,10 @@ class TransactionManager {
   std::unordered_set<timestamp_t> curr_running_txns_;
   mutable common::SpinLatch curr_running_txns_latch_;
   bool gc_enabled_ = false;
-  TransactionQueue completed_txns_;
   storage::LogManager *const log_manager_;
+
+  std::vector<TransactionQueue> completed_txns_;
+  uint32_t num_gc_;
 
   timestamp_t ReadOnlyCommitCriticalSection(TransactionContext *txn, transaction::callback_fn callback,
                                             void *callback_arg);
@@ -107,5 +112,7 @@ class TransactionManager {
   void DeallocateInsertedTupleIfVarlen(TransactionContext *txn, storage::UndoRecord *undo,
                                        const storage::TupleAccessStrategy &accessor) const;
   void GCLastUpdateOnAbort(TransactionContext *txn);
+
+  static uint32_t HashTxn(TransactionContext *txn);
 };
 }  // namespace terrier::transaction

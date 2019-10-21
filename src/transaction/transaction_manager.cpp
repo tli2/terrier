@@ -3,6 +3,11 @@
 #include <utility>
 
 namespace terrier::transaction {
+
+uint32_t TransactionManager::HashTxn(TransactionContext *txn) {
+  return reinterpret_cast<uintptr_t>(txn) >> 4;
+}
+
 TransactionContext *TransactionManager::BeginTransaction() {
   // This latch has to also protect addition of this transaction to the running transaction table. Otherwise,
   // the thread might get scheduled out while other transactions commit, and the GC will deallocate their version
@@ -94,7 +99,10 @@ timestamp_t TransactionManager::Commit(TransactionContext *const txn, transactio
     // It is not necessary to have to GC process read-only transactions, but it's probably faster to call free off
     // the critical path there anyway
     // Also note here that GC will figure out what varlen entries to GC, as opposed to in the abort case.
-    if (gc_enabled_) completed_txns_.push_front(txn);
+    if (gc_enabled_) {
+      uint32_t hash = HashTxn(txn);
+      completed_txns_[hash % num_gc_].push_front(txn);
+    }
   }
   return result;
 }
@@ -114,7 +122,9 @@ void TransactionManager::Abort(TransactionContext *const txn) {
     const timestamp_t start_time = txn->StartTime();
     const size_t ret UNUSED_ATTRIBUTE = curr_running_txns_.erase(start_time);
     TERRIER_ASSERT(ret == 1, "Aborted transaction did not exist in global transactions table");
-    if (gc_enabled_) completed_txns_.push_front(txn);
+    if (gc_enabled_) {
+      uint32_t hash = HashTxn(txn);
+      completed_txns_[hash % num_gc_].push_front(txn);    }
   }
 }
 
@@ -159,10 +169,10 @@ timestamp_t TransactionManager::OldestTransactionStartTime() const {
   return result;
 }
 
-TransactionQueue TransactionManager::CompletedTransactionsForGC() {
+TransactionQueue TransactionManager::CompletedTransactionsForGC(int gc_id) {
   common::SpinLatch::ScopedSpinLatch guard(&curr_running_txns_latch_);
-  TransactionQueue hand_to_gc(std::move(completed_txns_));
-  TERRIER_ASSERT(completed_txns_.empty(), "TransactionManager's queue should now be empty.");
+  TransactionQueue hand_to_gc(std::move(completed_txns_[gc_id]));
+//  TERRIER_ASSERT(completed_txns_.empty(), "TransactionManager's queue should now be empty.");
   return hand_to_gc;
 }
 

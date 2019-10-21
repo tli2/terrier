@@ -16,8 +16,6 @@ DataTable::DataTable(BlockStore *const store, const BlockLayout &layout, const l
                  "First column must have size 8 for the version chain.");
   TERRIER_ASSERT(layout.NumColumns() > NUM_RESERVED_COLUMNS,
                  "First column is reserved for version info, second column is reserved for logical delete.");
-  for (uint32_t i = 0; i < MAX_THREADS; i ++)
-    insertion_heads_.push_back(nullptr);
 }
 
 DataTable::~DataTable() {
@@ -136,10 +134,8 @@ TupleSlot DataTable::Insert(transaction::TransactionContext *const txn, const Pr
   // to change the insertion head. We do not expect this loop to be executed more than
   // twice, but there is technically a possibility for blocks with only a few slots.
   TupleSlot result;
-  uint64_t id = ((uint64_t)pthread_self()) % MAX_THREADS;
   while (true) {
-    RawBlock *block = insertion_heads_[id];
-//    RawBlock *block = insertion_head_.load();
+    RawBlock *block = insertion_head_.load();
     if (block != nullptr && accessor_.Allocate(block, &result)) break;
     NewBlock(block);
   }

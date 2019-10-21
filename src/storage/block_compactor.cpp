@@ -16,7 +16,12 @@ void NoOp(void * /* unused */) {}
 }  // namespace
 
 void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn_manager) {
-  std::forward_list<RawBlock *> to_process = std::move(compaction_queue_);
+  std::forward_list<RawBlock *> to_process;
+  {
+    common::SpinLatch::ScopedSpinLatch guard(&queue_latch_);
+    to_process = std::move(compaction_queue_);
+  }
+
   for (auto &block : to_process) {
     BlockAccessController &controller = block->controller_;
     switch (controller.CurrentBlockState()) {

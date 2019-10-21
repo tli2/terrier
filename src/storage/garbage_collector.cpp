@@ -60,7 +60,7 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
   transaction::TransactionContext *txn = nullptr;
 
   // Get the completed transactions from the TransactionManager
-  transaction::TransactionQueue completed_txns = txn_manager_->CompletedTransactionsForGC();
+  transaction::TransactionQueue completed_txns = txn_manager_->CompletedTransactionsForGC(gc_id_);
   if (!completed_txns.empty()) {
     // Append to our local unlink queue
     txns_to_unlink_.splice_after(txns_to_unlink_.cbefore_begin(), std::move(completed_txns));
@@ -69,10 +69,6 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
   uint32_t txns_processed = 0;
   // Certain transactions might not be yet safe to gc. Need to requeue them
   transaction::TransactionQueue requeue;
-  // It is sufficient to truncate each version chain once in a GC invocation because we only read the maximal safe
-  // timestamp once, and the version chain is sorted by timestamp. Here we keep a set of slots to truncate to avoid
-  // wasteful traversals of the version chain.
-  std::unordered_set<TupleSlot> visited_slots;
 
   // Process every transaction in the unlink queue
   while (!txns_to_unlink_.empty()) {
@@ -94,16 +90,15 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
     } else if (transaction::TransactionUtil::NewerThan(oldest_txn, txn->TxnId().load())) {
       // Safe to garbage collect.
       for (auto &undo_record : txn->undo_buffer_) {
+        if (observer_ != nullptr) observer_->ObserveWrite(undo_record.Slot().GetBlock());
         DataTable *&table = undo_record.Table();
-        if (table == nullptr) throw std::runtime_error("committed transactions should not have undo records that point to null");
+        if (table == nullptr) continue;
         // Each version chain needs to be traversed and truncated at most once every GC period. Check
         // if we have already visited this tuple slot; if not, proceed to prune the version chain.
-        if (visited_slots.insert(undo_record.Slot()).second)
-          TruncateVersionChain(table, undo_record.Slot(), oldest_txn);
+        TruncateVersionChain(table, undo_record.Slot(), oldest_txn);
         // Regardless of the version chain we will need to reclaim deleted slots and any dangling pointers to varlens.
         ReclaimSlotIfDeleted(&undo_record);
         ReclaimBufferIfVarlen(txn, &undo_record);
-        if (observer_ != nullptr) observer_->ObserveWrite(undo_record.Slot().GetBlock());
       }
       txns_to_deallocate_.push_front(txn);
       txns_processed++;
@@ -144,21 +139,28 @@ void GarbageCollector::TruncateVersionChain(DataTable *const table, const TupleS
   UndoRecord *next;
   // Traverse until we find the earliest UndoRecord that can be unlinked.
   while (true) {
+    if (curr->Table() == nullptr) return;
     next = curr->Next();
     // This is a legitimate case where we truncated the version chain but had to restart because the previous head
     // was aborted.
     if (next == nullptr) return;
-    if (transaction::TransactionUtil::NewerThan(oldest, next->Timestamp().load())) break;
     curr = next;
+    if (transaction::TransactionUtil::NewerThan(oldest, next->Timestamp().load())) break;
   }
-  // The rest of the version chain must also be invisible to any running transactions since our version
-  // is newest-to-oldest sorted.
-  curr->Next().store(nullptr);
 
   // If the head of the version chain was not committed, it could have been aborted and requires a retry.
   if (curr == version_ptr && !transaction::TransactionUtil::Committed(version_ptr->Timestamp().load()) &&
       table->AtomicallyReadVersionPtr(slot, accessor) != version_ptr)
     TruncateVersionChain(table, slot, oldest);
+
+  // The rest of the version chain must also be invisible to any running transactions since our version
+  // is newest-to-oldest sorted. Flip them all to tell the others
+  curr->Next().store(nullptr);
+  while (curr != nullptr) {
+    curr->Table() = nullptr;
+    curr = curr->Next();
+  }
+
 }
 
 void GarbageCollector::ReclaimSlotIfDeleted(UndoRecord *const undo_record) const {

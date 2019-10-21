@@ -68,15 +68,10 @@ class StrongTypeAlias {
   StrongTypeAlias() = default;
 
   /**
-   * Constructs a new StrongTypeAlias.
-   * @param val const reference to the underlying type.
-   */
-  explicit StrongTypeAlias(const IntType &val) : val_(val) {}
-  /**
    * Move constructs a new StrongTypeAlias.
    * @param val const reference to the underlying type.
    */
-  explicit StrongTypeAlias(IntType &&val) : val_(std::move(val)) {}
+  explicit StrongTypeAlias(IntType val) : val_(val) {}
 
   /**
    * @return the underlying value.
