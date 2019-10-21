@@ -42,21 +42,21 @@ namespace terrier {
 struct ArrowBufferBuilder {
   std::shared_ptr<arrow::Table> Build() {
     std::shared_ptr<arrow::Array> o_id, o_d_id, o_w_id, ol_number,
-        ol_i_id, ol_supply_w_id, ol_delivery_d, ol_quantity, ol_amount, ol_dist_info;
+        ol_i_id, ol_supply_w_id, /*ol_delivery_d,*/ ol_quantity, ol_amount/*, ol_dist_info*/;
     auto status UNUSED_ATTRIBUTE = o_id_builder.Finish(&o_id);
     auto status1 UNUSED_ATTRIBUTE = o_d_id_builder.Finish(&o_d_id);
     auto status2 UNUSED_ATTRIBUTE = o_w_id_builder.Finish(&o_w_id);
     auto status3 UNUSED_ATTRIBUTE = ol_number_builder.Finish(&ol_number);
     auto status4 UNUSED_ATTRIBUTE = ol_i_id_builder.Finish(&ol_i_id);
     auto status5 UNUSED_ATTRIBUTE = ol_supply_w_id_builder.Finish(&ol_supply_w_id);
-    auto status6 UNUSED_ATTRIBUTE = ol_delivery_d_builder.Finish(&ol_delivery_d);
+//    auto status6 UNUSED_ATTRIBUTE = ol_delivery_d_builder.Finish(&ol_delivery_d);
     auto status7 UNUSED_ATTRIBUTE = ol_quantity_builder.Finish(&ol_quantity);
     auto status8 UNUSED_ATTRIBUTE = ol_amount_builder.Finish(&ol_amount);
-    auto status9 UNUSED_ATTRIBUTE = ol_dist_info_builder.Finish(&ol_dist_info);
+//    auto status9 UNUSED_ATTRIBUTE = ol_dist_info_builder.Finish(&ol_dist_info);
     std::vector<std::shared_ptr<arrow::Field>> schema_vector{
-        arrow::field("ol_dist_info", arrow::utf8()),
+//        arrow::field("ol_dist_info", arrow::utf8()),
         arrow::field("ol_amount", arrow::float64()),
-        arrow::field("ol_delivery_d", arrow::uint64()),
+//        arrow::field("ol_delivery_d", arrow::uint64()),
         arrow::field("o_id", arrow::uint32()),
         arrow::field("ol_i_id", arrow::uint32()),
         arrow::field("o_d_id", arrow::uint8()),
@@ -66,7 +66,7 @@ struct ArrowBufferBuilder {
         arrow::field("ol_quantity", arrow::uint8())
     };
 
-    std::vector<std::shared_ptr<arrow::Array>> table_vector{ol_dist_info, ol_amount, ol_delivery_d, o_id, ol_i_id,
+    std::vector<std::shared_ptr<arrow::Array>> table_vector{/*ol_dist_info,*/ ol_amount, /*ol_delivery_d,*/ o_id, ol_i_id,
                                                             o_d_id, o_w_id, ol_number, ol_supply_w_id, ol_quantity};
     return arrow::Table::Make(std::make_shared<arrow::Schema>(schema_vector), table_vector);
   }
@@ -77,10 +77,10 @@ struct ArrowBufferBuilder {
   arrow::UInt8Builder ol_number_builder;
   arrow::UInt32Builder ol_i_id_builder;
   arrow::UInt8Builder ol_supply_w_id_builder;
-  arrow::UInt64Builder ol_delivery_d_builder;
+//  arrow::UInt64Builder ol_delivery_d_builder;
   arrow::UInt8Builder ol_quantity_builder;
   arrow::DoubleBuilder ol_amount_builder;
-  arrow::StringBuilder ol_dist_info_builder;
+//  arrow::StringBuilder ol_dist_info_builder;
 };
 
 struct ReadBuffer {
@@ -105,10 +105,11 @@ struct ReadBuffer {
     }
 
     uint32_t varlen_size = ReadValue<uint32_t>();
-    auto status UNUSED_ATTRIBUTE = builder.ol_dist_info_builder.Append(buffer + read_head, varlen_size);
+//    auto status UNUSED_ATTRIBUTE = builder.ol_dist_info_builder.Append(buffer + read_head, varlen_size);
     read_head += varlen_size;
     read_head += sizeof(uint32_t);
-    auto status1 UNUSED_ATTRIBUTE = builder.ol_delivery_d_builder.Append(ReadValue<uint64_t>());
+    ReadValue<uint64_t >();
+//    auto status1 UNUSED_ATTRIBUTE = builder.ol_delivery_d_builder.Append(ReadValue<uint64_t>());
     read_head += sizeof(uint32_t);
     auto status2 UNUSED_ATTRIBUTE = builder.ol_amount_builder.Append(ReadValue<double>());
     read_head += sizeof(uint32_t);
