@@ -273,7 +273,6 @@ class Delivery {
         uint64_t delivery_time = GenerateDeliveryTime<Random>(order_line_select_tuple, generator);
         order_line_update_tuple = order_line_update_pr_initializer.InitializeRow(worker->order_line_tuple_buffer);
         *reinterpret_cast<uint64_t *>(order_line_update_tuple->AccessForceNotNull(0)) = delivery_time;
-        printf("%llu\n", delivery_time);
         update_result = db->order_line_table_->Update(txn, tuple_slot, *order_line_update_tuple);
         if (!update_result) {
           // This can fail due to remote orders

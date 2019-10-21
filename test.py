@@ -23,16 +23,15 @@ class StupidNetwork:
     self.model.add(layers.Dense(1))
     self.model.compile(loss=losses.mean_squared_error, optimizer=optimizers.Adam(lr=1e-4))
 
-  def train(self, pandas_df):
+  def train(self, pandas_df, target):
     dataset = arrow_io.ArrowDataset.from_pandas(pandas_df)
-    dataset = dataset.shuffle(buffer_size=1024).batch(8)
-    self.model.fit(dataset)
+    self.model.fit(dataset, target)
 
-  def eval(self, pandas_df):
+  def eval(self, pandas_df, target):
     print("Evaluating...\n")
-    model.evaluate(arrow_io.ArrowDataset.from_pandas(pandas_df).batch(8))
+    self.model.evaluate(arrow_io.ArrowDataset.from_pandas(pandas_df), target)
 
 network = StupidNetwork()
-t = client.read_table("snode", 0.0)
-network.train(t.to_pandas())
-network.eval(t.to_pandas())
+t, d = client.read_table("snode", 0.0)
+network.train(t.to_pandas(), d.to_numpy())
+network.eval(t.to_pandas(), d.to_numpy())

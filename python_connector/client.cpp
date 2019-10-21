@@ -91,7 +91,7 @@ struct ReadBuffer {
     return val;
   }
 
-  int ReadRow(ArrowBufferBuilder &builder) {
+  int ReadRow(ArrowBufferBuilder &builder, arrow::UInt64Builder &dd_builder) {
     if (read_head + 5 > size) return NEED_MORE;
     char packet_type = ReadValue<char>();
     if (packet_type == 'Z') return DONE;
@@ -108,8 +108,7 @@ struct ReadBuffer {
 //    auto status UNUSED_ATTRIBUTE = builder.ol_dist_info_builder.Append(buffer + read_head, varlen_size);
     read_head += varlen_size;
     read_head += sizeof(uint32_t);
-    ReadValue<uint64_t >();
-//    auto status1 UNUSED_ATTRIBUTE = builder.ol_delivery_d_builder.Append(ReadValue<uint64_t>());
+    auto status1 UNUSED_ATTRIBUTE = dd_builder.Append(ReadValue<uint64_t>());
     read_head += sizeof(uint32_t);
     auto status2 UNUSED_ATTRIBUTE = builder.ol_amount_builder.Append(ReadValue<double>());
     read_head += sizeof(uint32_t);
@@ -211,14 +210,15 @@ int sock_connect(const char *servername, int port) {
   return sockfd;
 }
 
-pybind11::object read_table(const char *servername, double hot_ratio) {
+pybind11::tuple read_table(const char *servername, double hot_ratio) {
   auto sock = sock_connect(servername, 15712);
   send(sock, &hot_ratio, sizeof(hot_ratio), 0);
   ReadBuffer reader;
   ArrowBufferBuilder builder;
+  arrow::UInt64Builder ol_delivery_d_builder;
   uint32_t rows_read = 0;
   while (true) {
-    int result = reader.ReadRow(builder);
+    int result = reader.ReadRow(builder, ol_delivery_d_builder);
     if (result == DONE) break;
     if (result == NEED_MORE) {
       reader.ShiftToHead();
@@ -229,7 +229,10 @@ pybind11::object read_table(const char *servername, double hot_ratio) {
     if (rows_read % 50000 == 0) printf("Read %u rows \n", rows_read);
   }
   arrow::py::import_pyarrow();
-  return pybind11::reinterpret_steal<pybind11::object>(pybind11::handle(arrow::py::wrap_table(builder.Build())));
+  std::shared_ptr<arrow::Array> dd;
+  auto status UNUSED_ATTRIBUTE = ol_delivery_d_builder.Finish(&dd);
+  return pybind11::make_tuple(pybind11::reinterpret_steal<pybind11::object>(pybind11::handle(arrow::py::wrap_table(builder.Build()))),
+                              pybind11::reinterpret_steal<pybind11::object>(pybind11::handle(arrow::py::wrap_array(dd))));
 }
 
 
