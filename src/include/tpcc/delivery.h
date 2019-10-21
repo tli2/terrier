@@ -140,7 +140,7 @@ class Delivery {
 
   template <class Random>
   uint64_t GenerateDeliveryTime(storage::ProjectedRow *order_line_select_tuple, Random *generator) const {
-    std::uniform_int_distribution dist(5000, 10000);
+    // std::uniform_int_distribution dist(5000, 10000);
     auto ol_o_id UNUSED_ATTRIBUTE = *reinterpret_cast<uint32_t *>(order_line_select_tuple->AccessWithNullCheck(ol_o_id_offset));
     auto ol_d_id UNUSED_ATTRIBUTE = *reinterpret_cast<uint8_t *>(order_line_select_tuple->AccessWithNullCheck(ol_d_id_offset));
     auto ol_w_id = *reinterpret_cast<uint8_t *>(order_line_select_tuple->AccessWithNullCheck(ol_w_id_offset));
@@ -150,7 +150,7 @@ class Delivery {
     auto ol_quantity = *reinterpret_cast<uint8_t *>(order_line_select_tuple->AccessWithNullCheck(ol_quantity_offset));
     auto ol_amount UNUSED_ATTRIBUTE= *reinterpret_cast<double *>(order_line_select_tuple->AccessWithNullCheck(ol_amount_offset));
 
-    return ol_number * ol_w_id * (ol_i_id + ol_supply_w_id + ol_quantity) + dist(*generator);
+    return ol_number + ol_w_id + ol_i_id + ol_supply_w_id + ol_quantity /* + dist(*generator)*/;
   }
 
   // 2.4.2
