@@ -38,13 +38,13 @@ class TPCCBenchmark : public benchmark::Fixture {
   }
 
   void StartGC(transaction::TransactionManager *const txn_manager) {
-//    gc_0 = new storage::GarbageCollector(txn_manager, &access_observer_, 0);
-//    gc_1 = new storage::GarbageCollector(txn_manager, &access_observer_, 1);
-//    gc_2 = new storage::GarbageCollector(txn_manager, &access_observer_, 2);
+    gc_0 = new storage::GarbageCollector(txn_manager, &access_observer_0, 0);
+    gc_1 = new storage::GarbageCollector(txn_manager, &access_observer_1, 1);
+    gc_2 = new storage::GarbageCollector(txn_manager, &access_observer_2, 2);
 
-    gc_0 = new storage::GarbageCollector(txn_manager, nullptr, 0);
-    gc_1 = new storage::GarbageCollector(txn_manager, nullptr, 1);
-    gc_2 = new storage::GarbageCollector(txn_manager, nullptr, 2);
+//    gc_0 = new storage::GarbageCollector(txn_manager, nullptr, 0);
+//    gc_1 = new storage::GarbageCollector(txn_manager, nullptr, 1);
+//    gc_2 = new storage::GarbageCollector(txn_manager, nullptr, 2);
 
     run_gc_ = true;
     gc_thread_0 = std::thread([this] {
@@ -106,11 +106,14 @@ class TPCCBenchmark : public benchmark::Fixture {
   std::default_random_engine generator_;
   storage::LogManager *log_manager_ = nullptr;
   storage::BlockCompactor compactor_;
-  storage::AccessObserver access_observer_{&compactor_};
+  storage::AccessObserver access_observer_0{&compactor_};
+  storage::AccessObserver access_observer_1{&compactor_};
+  storage::AccessObserver access_observer_2{&compactor_};
+
 
   const bool only_count_new_order_ = false;
   const int8_t num_threads_ = 2;
-  const uint32_t num_precomputed_txns_per_worker_ = 10000;
+  const uint32_t num_precomputed_txns_per_worker_ = 100000;
   const uint32_t w_payment = 44;
   const uint32_t w_delivery = 4;
   const uint32_t w_order_status = 4;
@@ -215,7 +218,10 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     }
     printf("loading database...\n");
     compactor_.EmptyQueue();
-    access_observer_ = storage::AccessObserver(&compactor_);
+    access_observer_0 = storage::AccessObserver(&compactor_);
+    access_observer_1 = storage::AccessObserver(&compactor_);
+    access_observer_2 = storage::AccessObserver(&compactor_);
+
 
     tpcc::Loader::PopulateDatabase(&txn_manager, &generator_, tpcc_db, workers);
     log_manager_->Process();  // log all of the Inserts from table creation

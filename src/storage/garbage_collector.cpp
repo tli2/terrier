@@ -90,9 +90,10 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
     } else if (transaction::TransactionUtil::NewerThan(oldest_txn, txn->TxnId().load())) {
       // Safe to garbage collect.
       for (auto &undo_record : txn->undo_buffer_) {
-        if (observer_ != nullptr) observer_->ObserveWrite(undo_record.Slot().GetBlock());
+        if (observer_ != nullptr)
+          observer_->ObserveWrite(undo_record.Slot().GetBlock());
         DataTable *&table = undo_record.Table();
-        if (table == nullptr) continue;
+        TERRIER_ASSERT(table != nullptr, "WTF");
         // Each version chain needs to be traversed and truncated at most once every GC period. Check
         // if we have already visited this tuple slot; if not, proceed to prune the version chain.
         TruncateVersionChain(table, undo_record.Slot(), oldest_txn);
