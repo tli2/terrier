@@ -228,10 +228,12 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
       workers.emplace_back(tpcc_db);
     }
     printf("loading database...\n");
-    compactor_.EmptyQueue();
-    access_observer_0 = storage::AccessObserver(&compactor_);
-    access_observer_1 = storage::AccessObserver(&compactor_);
-    access_observer_2 = storage::AccessObserver(&compactor_);
+    compactor_0.EmptyQueue();
+    compactor_1.EmptyQueue();
+
+    access_observer_0 = storage::AccessObserver(&compactor_0);
+    access_observer_1 = storage::AccessObserver(&compactor_0);
+    access_observer_2 = storage::AccessObserver(&compactor_1);
 
 
     tpcc::Loader::PopulateDatabase(&txn_manager, &generator_, tpcc_db, workers);
