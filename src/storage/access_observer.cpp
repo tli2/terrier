@@ -8,7 +8,11 @@ void AccessObserver::ObserveGCInvocation() {
   gc_epoch_++;
   for (auto it = last_touched_.begin(), end = last_touched_.end(); it != end;) {
     if (it->second + COLD_DATA_EPOCH_THRESHOLD < gc_epoch_) {
-      compactor_->PutInQueue(it->first);
+      auto hash = reinterpret_cast<uintptr_t>(it->first) >> 4;
+      if (hash % 2 == 0)
+        compactor_1->PutInQueue(it->first);
+      else
+        compactor_2->PutInQueue(it->first);
       it = last_touched_.erase(it);
     } else {
       ++it;

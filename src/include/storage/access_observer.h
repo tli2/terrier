@@ -29,7 +29,7 @@ class AccessObserver {
    * Constructs a new AccessObserver that will send its observations to the given block compactor
    * @param compactor the compactor to use after identifying a cold block
    */
-  explicit AccessObserver(BlockCompactor *compactor) : compactor_(compactor) {}
+  explicit AccessObserver(BlockCompactor *compactor1, BlockCompactor *compactor2) : compactor_1(compactor1), compactor_2(compactor2)  {}
 
   /**
    * Signals to the AccessObserver that a new GC run has begun. This is useful as a measurement of time to the
@@ -56,6 +56,7 @@ class AccessObserver {
   // cold blocks given current epoch and some threshold for a block to be cold.
 //  std::map<uint64_t, std::unordered_map<RawBlock *, DataTable *>> table_references_by_epoch_;
 //  std::unordered_set<RawBlock *> no_longer_insertable_;
-  BlockCompactor * compactor_;
+  BlockCompactor * compactor_1;
+  BlockCompactor * compactor_2;
 };
 }  // namespace terrier::storage

@@ -60,11 +60,9 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
 //        printf("Gathering of block %p successful!\n", entry.first);
         break;
       }
-      case BlockState::FROZEN:
+      default:
         // okay
         break;
-      default:
-        throw std::runtime_error("unexpected control flow");
     }
   }
 }

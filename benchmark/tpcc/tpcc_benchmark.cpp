@@ -122,13 +122,13 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::LogManager *log_manager_ = nullptr;
   storage::BlockCompactor compactor_0;
   storage::BlockCompactor compactor_1;
-  storage::AccessObserver access_observer_0{&compactor_0};
-  storage::AccessObserver access_observer_1{&compactor_0};
-  storage::AccessObserver access_observer_2{&compactor_1};
+  storage::AccessObserver access_observer_0{&compactor_0, &compactor_1};
+  storage::AccessObserver access_observer_1{&compactor_0, &compactor_1};
+  storage::AccessObserver access_observer_2{&compactor_0, &compactor_1};
 
 
   const bool only_count_new_order_ = false;
-  const int8_t num_threads_ = 2;
+  const int8_t num_threads_ = 18;
   const uint32_t num_precomputed_txns_per_worker_ = 100000;
   const uint32_t w_payment = 44;
   const uint32_t w_delivery = 4;
@@ -231,9 +231,9 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     compactor_0.EmptyQueue();
     compactor_1.EmptyQueue();
 
-    access_observer_0 = storage::AccessObserver(&compactor_0);
-    access_observer_1 = storage::AccessObserver(&compactor_0);
-    access_observer_2 = storage::AccessObserver(&compactor_1);
+    access_observer_0 = storage::AccessObserver(&compactor_0, &compactor_1);
+    access_observer_1 = storage::AccessObserver(&compactor_0, &compactor_1);
+    access_observer_2 = storage::AccessObserver(&compactor_0, &compactor_1);
 
 
     tpcc::Loader::PopulateDatabase(&txn_manager, &generator_, tpcc_db, workers);
