@@ -89,12 +89,27 @@ class TPCCBenchmark : public benchmark::Fixture {
 
   void StartCompactor(transaction::TransactionManager *const txn_manager) {
     run_compactor_ = true;
-    compactor_thread_ = std::thread([this, txn_manager] { CompactorThreadLoop(txn_manager); });
+
+    compactor_thread_0 = std::thread([this, txn_manager] {
+      while (run_compactor_) {
+        std::this_thread::sleep_for(compaction_period_);
+        compactor_0.ProcessCompactionQueue(txn_manager);
+      }
+    });
+
+    compactor_thread_1 = std::thread([this, txn_manager] {
+      while (run_compactor_) {
+        std::this_thread::sleep_for(compaction_period_);
+        compactor_1.ProcessCompactionQueue(txn_manager);
+      }
+    });
+
   }
 
   void EndCompactor() {
     run_compactor_ = false;
-    compactor_thread_.join();
+    compactor_thread_0.join();
+    compactor_thread_1.join();
   }
 
   const uint64_t blockstore_size_limit_ = 50000;
@@ -105,10 +120,11 @@ class TPCCBenchmark : public benchmark::Fixture {
   storage::RecordBufferSegmentPool buffer_pool_{buffersegment_size_limit_, buffersegment_reuse_limit_};
   std::default_random_engine generator_;
   storage::LogManager *log_manager_ = nullptr;
-  storage::BlockCompactor compactor_;
-  storage::AccessObserver access_observer_0{&compactor_};
-  storage::AccessObserver access_observer_1{&compactor_};
-  storage::AccessObserver access_observer_2{&compactor_};
+  storage::BlockCompactor compactor_0;
+  storage::BlockCompactor compactor_1;
+  storage::AccessObserver access_observer_0{&compactor_0};
+  storage::AccessObserver access_observer_1{&compactor_0};
+  storage::AccessObserver access_observer_2{&compactor_1};
 
 
   const bool only_count_new_order_ = false;
@@ -143,16 +159,11 @@ class TPCCBenchmark : public benchmark::Fixture {
   volatile bool run_gc_ = false;
   const std::chrono::milliseconds gc_period_{5};
 
-  std::thread compactor_thread_;
+  std::thread compactor_thread_0;
+  std::thread compactor_thread_1;
+
   volatile bool run_compactor_ = false;
   const std::chrono::milliseconds compaction_period_{10};
-
-  void CompactorThreadLoop(transaction::TransactionManager *const txn_manager) {
-    while (run_compactor_) {
-      std::this_thread::sleep_for(compaction_period_);
-      compactor_.ProcessCompactionQueue(txn_manager);
-    }
-  }
 
 };
 
