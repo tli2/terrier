@@ -1,6 +1,6 @@
 #include "storage/block_compactor.h"
 #include <vector>
-#include "arrow/api.h"
+//#include "arrow/api.h"
 #include "storage/block_access_controller.h"
 #include "storage/garbage_collector.h"
 #include "storage/storage_defs.h"

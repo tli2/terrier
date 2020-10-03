@@ -252,9 +252,9 @@ include_directories(SYSTEM ${JEMALLOC_INCLUDE_DIR})
 list(APPEND TERRIER_LINK_LIBS ${JEMALLOC_LIBRARIES})
 
 # Arrow
-find_package(Arrow REQUIRED)
-include_directories(SYSTEM ${ARROW_INCLUDE_DIR})
-list(APPEND TERRIER_LINK_LIBS ${ARROW_LIBRARIES})
+#find_package(Arrow REQUIRED)
+#include_directories(SYSTEM ${ARROW_INCLUDE_DIR})
+#list(APPEND TERRIER_LINK_LIBS ${ARROW_LIBRARIES})
 # ---[ Libevent
 find_package(Libevent REQUIRED)
 include_directories(SYSTEM ${LIBEVENT_INCLUDE_DIRS})

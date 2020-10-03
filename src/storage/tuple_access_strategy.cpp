@@ -42,7 +42,7 @@ void TupleAccessStrategy::InitializeRawBlock(RawBlock *const raw, const layout_v
   for (uint16_t i = 0; i < layout_.NumColumns(); i++) {
     col_id_t id(i);
     if (layout_.IsVarlen(id))
-      arrow_metadata.GetColumnInfo(layout_, id).Type() = storage::ArrowColumnType::DICTIONARY_COMPRESSED;
+      arrow_metadata.GetColumnInfo(layout_, id).Type() = storage::ArrowColumnType::GATHERED_VARLEN;
     else
       arrow_metadata.GetColumnInfo(layout_, id).Type() = storage::ArrowColumnType::FIXED_LENGTH;
   }
