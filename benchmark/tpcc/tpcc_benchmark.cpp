@@ -235,11 +235,11 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     access_observer_1 = storage::AccessObserver(&compactor_0, &compactor_1);
     access_observer_2 = storage::AccessObserver(&compactor_0, &compactor_1);
 
-
     tpcc::Loader::PopulateDatabase(&txn_manager, &generator_, tpcc_db, workers);
     log_manager_->Process();  // log all of the Inserts from table creation
     StartGC(&txn_manager);
 
+    std::atomic<long> totalProcessedTxns = 0;
     StartLogging();
     std::this_thread::sleep_for(std::chrono::seconds(1));  // Let GC clean up
     StartCompactor(&txn_manager);
@@ -277,9 +277,12 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
           default:
             throw std::runtime_error("Unexpected transaction type.");
         }
+        if (i % 1024 == 0)
+          totalProcessedTxns += 1024;
       }
     };
     printf("starting workload\n");
+    std::vector<std::pair<long, long>> readings;
     // run the TPCC workload to completion
     uint64_t elapsed_ms;
     {
@@ -287,7 +290,18 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
       for (int8_t i = 0; i < num_threads_; i++) {
         thread_pool_.SubmitTask([i, &tpcc_workload] { tpcc_workload(i); });
       }
-      thread_pool_.WaitUntilAllFinished();
+//      thread_pool_.WaitUntilAllFinished();
+
+      while (!thread_pool_.HasFinished()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        long processed = 0;
+        do {
+          processed = totalProcessedTxns;
+        } while (!totalProcessedTxns.compare_exchange_weak(processed, 0));
+
+        readings.emplace_back(compactor_0.CurrentCompactionQueueSize() + compactor_1.CurrentCompactionQueueSize(), processed);
+      }
       printf("transactions all submitted\n");
       EndLogging();
     }
@@ -295,22 +309,25 @@ BENCHMARK_DEFINE_F(TPCCBenchmark, Basic)(benchmark::State &state) {
     // cleanup
     EndCompactor();
     EndGC();
-    printf("history table:\n");
-    tpcc_db->history_table_->table_.data_table->InspectTable();
-    printf("item table:\n");
-    tpcc_db->item_table_->table_.data_table->InspectTable();
-    printf("order table:\n");
-    tpcc_db->order_table_->table_.data_table->InspectTable();
-    printf("order_line table:\n");
-    tpcc_db->order_line_table_->table_.data_table->InspectTable();
-    printf("\n\n\n");
-    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
-    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
-    uint32_t aborted = 0;
-    for (auto &entry : precomputed_args)
-      for (auto &arg : entry)
-        aborted += arg.aborted;
-    printf("number of transactions aborted: %u\n", aborted);
+//    printf("history table:\n");
+//    tpcc_db->history_table_->table_.data_table->InspectTable();
+//    printf("item table:\n");
+//    tpcc_db->item_table_->table_.data_table->InspectTable();
+//    printf("order table:\n");
+//    tpcc_db->order_table_->table_.data_table->InspectTable();
+//    printf("order_line table:\n");
+//    tpcc_db->order_line_table_->table_.data_table->InspectTable();
+//    printf("\n\n\n");
+//    printf("total number of transactions: %u\n", num_precomputed_txns_per_worker_ * num_threads_);
+//    printf("number of transactions stalled: %u\n", storage::DirtyGlobals::blocked_transactions.load());
+//    uint32_t aborted = 0;
+//    for (auto &entry : precomputed_args)
+//      for (auto &arg : entry)
+//        aborted += arg.aborted;
+//    printf("number of transactions aborted: %u\n", aborted);
+    for (const auto &entry : readings) {
+      printf("%ld, %ld\n", entry.first, entry.second);
+    }
     delete tpcc_db;
     delete log_manager_;
   }

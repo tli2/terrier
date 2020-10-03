@@ -115,6 +115,11 @@ class WorkerPool {
     finished_cv_.wait(lock, [&] { return busy_workers_ == 0 && task_queue_.empty(); });
   }
 
+  bool HasFinished() {
+    std::unique_lock<std::mutex> lock(task_lock_);
+    return busy_workers_ == 0 && task_queue_.empty();
+  }
+
   /**
    * Get the number of worker threads in this pool
    *

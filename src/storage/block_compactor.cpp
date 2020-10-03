@@ -20,6 +20,8 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
   {
     common::SpinLatch::ScopedSpinLatch guard(&queue_latch_);
     to_process = std::move(compaction_queue_);
+    processingCount_ = queueCount_.load();
+    queueCount_ = 0;
   }
 
   for (auto &block : to_process) {
@@ -64,6 +66,7 @@ void BlockCompactor::ProcessCompactionQueue(transaction::TransactionManager *txn
         // okay
         break;
     }
+    processingCount_--;
   }
 }
 

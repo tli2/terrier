@@ -49,6 +49,8 @@ class BlockCompactor {
   };
 
  public:
+  std::atomic<long> processingCount_{0}, queueCount_{0};
+
   /**
    * Processes the compaction queue and mark processed blocks as cold if successful. The compaction can fail due
    * to live versions or contention. There will be a brief window where user transactions writing to the block
@@ -56,6 +58,11 @@ class BlockCompactor {
    *
    */
   void ProcessCompactionQueue(transaction::TransactionManager *txn_manager);
+
+  long CurrentCompactionQueueSize() {
+    common::SpinLatch::ScopedSpinLatch guard(&queue_latch_);
+    return queueCount_ + processingCount_;
+  }
 
   // TODO(Tianyu): Should a block know about its own data table? We seem to need this back pointer awfully often.
   /**
@@ -65,6 +72,7 @@ class BlockCompactor {
   void PutInQueue(RawBlock *block) {
     common::SpinLatch::ScopedSpinLatch guard(&queue_latch_);
     compaction_queue_.push_front(block);
+    queueCount_++;
   }
 
   void EmptyQueue() { compaction_queue_.clear(); }
