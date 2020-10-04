@@ -146,15 +146,17 @@ void GarbageCollector::TruncateVersionChain(DataTable *const table, const TupleS
     // This is a legitimate case where we truncated the version chain but had to restart because the previous head
     // was aborted.
     if (next == nullptr) return;
-    curr = next;
     if (transaction::TransactionUtil::NewerThan(oldest, next->Timestamp().load())) break;
+    curr = next;
   }
 
+  curr->Next().store(nullptr);
   // If the head of the version chain was not committed, it could have been aborted and requires a retry.
   if (curr == version_ptr && !transaction::TransactionUtil::Committed(version_ptr->Timestamp().load()) &&
       table->AtomicallyReadVersionPtr(slot, accessor) != version_ptr)
     TruncateVersionChain(table, slot, oldest);
 
+  curr = next;
   // The rest of the version chain must also be invisible to any running transactions since our version
   // is newest-to-oldest sorted. Flip them all to tell the others
   while (curr != nullptr) {
