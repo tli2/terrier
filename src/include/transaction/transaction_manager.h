@@ -78,6 +78,18 @@ class TransactionManager {
    */
   TransactionQueue CompletedTransactionsForGC(int gc_id);
 
+  timestamp_t Protect() {
+    timestamp_t start_time = time_++;
+    common::SpinLatch::ScopedSpinLatch running_guard(&curr_running_txns_latch_);
+    curr_running_txns_.emplace(start_time);
+    return start_time;
+  }
+
+  void Release(timestamp_t t) {
+    common::SpinLatch::ScopedSpinLatch guard(&curr_running_txns_latch_);
+    curr_running_txns_.erase(t);
+  }
+
  private:
   storage::RecordBufferSegmentPool *buffer_pool_;
   // TODO(Tianyu): Timestamp generation needs to be more efficient (batches)

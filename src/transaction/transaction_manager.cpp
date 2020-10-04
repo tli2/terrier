@@ -124,7 +124,8 @@ void TransactionManager::Abort(TransactionContext *const txn) {
     TERRIER_ASSERT(ret == 1, "Aborted transaction did not exist in global transactions table");
     if (gc_enabled_) {
       uint32_t hash = HashTxn(txn);
-      completed_txns_[hash % num_gc_].push_front(txn);    }
+      completed_txns_[hash % num_gc_].push_front(txn);
+    }
   }
 }
 

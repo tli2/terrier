@@ -70,6 +70,7 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
   // Certain transactions might not be yet safe to gc. Need to requeue them
   transaction::TransactionQueue requeue;
 
+  auto lock = txn_manager_->Protect();
   // Process every transaction in the unlink queue
   while (!txns_to_unlink_.empty()) {
     txn = txns_to_unlink_.front();
@@ -111,7 +112,7 @@ uint32_t GarbageCollector::ProcessUnlinkQueue() {
 
   // Requeue any txns that we were still visible to running transactions
   txns_to_unlink_ = transaction::TransactionQueue(std::move(requeue));
-
+  txn_manager_->Release(lock);
   return txns_processed;
 }
 
@@ -156,12 +157,12 @@ void GarbageCollector::TruncateVersionChain(DataTable *const table, const TupleS
 
   // The rest of the version chain must also be invisible to any running transactions since our version
   // is newest-to-oldest sorted. Flip them all to tell the others
-  curr->Next().store(nullptr);
   while (curr != nullptr) {
+    next = curr->Next();
     curr->Pruned() = true;
-    curr = curr->Next();
+    curr->Next().store(nullptr);
+    curr = next;
   }
-
 }
 
 void GarbageCollector::ReclaimSlotIfDeleted(UndoRecord *const undo_record) const {
